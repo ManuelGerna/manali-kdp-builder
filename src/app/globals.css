@@ -1,18 +1,18 @@
 :root {
-  --background: #f7f6f2;
+  --background: #f6f7f4;
   --surface: #ffffff;
-  --surface-muted: #efeee8;
+  --surface-muted: #eef2ed;
   --text: #23241f;
-  --muted: #696d64;
-  --line: #dedbd2;
+  --muted: #626b61;
+  --line: #dce2da;
   --brand: #315f52;
   --brand-strong: #24483e;
-  --accent: #c08b46;
+  --accent: #b87935;
   --danger: #9f3f35;
   --warning: #8a6422;
   --success: #356c4d;
   --radius: 8px;
-  --shadow: 0 18px 50px rgba(35, 36, 31, 0.08);
+  --shadow: 0 14px 32px rgba(35, 36, 31, 0.06);
 }
 
 * {
@@ -22,6 +22,7 @@
 html {
   min-height: 100%;
   background: var(--background);
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
@@ -48,6 +49,12 @@ textarea {
 
 button {
   border: 0;
+  cursor: pointer;
+}
+
+:focus-visible {
+  outline: 3px solid rgba(49, 95, 82, 0.18);
+  outline-offset: 2px;
 }
 
 .app-shell {
@@ -59,19 +66,16 @@ button {
   top: 0;
   z-index: 10;
   border-bottom: 1px solid var(--line);
-  background: rgba(247, 246, 242, 0.94);
+  background: rgba(246, 247, 244, 0.95);
   backdrop-filter: blur(18px);
 }
 
 .topbar-inner {
-  display: flex;
+  display: grid;
   width: min(1120px, 100%);
   margin: 0 auto;
-  padding: 14px 16px;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 16px;
+  padding: 12px 14px;
+  gap: 12px;
 }
 
 .brand-lockup {
@@ -83,8 +87,9 @@ button {
 
 .brand-mark {
   display: grid;
-  width: 34px;
-  height: 34px;
+  width: 38px;
+  height: 38px;
+  flex: 0 0 auto;
   place-items: center;
   border-radius: 8px;
   background: var(--brand);
@@ -101,7 +106,7 @@ button {
 
 .brand-name {
   font-weight: 800;
-  line-height: 1.05;
+  line-height: 1.1;
 }
 
 .brand-domain {
@@ -111,22 +116,36 @@ button {
 }
 
 .top-nav {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   width: 100%;
   align-items: center;
-  gap: 8px;
-  overflow-x: auto;
+  gap: 6px;
 }
 
-.nav-link {
+.top-nav .logout-form {
+  min-width: 0;
+}
+
+.nav-link,
+.top-nav .ghost-button {
   border-radius: 8px;
   color: var(--muted);
   font-weight: 700;
-  padding: 9px 11px;
+  min-height: 40px;
+  padding: 0 10px;
+  text-align: center;
   white-space: nowrap;
 }
 
-.nav-link:hover {
+.nav-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.nav-link:hover,
+.top-nav .ghost-button:hover {
   background: var(--surface-muted);
   color: var(--text);
 }
@@ -134,13 +153,13 @@ button {
 .shell-main {
   width: min(1120px, 100%);
   margin: 0 auto;
-  padding: 28px 16px 44px;
+  padding: 22px 14px 40px;
 }
 
 .page-header {
   display: grid;
-  gap: 14px;
-  margin-bottom: 22px;
+  gap: 16px;
+  margin-bottom: 20px;
 }
 
 .eyebrow {
@@ -154,9 +173,10 @@ button {
 
 .page-title {
   margin: 0;
-  font-size: clamp(1.75rem, 4vw, 2.55rem);
-  line-height: 1.08;
+  font-size: clamp(1.55rem, 6vw, 2.45rem);
+  line-height: 1.12;
   letter-spacing: 0;
+  overflow-wrap: anywhere;
 }
 
 .page-copy {
@@ -172,17 +192,22 @@ button {
   gap: 10px;
 }
 
+.page-header .header-actions > * {
+  width: 100%;
+}
+
 .button,
 .secondary-button,
 .ghost-button {
   display: inline-flex;
-  min-height: 42px;
+  min-height: 44px;
   align-items: center;
   justify-content: center;
   border-radius: 8px;
   font-weight: 800;
-  line-height: 1;
-  padding: 0 14px;
+  line-height: 1.15;
+  padding: 0 15px;
+  text-align: center;
   transition:
     background 160ms ease,
     color 160ms ease,
@@ -226,7 +251,7 @@ button {
 
 .grid {
   display: grid;
-  gap: 14px;
+  gap: 16px;
 }
 
 .grid.two {
@@ -238,7 +263,7 @@ button {
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-  margin-bottom: 16px;
+  margin-bottom: 18px;
 }
 
 .filter-chip {
@@ -269,7 +294,7 @@ button {
 .book-card {
   display: grid;
   gap: 16px;
-  padding: 16px;
+  padding: 18px;
 }
 
 .book-card-main {
@@ -297,9 +322,10 @@ button {
 .meta-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 8px 12px;
   color: var(--muted);
   font-size: 0.88rem;
+  line-height: 1.5;
 }
 
 .card-actions {
@@ -322,15 +348,14 @@ button {
   list-style: none;
 }
 
-.panel-list li {
-  display: flex;
-  justify-content: space-between;
-  gap: 16px;
+.field-row {
+  display: grid;
+  gap: 4px;
   border-bottom: 1px solid var(--line);
   padding-bottom: 10px;
 }
 
-.panel-list li:last-child {
+.field-row:last-child {
   border-bottom: 0;
   padding-bottom: 0;
 }
@@ -341,19 +366,19 @@ button {
 
 .panel-value {
   font-weight: 800;
-  text-align: right;
+  overflow-wrap: anywhere;
 }
 
 .copy-field-list {
   display: grid;
-  gap: 12px;
+  gap: 14px;
 }
 
 .copy-field {
   display: grid;
-  gap: 8px;
+  gap: 10px;
   border-bottom: 1px solid var(--line);
-  padding-bottom: 12px;
+  padding-bottom: 14px;
 }
 
 .copy-field:last-child {
@@ -362,29 +387,43 @@ button {
 }
 
 .copy-field-header {
-  display: flex;
+  display: grid;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  gap: 8px;
 }
 
 .copy-field-label {
+  margin: 0;
   color: var(--muted);
   font-size: 0.9rem;
+  font-weight: 800;
+  line-height: 1.35;
   min-width: 0;
+}
+
+.copy-field-value-shell {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fafbf8;
+  padding: 12px;
 }
 
 .copy-field-value {
   margin: 0;
   color: var(--text);
-  line-height: 1.6;
+  line-height: 1.7;
   overflow-wrap: anywhere;
   white-space: pre-wrap;
 }
 
 .copy-field-button {
-  min-height: 36px;
-  flex: 0 0 auto;
+  min-height: 40px;
+  width: 100%;
+}
+
+.kdp-copy-layout {
+  display: grid;
+  gap: 16px;
 }
 
 .status-pill {
@@ -447,6 +486,7 @@ button {
   border-radius: 8px;
   background: #ffffff;
   color: var(--text);
+  min-height: 46px;
   padding: 11px 12px;
 }
 
@@ -482,7 +522,7 @@ button {
   display: grid;
   width: min(420px, 100%);
   gap: 18px;
-  padding: 22px;
+  padding: 24px;
 }
 
 .login-heading {
@@ -523,11 +563,15 @@ button {
 
 @media (min-width: 720px) {
   .topbar-inner {
-    flex-wrap: nowrap;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    padding: 14px 16px;
   }
 
   .top-nav {
+    display: flex;
     width: auto;
+    gap: 8px;
   }
 
   .page-header {
@@ -540,6 +584,10 @@ button {
     gap: 10px;
   }
 
+  .page-header .header-actions > * {
+    width: auto;
+  }
+
   .grid.two {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -547,5 +595,33 @@ button {
   .book-card {
     grid-template-columns: 1fr auto;
     align-items: center;
+  }
+
+  .field-row {
+    grid-template-columns: minmax(120px, 0.9fr) minmax(0, 1.1fr);
+    align-items: start;
+    gap: 16px;
+  }
+
+  .panel-value {
+    text-align: right;
+  }
+
+  .copy-field-header {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .copy-field-button {
+    width: auto;
+  }
+}
+
+@media (min-width: 900px) {
+  .kdp-copy-layout {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .kdp-panel-description-keywords {
+    grid-column: 1 / -1;
   }
 }

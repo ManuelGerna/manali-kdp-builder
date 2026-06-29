@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { LogoutButton } from "@/components/auth/logout-button";
+import { PageHeader } from "@/components/ui/page-header";
 
 type AppShellProps = {
   children: React.ReactNode;
@@ -41,14 +42,12 @@ export function AppShell({
       </header>
 
       <main className="shell-main">
-        <header className="page-header">
-          <div className="page-header-copy">
-            <p className="eyebrow">{eyebrow}</p>
-            <h1 className="page-title">{title}</h1>
-            {description ? <p className="page-copy">{description}</p> : null}
-          </div>
-          {actions ? <div className="header-actions">{actions}</div> : null}
-        </header>
+        <PageHeader
+          actions={actions}
+          description={description}
+          eyebrow={eyebrow}
+          title={title}
+        />
 
         {children}
       </main>

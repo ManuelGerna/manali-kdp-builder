@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
+import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
+import { FieldRow } from "@/components/ui/field-row";
 import { StatusPill } from "@/components/ui/status-pill";
 import {
   AI_USAGE_LABELS,
@@ -129,108 +131,63 @@ export default async function BookDetailPage({ params }: BookDetailPageProps) {
       }
     >
       <div className="grid two">
-        <section className="panel">
+        <Card>
           <StatusPill status={toBookStatus(book.status)} />
           <h2>Dati principali</h2>
           <ul className="panel-list">
-            <li>
-              <span className="panel-label">Autore</span>
-              <span className="panel-value">{book.author_name}</span>
-            </li>
-            <li>
-              <span className="panel-label">Lingua</span>
-              <span className="panel-value">{book.language.toUpperCase()}</span>
-            </li>
-            <li>
-              <span className="panel-label">Tipo</span>
-              <span className="panel-value">Crystal guide journal</span>
-            </li>
-            <li>
-              <span className="panel-label">Uso AI</span>
-              <span className="panel-value">
-                {formatAiUsage(book.ai_usage_type)}
-              </span>
-            </li>
-            <li>
-              <span className="panel-label">Sezioni</span>
-              <span className="panel-value">{sections.length}</span>
-            </li>
+            <FieldRow label="Autore" value={book.author_name} />
+            <FieldRow label="Lingua" value={book.language.toUpperCase()} />
+            <FieldRow label="Tipo" value="Crystal guide journal" />
+            <FieldRow
+              label="Uso AI"
+              value={formatAiUsage(book.ai_usage_type)}
+            />
+            <FieldRow label="Sezioni" value={sections.length} />
           </ul>
-        </section>
+        </Card>
 
-        <section className="panel">
-          <h2>Formato V1</h2>
+        <Card title="Formato V1">
           {settings ? (
             <ul className="panel-list">
-              <li>
-                <span className="panel-label">Trim size</span>
-                <span className="panel-value">{settings.trim_size}</span>
-              </li>
-              <li>
-                <span className="panel-label">Bleed</span>
-                <span className="panel-value">{formatBoolean(settings.bleed)}</span>
-              </li>
-              <li>
-                <span className="panel-label">Interior</span>
-                <span className="panel-value">{settings.interior_type}</span>
-              </li>
-              <li>
-                <span className="panel-label">Paper</span>
-                <span className="panel-value">{settings.paper_type}</span>
-              </li>
-              <li>
-                <span className="panel-label">Body font</span>
-                <span className="panel-value">{settings.body_font}</span>
-              </li>
-              <li>
-                <span className="panel-label">Heading font</span>
-                <span className="panel-value">{settings.heading_font}</span>
-              </li>
-              <li>
-                <span className="panel-label">Font size</span>
-                <span className="panel-value">{settings.body_font_size}</span>
-              </li>
-              <li>
-                <span className="panel-label">Line height</span>
-                <span className="panel-value">{settings.line_height}</span>
-              </li>
-              <li>
-                <span className="panel-label">Margini</span>
-                <span className="panel-value">
-                  {settings.margin_top}/{settings.margin_bottom}/
-                  {settings.margin_inner}/{settings.margin_outer}
-                </span>
-              </li>
+              <FieldRow label="Trim size" value={settings.trim_size} />
+              <FieldRow label="Bleed" value={formatBoolean(settings.bleed)} />
+              <FieldRow label="Interior" value={settings.interior_type} />
+              <FieldRow label="Paper" value={settings.paper_type} />
+              <FieldRow label="Body font" value={settings.body_font} />
+              <FieldRow label="Heading font" value={settings.heading_font} />
+              <FieldRow label="Font size" value={settings.body_font_size} />
+              <FieldRow label="Line height" value={settings.line_height} />
+              <FieldRow
+                label="Margini"
+                value={`${settings.margin_top}/${settings.margin_bottom}/${settings.margin_inner}/${settings.margin_outer}`}
+              />
             </ul>
           ) : (
             <p className="form-note">
               Impostazioni KDP non trovate per questo libretto.
             </p>
           )}
-        </section>
+        </Card>
 
-        <section className="panel">
-          <h2>Sezioni</h2>
+        <Card title="Sezioni">
           {sections.length === 0 ? (
             <p className="form-note">Nessuna sezione ancora creata.</p>
           ) : (
             <ul className="panel-list">
               {sections.map((section) => (
-                <li key={section.id}>
-                  <span className="panel-label">
-                    {section.sort_order}. {formatSectionType(section.section_type)}
-                  </span>
-                  <span className="panel-value">
-                    {section.title || "Senza titolo"}
-                  </span>
-                </li>
+                <FieldRow
+                  key={section.id}
+                  label={`${section.sort_order}. ${formatSectionType(
+                    section.section_type,
+                  )}`}
+                  value={section.title || "Senza titolo"}
+                />
               ))}
             </ul>
           )}
-        </section>
+        </Card>
 
-        <section className="panel">
-          <h2>Azioni</h2>
+        <Card title="Azioni">
           <div className="card-actions">
             <button className="secondary-button" disabled type="button">
               Contenuti
@@ -242,7 +199,7 @@ export default async function BookDetailPage({ params }: BookDetailPageProps) {
               Export PDF
             </button>
           </div>
-        </section>
+        </Card>
       </div>
     </AppShell>
   );
