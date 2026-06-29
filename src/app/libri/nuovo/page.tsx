@@ -1,5 +1,6 @@
 import { AppShell } from "@/components/app-shell";
 import { CreateBookForm } from "@/app/libri/nuovo/create-book-form";
+import { Card } from "@/components/ui/card";
 
 export default function NewBookPage() {
   return (
@@ -7,9 +8,9 @@ export default function NewBookPage() {
       title="Nuovo libretto"
       description="Base form per i dati iniziali del progetto editoriale."
     >
-      <section className="panel">
+      <Card>
         <CreateBookForm />
-      </section>
+      </Card>
     </AppShell>
   );
 }

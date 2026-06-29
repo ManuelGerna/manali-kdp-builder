@@ -1,11 +1,12 @@
 import { signOut } from "@/app/login/actions";
+import { ActionButton } from "@/components/ui/action-button";
 
 export function LogoutButton() {
   return (
     <form action={signOut} className="logout-form">
-      <button className="ghost-button" type="submit">
+      <ActionButton variant="ghost" type="submit">
         Esci
-      </button>
+      </ActionButton>
     </form>
   );
 }

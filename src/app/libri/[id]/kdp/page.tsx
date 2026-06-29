@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
+import { Card } from "@/components/ui/card";
 import { CopyField } from "@/components/ui/copy-field";
 import { EmptyState } from "@/components/ui/empty-state";
 import { getBookDetail } from "@/lib/kdp/books";
@@ -109,10 +110,13 @@ export default async function KdpFieldsPage({ params }: KdpFieldsPageProps) {
         </Link>
       }
     >
-      <div className="grid">
+      <div className="kdp-copy-layout">
         {fieldGroups.map((group) => (
-          <section className="panel" key={group.id}>
-            <h2>{group.title}</h2>
+          <Card
+            className={`kdp-panel kdp-panel-${group.id}`}
+            key={group.id}
+            title={group.title}
+          >
             <div className="copy-field-list">
               {group.fields.map((field) => (
                 <CopyField
@@ -122,7 +126,7 @@ export default async function KdpFieldsPage({ params }: KdpFieldsPageProps) {
                 />
               ))}
             </div>
-          </section>
+          </Card>
         ))}
       </div>
     </AppShell>

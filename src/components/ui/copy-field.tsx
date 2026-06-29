@@ -31,13 +31,16 @@ export function CopyField({ label, value }: CopyFieldProps) {
         <button
           className="secondary-button copy-field-button"
           disabled={!value}
+          aria-label={`Copia ${label}`}
           onClick={copyValue}
           type="button"
         >
           {copied ? "Copiato" : "Copia"}
         </button>
       </div>
-      <p className="copy-field-value">{value || "Campo vuoto"}</p>
+      <div className="copy-field-value-shell">
+        <p className="copy-field-value">{value || "Campo vuoto"}</p>
+      </div>
     </div>
   );
 }
