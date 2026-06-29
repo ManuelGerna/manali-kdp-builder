@@ -344,6 +344,49 @@ button {
   text-align: right;
 }
 
+.copy-field-list {
+  display: grid;
+  gap: 12px;
+}
+
+.copy-field {
+  display: grid;
+  gap: 8px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 12px;
+}
+
+.copy-field:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.copy-field-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.copy-field-label {
+  color: var(--muted);
+  font-size: 0.9rem;
+  min-width: 0;
+}
+
+.copy-field-value {
+  margin: 0;
+  color: var(--text);
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.copy-field-button {
+  min-height: 36px;
+  flex: 0 0 auto;
+}
+
 .status-pill {
   display: inline-flex;
   width: fit-content;
