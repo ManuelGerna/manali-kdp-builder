@@ -227,3 +227,11 @@ export type Database = {
 export type Tables<
   PublicTableName extends keyof Database["public"]["Tables"],
 > = Database["public"]["Tables"][PublicTableName]["Row"];
+
+export type TablesInsert<
+  PublicTableName extends keyof Database["public"]["Tables"],
+> = Database["public"]["Tables"][PublicTableName]["Insert"];
+
+export type TablesUpdate<
+  PublicTableName extends keyof Database["public"]["Tables"],
+> = Database["public"]["Tables"][PublicTableName]["Update"];
