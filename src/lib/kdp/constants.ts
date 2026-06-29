@@ -68,17 +68,32 @@ export const SECTION_TYPES = [
   "title_page",
   "disclaimer",
   "introduction",
-  "chapter_text",
+  "chapter",
   "crystal_card",
-  "affirmation_page",
-  "journaling_page",
-  "notes_page",
-  "summary_table",
+  "journal_page",
+  "affirmation",
+  "notes",
   "conclusion",
-  "blank_page",
 ] as const;
 
 export type SectionType = (typeof SECTION_TYPES)[number];
+
+export const SECTION_TYPE_LABELS: Record<SectionType, string> = {
+  title_page: "Pagina titolo",
+  disclaimer: "Disclaimer",
+  introduction: "Introduzione",
+  chapter: "Capitolo",
+  crystal_card: "Scheda cristallo",
+  journal_page: "Pagina diario",
+  affirmation: "Affermazione",
+  notes: "Note",
+  conclusion: "Conclusione",
+};
+
+export const SECTION_TYPE_OPTIONS = SECTION_TYPES.map((value) => ({
+  value,
+  label: SECTION_TYPE_LABELS[value],
+}));
 
 export const EXPORT_TYPES = [
   "interior_pdf",
