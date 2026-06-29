@@ -3,9 +3,14 @@ import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
 import { CopyField } from "@/components/ui/copy-field";
+import { DownloadTextButton } from "@/components/ui/download-text-button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { getBookDetail } from "@/lib/kdp/books";
-import { buildKdpCopyFieldGroups } from "@/lib/kdp/copy-fields";
+import {
+  buildKdpCopyFieldGroups,
+  formatKdpFieldsAsText,
+  getKdpFieldsTextFileName,
+} from "@/lib/kdp/copy-fields";
 import {
   createClient,
   hasSupabaseServerConfig,
@@ -98,6 +103,8 @@ export default async function KdpFieldsPage({ params }: KdpFieldsPageProps) {
     book,
     settings,
   });
+  const textExportContent = formatKdpFieldsAsText(fieldGroups);
+  const textExportFilename = getKdpFieldsTextFileName(book.title);
 
   return (
     <AppShell
@@ -105,9 +112,15 @@ export default async function KdpFieldsPage({ params }: KdpFieldsPageProps) {
       eyebrow={book.title}
       description="Campi principali pronti da copiare manualmente durante la pubblicazione."
       actions={
-        <Link className="secondary-button" href={`/libri/${book.id}`}>
-          Torna al libretto
-        </Link>
+        <>
+          <DownloadTextButton
+            content={textExportContent}
+            filename={textExportFilename}
+          />
+          <Link className="secondary-button" href={`/libri/${book.id}`}>
+            Torna al libretto
+          </Link>
+        </>
       }
     >
       <div className="kdp-copy-layout">
