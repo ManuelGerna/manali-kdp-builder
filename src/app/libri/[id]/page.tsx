@@ -230,14 +230,14 @@ export default async function BookDetailPage({ params }: BookDetailPageProps) {
         </section>
 
         <section className="panel">
-          <h2>Azioni future</h2>
+          <h2>Azioni</h2>
           <div className="card-actions">
             <button className="secondary-button" disabled type="button">
               Contenuti
             </button>
-            <button className="secondary-button" disabled type="button">
+            <Link className="secondary-button" href={`/libri/${book.id}/kdp`}>
               Dati KDP copiabili
-            </button>
+            </Link>
             <button className="secondary-button" disabled type="button">
               Export PDF
             </button>
