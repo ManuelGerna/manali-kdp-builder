@@ -134,6 +134,82 @@ function getInteriorFileName(book: KdpBook, trimSize: string) {
   return `${slug}-interior-${trimSize}-bw.pdf`;
 }
 
+function getFieldValue(fieldGroups: KdpCopyFieldGroup[], fieldId: string) {
+  return (
+    fieldGroups
+      .flatMap((group) => group.fields)
+      .find((field) => field.id === fieldId)?.value ?? ""
+  );
+}
+
+function getGroupFields(fieldGroups: KdpCopyFieldGroup[], groupId: string) {
+  return fieldGroups.find((group) => group.id === groupId)?.fields ?? [];
+}
+
+function formatLabelBlock(label: string, value: string) {
+  return `${label}:\n${value}`;
+}
+
+function formatNumberedValues(fields: KdpCopyField[]) {
+  return fields.map((field, index) => `${index + 1}. ${field.value}`);
+}
+
+export function getKdpFieldsTextFileName(title: string) {
+  const slug = slugify(title);
+
+  return slug ? `${slug}-kdp-fields.txt` : "kdp-fields.txt";
+}
+
+export function formatKdpFieldsAsText(fieldGroups: KdpCopyFieldGroup[]) {
+  const keywordFields = getGroupFields(
+    fieldGroups,
+    "description-keywords",
+  ).filter((field) => field.id.startsWith("keyword-"));
+  const categoryFields = getGroupFields(fieldGroups, "categories");
+
+  return [
+    "DATI PER AMAZON KDP",
+    "",
+    formatLabelBlock("Titolo", getFieldValue(fieldGroups, "title")),
+    "",
+    formatLabelBlock("Sottotitolo", getFieldValue(fieldGroups, "subtitle")),
+    "",
+    formatLabelBlock(
+      "Nome autore / pen name",
+      getFieldValue(fieldGroups, "author"),
+    ),
+    "",
+    formatLabelBlock("Lingua", getFieldValue(fieldGroups, "language")),
+    "",
+    "DESCRIZIONE",
+    getFieldValue(fieldGroups, "description"),
+    "",
+    "KEYWORD",
+    ...formatNumberedValues(keywordFields),
+    "",
+    "CATEGORIE SUGGERITE",
+    ...formatNumberedValues(categoryFields),
+    "",
+    "IMPOSTAZIONI PAPERBACK",
+    formatLabelBlock("Trim size", getFieldValue(fieldGroups, "trim-size")),
+    "",
+    formatLabelBlock("Interno", getFieldValue(fieldGroups, "interior")),
+    "",
+    formatLabelBlock("Carta", getFieldValue(fieldGroups, "paper")),
+    "",
+    formatLabelBlock("Bleed", getFieldValue(fieldGroups, "bleed")),
+    "",
+    "AI E FILE FUTURO",
+    formatLabelBlock("Nota uso AI", getFieldValue(fieldGroups, "ai-note")),
+    "",
+    formatLabelBlock(
+      "Nome file consigliato per interior PDF",
+      getFieldValue(fieldGroups, "interior-file"),
+    ),
+    "",
+  ].join("\n");
+}
+
 export function buildKdpCopyFieldGroups({
   book,
   settings,
