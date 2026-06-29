@@ -28,6 +28,20 @@ const SUPPORTED_LANGUAGES: readonly string[] = LANGUAGE_OPTIONS.map(
   (option) => option.value,
 );
 
+function logCreateBookAction(
+  event: string,
+  context: Record<string, boolean | number | string | null | undefined> = {},
+) {
+  console.error("[kdp-books:create-action]", {
+    event,
+    context,
+  });
+}
+
+function getErrorName(error: unknown) {
+  return error instanceof Error ? error.name : typeof error;
+}
+
 function getString(formData: FormData, name: string) {
   return String(formData.get(name) ?? "").trim();
 }
@@ -76,6 +90,8 @@ export async function createBook(
   }
 
   if (!hasSupabaseServerConfig()) {
+    logCreateBookAction("missing_supabase_config");
+
     return {
       message:
         "Supabase non configurato. Completa le variabili del progetto KDP Builder prima di creare libretti.",
@@ -83,7 +99,13 @@ export async function createBook(
     };
   }
 
-  const supabase = await createClient().catch(() => null);
+  const supabase = await createClient().catch((error: unknown) => {
+    logCreateBookAction("create_supabase_client_failed", {
+      errorName: getErrorName(error),
+    });
+
+    return null;
+  });
 
   if (!supabase) {
     return {
@@ -98,6 +120,12 @@ export async function createBook(
   } = await supabase.auth.getUser();
 
   if (userError || !user) {
+    logCreateBookAction("auth_user_missing", {
+      hasUser: Boolean(user),
+      authErrorName: userError?.name,
+      authErrorStatus: userError?.status,
+    });
+
     redirect("/login");
   }
 
