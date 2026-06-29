@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+import type { PostgrestError } from "@supabase/supabase-js";
 import { DEFAULT_BOOK_SETTINGS } from "@/lib/kdp/constants";
 import type { createClient } from "@/lib/supabase/server";
 import type { Tables, TablesInsert } from "@/types/database";
@@ -43,6 +45,8 @@ export type BookDetailResult =
       notFound: boolean;
     };
 
+type LogContext = Record<string, boolean | number | string | null | undefined>;
+
 const DEFAULT_SETTINGS_INSERT = {
   trim_size: DEFAULT_BOOK_SETTINGS.trimSize,
   bleed: DEFAULT_BOOK_SETTINGS.bleed,
@@ -60,6 +64,69 @@ const DEFAULT_SETTINGS_INSERT = {
   header_enabled: DEFAULT_BOOK_SETTINGS.headerEnabled,
   footer_enabled: DEFAULT_BOOK_SETTINGS.footerEnabled,
 } satisfies Omit<TablesInsert<"kdp_book_settings">, "book_id">;
+
+function redactLogText(value: string | null | undefined) {
+  if (!value) {
+    return undefined;
+  }
+
+  return value
+    .replace(
+      /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi,
+      "[redacted-email]",
+    )
+    .replace(
+      /\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b/gi,
+      "[redacted-uuid]",
+    )
+    .slice(0, 500);
+}
+
+function idTail(value: string) {
+  return value.slice(-8);
+}
+
+function logPersistenceError(
+  operation: string,
+  error: PostgrestError | null,
+  context: LogContext = {},
+) {
+  console.error("[kdp-books:create]", {
+    operation,
+    code: error?.code ?? "unknown",
+    message: redactLogText(error?.message),
+    details: redactLogText(error?.details),
+    hint: redactLogText(error?.hint),
+    context,
+  });
+}
+
+function getPersistenceMessage(
+  error: PostgrestError | null,
+  fallback: string,
+) {
+  if (!error) {
+    return fallback;
+  }
+
+  if (error.code === "42501") {
+    return "Il database non consente la creazione del libretto. Verifica la configurazione Supabase.";
+  }
+
+  if (error.code === "23514") {
+    return "I dati non rispettano i vincoli richiesti. Controlla i campi e riprova.";
+  }
+
+  if (error.code === "23503") {
+    return "Non riesco a collegare il libretto ai record richiesti.";
+  }
+
+  if (error.code === "23505") {
+    return "Esiste gia' un record collegato a questo libretto.";
+  }
+
+  return fallback;
+}
 
 export async function listBooks(
   supabase: KdpSupabaseClient,
@@ -153,9 +220,16 @@ export async function createBookWithDefaultSettings(
   supabase: KdpSupabaseClient,
   input: CreateBookInput,
 ): Promise<RepositoryResult<{ bookId: string }>> {
-  const { data: book, error: bookError } = await supabase
+  const bookId = randomUUID();
+  const logContext = {
+    bookIdTail: idTail(bookId),
+    userIdTail: idTail(input.userId),
+  };
+
+  const { error: bookError } = await supabase
     .from("kdp_books")
     .insert({
+      id: bookId,
       title: input.title,
       subtitle: input.subtitle,
       author_name: input.authorName,
@@ -163,49 +237,58 @@ export async function createBookWithDefaultSettings(
       status: "draft",
       ai_usage_type: input.aiUsageType,
       created_by: input.userId,
-    })
-    .select("id")
-    .single();
+    });
 
-  if (bookError || !book) {
+  if (bookError) {
+    logPersistenceError("insert_kdp_books", bookError, logContext);
+
     return {
       data: null,
-      error: "Non riesco a creare il libretto. Controlla i dati e riprova.",
+      error: getPersistenceMessage(
+        bookError,
+        "Non riesco a creare il libretto. Controlla i dati e riprova.",
+      ),
     };
   }
 
   const { error: settingsError } = await supabase
     .from("kdp_book_settings")
     .insert({
-      book_id: book.id,
+      book_id: bookId,
       ...DEFAULT_SETTINGS_INSERT,
     });
 
   if (!settingsError) {
     return {
       data: {
-        bookId: book.id,
+        bookId,
       },
       error: null,
     };
   }
 
+  logPersistenceError("insert_kdp_book_settings", settingsError, logContext);
+
   const { error: rollbackError } = await supabase
     .from("kdp_books")
     .delete()
-    .eq("id", book.id);
+    .eq("id", bookId);
 
   if (rollbackError) {
+    logPersistenceError("rollback_delete_kdp_books", rollbackError, logContext);
+
     return {
       data: null,
       error:
-        "Il libretto e' stato creato, ma le impostazioni KDP non sono state salvate. Apri la lista e verifica il record prima di riprovare.",
+        "Il libretto e' stato creato, ma le impostazioni KDP non sono state salvate. Verifica il record prima di riprovare.",
     };
   }
 
   return {
     data: null,
-    error:
+    error: getPersistenceMessage(
+      settingsError,
       "Creazione interrotta: non sono riuscito a salvare le impostazioni KDP. Il libretto non e' stato mantenuto.",
+    ),
   };
 }
