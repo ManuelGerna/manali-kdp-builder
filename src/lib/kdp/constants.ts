@@ -106,7 +106,7 @@ export const DEFAULT_BOOK_SETTINGS = {
   bodyFont: "Lora",
   headingFont: "Cormorant Garamond",
   bodyFontSize: 11,
-  lineHeight: 1.35,
+  lineHeight: 1.5,
   marginTop: 0.75,
   marginBottom: 0.75,
   marginInner: 0.75,
