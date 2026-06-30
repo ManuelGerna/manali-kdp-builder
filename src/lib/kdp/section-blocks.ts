@@ -5,6 +5,10 @@ import type {
   BlockType,
   PrintVisibility,
 } from "@/lib/kdp/constants";
+import {
+  getCreateOwnershipFields,
+  type OwnershipActor,
+} from "@/lib/kdp/ownership";
 import type { createClient } from "@/lib/supabase/server";
 import type { Tables } from "@/types/database";
 
@@ -13,6 +17,7 @@ type KdpSupabaseClient = Awaited<ReturnType<typeof createClient>>;
 export type KdpSectionBlock = Tables<"kdp_section_blocks">;
 
 export type SectionBlockInput = {
+  actor: OwnershipActor;
   bookId: string;
   sectionId: string;
   assetId?: string | null;
@@ -176,6 +181,7 @@ export async function createSectionBlock(
       layout_preset: input.layoutPreset,
       print_visibility: input.printVisibility,
       editor_notes: input.editorNotes,
+      ...getCreateOwnershipFields(input.actor),
     })
     .select("id")
     .single();

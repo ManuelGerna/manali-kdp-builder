@@ -5,6 +5,7 @@ import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { FieldRow } from "@/components/ui/field-row";
 import { listAssets } from "@/lib/kdp/assets";
+import { formatInternalOwner } from "@/lib/kdp/ownership";
 import {
   ASSET_STATUS_LABELS,
   BLOCK_TYPE_LABELS,
@@ -68,6 +69,7 @@ const STATUS_MESSAGES: Record<string, string> = {
   block_created: "Placeholder immagine creato.",
   created: "Sezione creata.",
   deleted: "Sezione eliminata.",
+  imported: "Import completato.",
   reordered: "Ordine sezioni aggiornato.",
   updated: "Sezione aggiornata.",
 };
@@ -226,6 +228,11 @@ function SectionCard({
           <span className="section-chip">Page break prima</span>
         ) : null}
       </div>
+
+      <p className="section-owner-meta">
+        Creato da: {formatInternalOwner(section.created_by_email)} - Ultima
+        modifica: {formatInternalOwner(section.updated_by_email)}
+      </p>
 
       <div className="section-content-grid">
         <section className="section-content-area">
@@ -446,9 +453,14 @@ export default async function BookContentsPage({
       eyebrow={book.title}
       description={book.subtitle || "Builder editoriale per sezioni, blocchi e note."}
       actions={
-        <Link className="secondary-button" href={`/libri/${book.id}`}>
-          Torna al libretto
-        </Link>
+        <>
+          <Link className="secondary-button" href={`/libri/${book.id}/importa`}>
+            Importa bozza
+          </Link>
+          <Link className="secondary-button" href={`/libri/${book.id}`}>
+            Torna al libretto
+          </Link>
+        </>
       }
     >
       <div className="content-layout">

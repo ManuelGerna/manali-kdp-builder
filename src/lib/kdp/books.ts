@@ -1,6 +1,11 @@
 import { randomUUID } from "node:crypto";
 import type { PostgrestError } from "@supabase/supabase-js";
 import { DEFAULT_BOOK_SETTINGS } from "@/lib/kdp/constants";
+import {
+  getCreateOwnershipFields,
+  getUpdateOwnershipFields,
+  type OwnershipActor,
+} from "@/lib/kdp/ownership";
 import type { createClient } from "@/lib/supabase/server";
 import type { Tables, TablesInsert, TablesUpdate } from "@/types/database";
 
@@ -16,11 +21,12 @@ export type CreateBookInput = {
   authorName: string;
   language: string;
   aiUsageType: string;
-  userId: string;
+  actor: OwnershipActor;
 };
 
 export type UpdateBookSettingsInput = {
   bookId: string;
+  actor: OwnershipActor;
   trimSize: string;
   bleed: boolean;
   interiorType: string;
@@ -169,7 +175,7 @@ export async function listBooks(
   const { data, error } = await supabase
     .from("kdp_books")
     .select(
-      "id,title,subtitle,author_name,language,book_type,status,ai_usage_type,internal_description,created_by,created_at,updated_at",
+      "id,title,subtitle,author_name,language,book_type,status,ai_usage_type,internal_description,created_by,created_by_user_id,created_by_email,updated_by_user_id,updated_by_email,created_at,updated_at",
     )
     .order("updated_at", { ascending: false });
 
@@ -258,7 +264,7 @@ export async function createBookWithDefaultSettings(
   const bookId = randomUUID();
   const logContext = {
     bookIdTail: idTail(bookId),
-    userIdTail: idTail(input.userId),
+    userIdTail: idTail(input.actor.userId),
   };
 
   const { error: bookError } = await supabase
@@ -271,7 +277,8 @@ export async function createBookWithDefaultSettings(
       language: input.language,
       status: "draft",
       ai_usage_type: input.aiUsageType,
-      created_by: input.userId,
+      created_by: input.actor.userId,
+      ...getCreateOwnershipFields(input.actor),
     });
 
   if (bookError) {
@@ -375,9 +382,55 @@ export async function updateBookSettings(
     };
   }
 
+  const ownershipResult = await touchBookOwnership(supabase, {
+    actor: input.actor,
+    bookId: input.bookId,
+  });
+
+  if (ownershipResult.data === null) {
+    return ownershipResult;
+  }
+
   return {
     data: {
       settingsId: data.id,
+    },
+    error: null,
+  };
+}
+
+export async function touchBookOwnership(
+  supabase: KdpSupabaseClient,
+  input: {
+    actor: OwnershipActor;
+    bookId: string;
+  },
+): Promise<RepositoryResult<{ bookId: string }>> {
+  const bookUpdate = {
+    ...getUpdateOwnershipFields(input.actor),
+  } satisfies TablesUpdate<"kdp_books">;
+  const { error } = await supabase
+    .from("kdp_books")
+    .update(bookUpdate)
+    .eq("id", input.bookId);
+
+  if (error) {
+    logPersistenceError("update_kdp_books_owner", error, {
+      bookIdTail: idTail(input.bookId),
+    });
+
+    return {
+      data: null,
+      error: getPersistenceMessage(
+        error,
+        "Non riesco ad aggiornare il tracciamento interno del libretto.",
+      ),
+    };
+  }
+
+  return {
+    data: {
+      bookId: input.bookId,
     },
     error: null,
   };

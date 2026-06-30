@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createAsset, deleteAsset } from "@/lib/kdp/assets";
+import { touchBookOwnership } from "@/lib/kdp/books";
 import {
   SECTION_LAYOUT_PRESETS,
   SECTION_STATUSES,
@@ -19,6 +20,10 @@ import {
   updateSection,
   type MoveSectionDirection,
 } from "@/lib/kdp/sections";
+import {
+  createOwnershipActor,
+  type OwnershipActor,
+} from "@/lib/kdp/ownership";
 import {
   createClient,
   hasSupabaseServerConfig,
@@ -179,8 +184,25 @@ async function getAuthenticatedSupabase(actionName: string) {
 
   return {
     supabase,
+    actor: createOwnershipActor({
+      email: user.email,
+      userId: user.id,
+    }),
     error: null,
   };
+}
+
+async function touchBookAfterContentChange(
+  supabase: KdpSupabaseClient,
+  bookId: string,
+  actor: OwnershipActor,
+) {
+  const ownershipResult = await touchBookOwnership(supabase, {
+    actor,
+    bookId,
+  });
+
+  return ownershipResult.data === null ? ownershipResult.error : null;
 }
 
 async function getBookAccessError(
@@ -248,9 +270,9 @@ export async function createSectionAction(
     };
   }
 
-  const { supabase, error } = await getAuthenticatedSupabase("create");
+  const { supabase, actor, error } = await getAuthenticatedSupabase("create");
 
-  if (!supabase) {
+  if (!supabase || !actor) {
     return {
       message: error,
       fields,
@@ -269,6 +291,7 @@ export async function createSectionAction(
   const sectionBody = getOptionalText(formData, "body");
   const sectionTitle = getOptionalText(formData, "title");
   const result = await createSection(supabase, {
+    actor,
     bookId,
     sectionType,
     title: sectionTitle,
@@ -290,6 +313,7 @@ export async function createSectionAction(
 
   if (sectionBody) {
     const blockResult = await createSectionBlock(supabase, {
+      actor,
       bookId,
       sectionId: result.data.sectionId,
       blockType: "text",
@@ -309,6 +333,19 @@ export async function createSectionAction(
         }),
       );
     }
+  }
+
+  const ownershipError = await touchBookAfterContentChange(
+    supabase,
+    bookId,
+    actor,
+  );
+
+  if (ownershipError) {
+    return {
+      message: ownershipError,
+      fields,
+    };
   }
 
   revalidateBookContent(bookId);
@@ -354,9 +391,9 @@ export async function updateSectionAction(
     };
   }
 
-  const { supabase, error } = await getAuthenticatedSupabase("update");
+  const { supabase, actor, error } = await getAuthenticatedSupabase("update");
 
-  if (!supabase) {
+  if (!supabase || !actor) {
     return {
       message: error,
       fields,
@@ -373,6 +410,7 @@ export async function updateSectionAction(
   }
 
   const result = await updateSection(supabase, {
+    actor,
     bookId,
     sectionId,
     sectionType,
@@ -393,6 +431,19 @@ export async function updateSectionAction(
     };
   }
 
+  const ownershipError = await touchBookAfterContentChange(
+    supabase,
+    bookId,
+    actor,
+  );
+
+  if (ownershipError) {
+    return {
+      message: ownershipError,
+      fields,
+    };
+  }
+
   revalidateBookContent(bookId);
   redirect(getContentPath(bookId, { status: "updated" }));
 }
@@ -409,9 +460,9 @@ export async function deleteSectionAction(formData: FormData) {
     redirect(getContentPath(bookId, { error: "Sezione non valida." }));
   }
 
-  const { supabase, error } = await getAuthenticatedSupabase("delete");
+  const { supabase, actor, error } = await getAuthenticatedSupabase("delete");
 
-  if (!supabase) {
+  if (!supabase || !actor) {
     redirect(getContentPath(bookId, { error }));
   }
 
@@ -425,6 +476,16 @@ export async function deleteSectionAction(formData: FormData) {
 
   if (result.data === null) {
     redirect(getContentPath(bookId, { error: result.error }));
+  }
+
+  const ownershipError = await touchBookAfterContentChange(
+    supabase,
+    bookId,
+    actor,
+  );
+
+  if (ownershipError) {
+    redirect(getContentPath(bookId, { error: ownershipError }));
   }
 
   revalidateBookContent(bookId);
@@ -444,9 +505,9 @@ export async function moveSectionAction(formData: FormData) {
     redirect(getContentPath(bookId, { error: "Riordino non valido." }));
   }
 
-  const { supabase, error } = await getAuthenticatedSupabase("move");
+  const { supabase, actor, error } = await getAuthenticatedSupabase("move");
 
-  if (!supabase) {
+  if (!supabase || !actor) {
     redirect(getContentPath(bookId, { error }));
   }
 
@@ -456,10 +517,26 @@ export async function moveSectionAction(formData: FormData) {
     redirect(getContentPath(bookId, { error: bookAccessError }));
   }
 
-  const result = await moveSection(supabase, bookId, sectionId, direction);
+  const result = await moveSection(
+    supabase,
+    bookId,
+    sectionId,
+    direction,
+    actor,
+  );
 
   if (result.data === null) {
     redirect(getContentPath(bookId, { error: result.error }));
+  }
+
+  const ownershipError = await touchBookAfterContentChange(
+    supabase,
+    bookId,
+    actor,
+  );
+
+  if (ownershipError) {
+    redirect(getContentPath(bookId, { error: ownershipError }));
   }
 
   revalidateBookContent(bookId);
@@ -481,11 +558,11 @@ export async function createImagePlaceholderBlockAction(formData: FormData) {
     redirect(getContentPath(bookId, { error: "Sezione non valida." }));
   }
 
-  const { supabase, error } = await getAuthenticatedSupabase(
+  const { supabase, actor, error } = await getAuthenticatedSupabase(
     "create-image-placeholder",
   );
 
-  if (!supabase) {
+  if (!supabase || !actor) {
     redirect(getContentPath(bookId, { error }));
   }
 
@@ -496,6 +573,7 @@ export async function createImagePlaceholderBlockAction(formData: FormData) {
   }
 
   const assetResult = await createAsset(supabase, {
+    actor,
     bookId,
     assetType: "image",
     title: title || "Placeholder immagine",
@@ -509,6 +587,7 @@ export async function createImagePlaceholderBlockAction(formData: FormData) {
   }
 
   const blockResult = await createSectionBlock(supabase, {
+    actor,
     bookId,
     sectionId,
     assetId: assetResult.data.assetId,
@@ -523,6 +602,16 @@ export async function createImagePlaceholderBlockAction(formData: FormData) {
   if (blockResult.data === null) {
     await deleteAsset(supabase, bookId, assetResult.data.assetId);
     redirect(getContentPath(bookId, { error: blockResult.error }));
+  }
+
+  const ownershipError = await touchBookAfterContentChange(
+    supabase,
+    bookId,
+    actor,
+  );
+
+  if (ownershipError) {
+    redirect(getContentPath(bookId, { error: ownershipError }));
   }
 
   revalidateBookContent(bookId);

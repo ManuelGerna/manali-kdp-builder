@@ -1,6 +1,10 @@
 import type { PostgrestError } from "@supabase/supabase-js";
 import type { RepositoryResult } from "@/lib/kdp/books";
 import type { AssetStatus, AssetType } from "@/lib/kdp/constants";
+import {
+  getCreateOwnershipFields,
+  type OwnershipActor,
+} from "@/lib/kdp/ownership";
 import type { createClient } from "@/lib/supabase/server";
 import type { Tables } from "@/types/database";
 
@@ -9,6 +13,7 @@ type KdpSupabaseClient = Awaited<ReturnType<typeof createClient>>;
 export type KdpAsset = Tables<"kdp_assets">;
 
 export type AssetInput = {
+  actor: OwnershipActor;
   bookId: string;
   assetType: AssetType;
   title: string | null;
@@ -120,6 +125,7 @@ export async function createAsset(
       alt_text: input.altText,
       prompt: input.prompt,
       status: input.status,
+      ...getCreateOwnershipFields(input.actor),
     })
     .select("id")
     .single();

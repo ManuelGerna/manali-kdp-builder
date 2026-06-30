@@ -6,6 +6,11 @@ import type {
   SectionStatus,
   SectionType,
 } from "@/lib/kdp/constants";
+import {
+  getCreateOwnershipFields,
+  getUpdateOwnershipFields,
+  type OwnershipActor,
+} from "@/lib/kdp/ownership";
 import type { Tables } from "@/types/database";
 
 type KdpSupabaseClient = Awaited<ReturnType<typeof createClient>>;
@@ -13,6 +18,7 @@ type KdpSupabaseClient = Awaited<ReturnType<typeof createClient>>;
 export type KdpSection = Tables<"kdp_sections">;
 
 export type SectionInput = {
+  actor: OwnershipActor;
   bookId: string;
   sectionType: SectionType;
   title: string | null;
@@ -159,6 +165,7 @@ export async function createSection(
       layout_preset: input.layoutPreset,
       editor_notes: input.editorNotes,
       sort_order: nextSortOrder,
+      ...getCreateOwnershipFields(input.actor),
     })
     .select("id")
     .single();
@@ -202,6 +209,7 @@ export async function updateSection(
       page_break_before: input.pageBreakBefore,
       layout_preset: input.layoutPreset,
       editor_notes: input.editorNotes,
+      ...getUpdateOwnershipFields(input.actor),
     })
     .eq("book_id", input.bookId)
     .eq("id", input.sectionId)
@@ -287,6 +295,7 @@ export async function moveSection(
   bookId: string,
   sectionId: string,
   direction: MoveSectionDirection,
+  actor: OwnershipActor,
 ): Promise<RepositoryResult<{ moved: boolean }>> {
   const sectionsResult = await listSections(supabase, bookId);
 
@@ -329,7 +338,10 @@ export async function moveSection(
 
     const { error } = await supabase
       .from("kdp_sections")
-      .update({ sort_order: nextSortOrder })
+      .update({
+        sort_order: nextSortOrder,
+        ...getUpdateOwnershipFields(actor),
+      })
       .eq("book_id", bookId)
       .eq("id", section.id);
 
