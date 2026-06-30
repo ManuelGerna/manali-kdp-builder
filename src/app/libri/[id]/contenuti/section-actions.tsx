@@ -2,6 +2,7 @@
 
 import { useFormStatus } from "react-dom";
 import {
+  createImagePlaceholderBlockAction,
   deleteSectionAction,
   moveSectionAction,
 } from "@/app/libri/[id]/contenuti/actions";
@@ -33,6 +34,16 @@ function DeleteButton() {
   return (
     <button className="secondary-button danger-button" disabled={pending} type="submit">
       {pending ? "Eliminazione..." : "Elimina"}
+    </button>
+  );
+}
+
+function PlaceholderButton() {
+  const { pending } = useFormStatus();
+
+  return (
+    <button className="secondary-button" disabled={pending} type="submit">
+      {pending ? "Creazione..." : "Crea placeholder"}
     </button>
   );
 }
@@ -83,6 +94,52 @@ export function DeleteSectionForm({
       <input name="book_id" type="hidden" value={bookId} />
       <input name="section_id" type="hidden" value={sectionId} />
       <DeleteButton />
+    </form>
+  );
+}
+
+export function CreateImagePlaceholderBlockForm({
+  bookId,
+  sectionId,
+}: {
+  bookId: string;
+  sectionId: string;
+}) {
+  return (
+    <form action={createImagePlaceholderBlockAction} className="form-grid">
+      <input name="book_id" type="hidden" value={bookId} />
+      <input name="section_id" type="hidden" value={sectionId} />
+
+      <div className="field">
+        <label htmlFor={`placeholder_title_${sectionId}`}>Titolo placeholder</label>
+        <input
+          id={`placeholder_title_${sectionId}`}
+          name="placeholder_title"
+          placeholder="Es. Illustrazione segno zodiacale"
+        />
+      </div>
+
+      <div className="field">
+        <label htmlFor={`placeholder_prompt_${sectionId}`}>
+          Prompt o descrizione immagine
+        </label>
+        <textarea
+          id={`placeholder_prompt_${sectionId}`}
+          name="placeholder_prompt"
+          placeholder="Descrizione editoriale dell'immagine da creare o sostituire"
+        />
+      </div>
+
+      <div className="field">
+        <label htmlFor={`placeholder_notes_${sectionId}`}>Note interne</label>
+        <textarea
+          id={`placeholder_notes_${sectionId}`}
+          name="placeholder_notes"
+          placeholder="Vincoli, fonti, taglio pagina o note per chi impagina"
+        />
+      </div>
+
+      <PlaceholderButton />
     </form>
   );
 }

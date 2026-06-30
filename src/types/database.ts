@@ -134,8 +134,14 @@ export type Database = {
           book_id: string;
           section_type: string;
           title: string | null;
+          subtitle: string | null;
           body: string | null;
           sort_order: number;
+          include_in_toc: boolean;
+          section_status: string;
+          page_break_before: boolean;
+          layout_preset: string;
+          editor_notes: string | null;
           settings: Json;
           created_at: string;
           updated_at: string;
@@ -145,8 +151,14 @@ export type Database = {
           book_id: string;
           section_type: string;
           title?: string | null;
+          subtitle?: string | null;
           body?: string | null;
           sort_order?: number;
+          include_in_toc?: boolean;
+          section_status?: string;
+          page_break_before?: boolean;
+          layout_preset?: string;
+          editor_notes?: string | null;
           settings?: Json;
           created_at?: string;
           updated_at?: string;
@@ -156,8 +168,14 @@ export type Database = {
           book_id?: string;
           section_type?: string;
           title?: string | null;
+          subtitle?: string | null;
           body?: string | null;
           sort_order?: number;
+          include_in_toc?: boolean;
+          section_status?: string;
+          page_break_before?: boolean;
+          layout_preset?: string;
+          editor_notes?: string | null;
           settings?: Json;
           created_at?: string;
           updated_at?: string;
@@ -168,6 +186,123 @@ export type Database = {
             columns: ["book_id"];
             isOneToOne: false;
             referencedRelation: "kdp_books";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      kdp_assets: {
+        Row: {
+          id: string;
+          book_id: string;
+          asset_type: string;
+          title: string | null;
+          file_path: string | null;
+          alt_text: string | null;
+          prompt: string | null;
+          status: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          book_id: string;
+          asset_type?: string;
+          title?: string | null;
+          file_path?: string | null;
+          alt_text?: string | null;
+          prompt?: string | null;
+          status?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          book_id?: string;
+          asset_type?: string;
+          title?: string | null;
+          file_path?: string | null;
+          alt_text?: string | null;
+          prompt?: string | null;
+          status?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "kdp_assets_book_id_fkey";
+            columns: ["book_id"];
+            isOneToOne: false;
+            referencedRelation: "kdp_books";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      kdp_section_blocks: {
+        Row: {
+          id: string;
+          book_id: string;
+          section_id: string;
+          asset_id: string | null;
+          block_type: string;
+          title: string | null;
+          body: string | null;
+          sort_order: number;
+          layout_preset: string;
+          print_visibility: string;
+          editor_notes: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          book_id: string;
+          section_id: string;
+          asset_id?: string | null;
+          block_type?: string;
+          title?: string | null;
+          body?: string | null;
+          sort_order?: number;
+          layout_preset?: string;
+          print_visibility?: string;
+          editor_notes?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          book_id?: string;
+          section_id?: string;
+          asset_id?: string | null;
+          block_type?: string;
+          title?: string | null;
+          body?: string | null;
+          sort_order?: number;
+          layout_preset?: string;
+          print_visibility?: string;
+          editor_notes?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "kdp_section_blocks_asset_id_fkey";
+            columns: ["asset_id"];
+            isOneToOne: false;
+            referencedRelation: "kdp_assets";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "kdp_section_blocks_book_id_fkey";
+            columns: ["book_id"];
+            isOneToOne: false;
+            referencedRelation: "kdp_books";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "kdp_section_blocks_section_id_fkey";
+            columns: ["section_id"];
+            isOneToOne: false;
+            referencedRelation: "kdp_sections";
             referencedColumns: ["id"];
           },
         ];

@@ -1,7 +1,11 @@
 import type { PostgrestError } from "@supabase/supabase-js";
 import type { createClient } from "@/lib/supabase/server";
 import type { RepositoryResult } from "@/lib/kdp/books";
-import type { SectionType } from "@/lib/kdp/constants";
+import type {
+  SectionLayoutPreset,
+  SectionStatus,
+  SectionType,
+} from "@/lib/kdp/constants";
 import type { Tables } from "@/types/database";
 
 type KdpSupabaseClient = Awaited<ReturnType<typeof createClient>>;
@@ -12,7 +16,13 @@ export type SectionInput = {
   bookId: string;
   sectionType: SectionType;
   title: string | null;
+  subtitle: string | null;
   body: string | null;
+  includeInToc: boolean;
+  sectionStatus: SectionStatus;
+  pageBreakBefore: boolean;
+  layoutPreset: SectionLayoutPreset;
+  editorNotes: string | null;
 };
 
 export type UpdateSectionInput = SectionInput & {
@@ -76,7 +86,7 @@ function getSectionPersistenceMessage(
   }
 
   if (error.code === "23514") {
-    return "Il tipo sezione non e' accettato dal database. Verifica la configurazione della tabella kdp_sections.";
+    return "Uno dei valori editoriali della sezione non e' accettato dal database. Verifica tipo, stato e layout.";
   }
 
   return fallback;
@@ -141,7 +151,13 @@ export async function createSection(
       book_id: input.bookId,
       section_type: input.sectionType,
       title: input.title,
+      subtitle: input.subtitle,
       body: input.body,
+      include_in_toc: input.includeInToc,
+      section_status: input.sectionStatus,
+      page_break_before: input.pageBreakBefore,
+      layout_preset: input.layoutPreset,
+      editor_notes: input.editorNotes,
       sort_order: nextSortOrder,
     })
     .select("id")
@@ -179,7 +195,13 @@ export async function updateSection(
     .update({
       section_type: input.sectionType,
       title: input.title,
+      subtitle: input.subtitle,
       body: input.body,
+      include_in_toc: input.includeInToc,
+      section_status: input.sectionStatus,
+      page_break_before: input.pageBreakBefore,
+      layout_preset: input.layoutPreset,
+      editor_notes: input.editorNotes,
     })
     .eq("book_id", input.bookId)
     .eq("id", input.sectionId)

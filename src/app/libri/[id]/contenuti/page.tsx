@@ -4,17 +4,36 @@ import { AppShell } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { FieldRow } from "@/components/ui/field-row";
+import { listAssets } from "@/lib/kdp/assets";
 import {
+  ASSET_STATUS_LABELS,
+  BLOCK_TYPE_LABELS,
+  PRINT_VISIBILITY_LABELS,
+  SECTION_LAYOUT_PRESET_LABELS,
+  SECTION_STATUS_LABELS,
   SECTION_TYPE_LABELS,
+  type AssetStatus,
+  type BlockType,
+  type PrintVisibility,
+  type SectionLayoutPreset,
+  type SectionStatus,
   type SectionType,
 } from "@/lib/kdp/constants";
+import {
+  listSectionBlocks,
+  type KdpSectionBlock,
+} from "@/lib/kdp/section-blocks";
 import { listSections, type KdpSection } from "@/lib/kdp/sections";
 import {
   createClient,
   hasSupabaseServerConfig,
 } from "@/lib/supabase/server";
 import type { Tables } from "@/types/database";
-import { DeleteSectionForm, MoveSectionForm } from "./section-actions";
+import {
+  CreateImagePlaceholderBlockForm,
+  DeleteSectionForm,
+  MoveSectionForm,
+} from "./section-actions";
 import { SectionCreateForm } from "./section-create-form";
 import { SectionEditForm } from "./section-edit-form";
 
@@ -46,6 +65,7 @@ type BookResult =
     };
 
 const STATUS_MESSAGES: Record<string, string> = {
+  block_created: "Placeholder immagine creato.",
   created: "Sezione creata.",
   deleted: "Sezione eliminata.",
   reordered: "Ordine sezioni aggiornato.",
@@ -98,6 +118,52 @@ function formatSectionType(sectionType: string) {
   );
 }
 
+function formatSectionStatus(sectionStatus: string) {
+  return (
+    SECTION_STATUS_LABELS[sectionStatus as SectionStatus] ??
+    sectionStatus.replaceAll("_", " ")
+  );
+}
+
+function formatLayoutPreset(layoutPreset: string) {
+  return (
+    SECTION_LAYOUT_PRESET_LABELS[layoutPreset as SectionLayoutPreset] ??
+    layoutPreset.replaceAll("_", " ")
+  );
+}
+
+function formatBlockType(blockType: string) {
+  return (
+    BLOCK_TYPE_LABELS[blockType as BlockType] ?? blockType.replaceAll("_", " ")
+  );
+}
+
+function formatPrintVisibility(printVisibility: string) {
+  return (
+    PRINT_VISIBILITY_LABELS[printVisibility as PrintVisibility] ??
+    printVisibility.replaceAll("_", " ")
+  );
+}
+
+function formatAssetStatus(assetStatus: string) {
+  return (
+    ASSET_STATUS_LABELS[assetStatus as AssetStatus] ??
+    assetStatus.replaceAll("_", " ")
+  );
+}
+
+function groupBlocksBySection(blocks: KdpSectionBlock[]) {
+  const grouped = new Map<string, KdpSectionBlock[]>();
+
+  for (const block of blocks) {
+    const sectionBlocks = grouped.get(block.section_id) ?? [];
+    sectionBlocks.push(block);
+    grouped.set(block.section_id, sectionBlocks);
+  }
+
+  return grouped;
+}
+
 function getPageMessage(searchParams: { error?: string; status?: string }) {
   if (searchParams.error) {
     return {
@@ -117,17 +183,20 @@ function getPageMessage(searchParams: { error?: string; status?: string }) {
 }
 
 function SectionCard({
+  blocks,
   index,
   isFirst,
   isLast,
   section,
 }: {
+  blocks: KdpSectionBlock[];
   index: number;
   isFirst: boolean;
   isLast: boolean;
   section: KdpSection;
 }) {
   const title = section.title || "Senza titolo";
+  const includeInToc = section.include_in_toc !== false;
 
   return (
     <article className="section-card">
@@ -137,14 +206,91 @@ function SectionCard({
             {index + 1}. {formatSectionType(section.section_type)}
           </p>
           <h2>{title}</h2>
+          {section.subtitle ? (
+            <p className="section-subtitle">{section.subtitle}</p>
+          ) : null}
         </div>
       </div>
 
-      {section.body ? (
-        <p className="section-body-preview">{section.body}</p>
-      ) : (
-        <p className="section-empty-body">Corpo vuoto.</p>
-      )}
+      <div className="section-chip-row" aria-label="Metadati sezione">
+        <span className="section-chip">
+          {formatSectionStatus(section.section_status)}
+        </span>
+        <span className="section-chip">
+          Layout: {formatLayoutPreset(section.layout_preset)}
+        </span>
+        <span className="section-chip">
+          Indice: {includeInToc ? "si" : "no"}
+        </span>
+        {section.page_break_before ? (
+          <span className="section-chip">Page break prima</span>
+        ) : null}
+      </div>
+
+      <div className="section-content-grid">
+        <section className="section-content-area">
+          <h3>Testo pubblicabile</h3>
+          {section.body ? (
+            <p className="section-body-preview">{section.body}</p>
+          ) : (
+            <p className="section-empty-body">Testo vuoto.</p>
+          )}
+        </section>
+
+        <section className="section-content-area">
+          <h3>Note interne</h3>
+          {section.editor_notes ? (
+            <p className="section-internal-notes">{section.editor_notes}</p>
+          ) : (
+            <p className="section-empty-body">Nessuna nota interna.</p>
+          )}
+        </section>
+      </div>
+
+      <section className="section-blocks-panel">
+        <div className="section-blocks-header">
+          <h3>Blocchi contenuto</h3>
+          <span className="section-chip">{blocks.length}</span>
+        </div>
+
+        {blocks.length > 0 ? (
+          <ul className="section-block-list">
+            {blocks.map((block) => (
+              <li className="section-block-item" key={block.id}>
+                <div className="section-block-item-header">
+                  <p className="section-meta">
+                    {block.sort_order}. {formatBlockType(block.block_type)}
+                  </p>
+                  <span className="section-chip">
+                    {formatPrintVisibility(block.print_visibility)}
+                  </span>
+                </div>
+                {block.title ? <h4>{block.title}</h4> : null}
+                {block.body ? (
+                  <p className="section-body-preview">{block.body}</p>
+                ) : null}
+                {block.editor_notes ? (
+                  <p className="section-internal-notes">
+                    {block.editor_notes}
+                  </p>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="section-empty-body">Nessun blocco dedicato.</p>
+        )}
+
+        <details className="section-edit-panel">
+          <summary className="secondary-button section-edit-toggle">
+            Placeholder immagine
+          </summary>
+          <CreateImagePlaceholderBlockForm
+            bookId={section.book_id}
+            sectionId={section.id}
+          />
+        </details>
+      </section>
 
       <div className="section-actions">
         <MoveSectionForm
@@ -277,13 +423,28 @@ export default async function BookContentsPage({
 
   const book = bookResult.data;
   const sections = sectionsResult.data;
+  const blocksResult = await listSectionBlocks(supabase, id);
+  const assetsResult = await listAssets(supabase, id);
+  const blocks = blocksResult.data ?? [];
+  const assets = assetsResult.data ?? [];
+  const blocksBySection = groupBlocksBySection(blocks);
+  const sectionsInToc = sections.filter(
+    (section) => section.include_in_toc !== false,
+  ).length;
+  const placeholderAssets = assets.filter(
+    (asset) => asset.status === "placeholder",
+  ).length;
+  const dataWarnings = [
+    blocksResult.data === null ? blocksResult.error : null,
+    assetsResult.data === null ? assetsResult.error : null,
+  ].filter((warning): warning is string => Boolean(warning));
   const pageMessage = getPageMessage(resolvedSearchParams);
 
   return (
     <AppShell
       title="Contenuti libretto"
       eyebrow={book.title}
-      description={book.subtitle || "Gestione minima delle sezioni del libretto."}
+      description={book.subtitle || "Builder editoriale per sezioni, blocchi e note."}
       actions={
         <Link className="secondary-button" href={`/libri/${book.id}`}>
           Torna al libretto
@@ -300,6 +461,12 @@ export default async function BookContentsPage({
           </p>
         ) : null}
 
+        {dataWarnings.map((warning) => (
+          <p className="form-note" key={warning} role="alert">
+            {warning}
+          </p>
+        ))}
+
         <div className="grid two" id="nuova-sezione">
           <Card title="Aggiungi sezione">
             <SectionCreateForm bookId={book.id} />
@@ -309,6 +476,12 @@ export default async function BookContentsPage({
             <ul className="panel-list">
               <FieldRow label="Titolo" value={book.title} />
               <FieldRow label="Sezioni" value={sections.length} />
+              <FieldRow label="In indice" value={sectionsInToc} />
+              <FieldRow label="Blocchi" value={blocks.length} />
+              <FieldRow
+                label={`Asset ${formatAssetStatus("placeholder")}`}
+                value={placeholderAssets}
+              />
               <FieldRow
                 label="Prossima posizione"
                 value={sections.length + 1}
@@ -331,6 +504,7 @@ export default async function BookContentsPage({
           <section className="section-list" aria-label="Sezioni contenuto">
             {sections.map((section, index) => (
               <SectionCard
+                blocks={blocksBySection.get(section.id) ?? []}
                 index={index}
                 isFirst={index === 0}
                 isLast={index === sections.length - 1}

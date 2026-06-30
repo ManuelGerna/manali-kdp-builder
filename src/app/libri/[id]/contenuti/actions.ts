@@ -2,7 +2,16 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { SECTION_TYPES, type SectionType } from "@/lib/kdp/constants";
+import { createAsset, deleteAsset } from "@/lib/kdp/assets";
+import {
+  SECTION_LAYOUT_PRESETS,
+  SECTION_STATUSES,
+  SECTION_TYPES,
+  type SectionLayoutPreset,
+  type SectionStatus,
+  type SectionType,
+} from "@/lib/kdp/constants";
+import { createSectionBlock } from "@/lib/kdp/section-blocks";
 import {
   createSection,
   deleteSection,
@@ -22,11 +31,19 @@ export type SectionFormState = {
   fields?: {
     section_type?: string;
     title?: string;
+    subtitle?: string;
     body?: string;
+    include_in_toc?: string;
+    section_status?: string;
+    page_break_before?: string;
+    layout_preset?: string;
+    editor_notes?: string;
   };
 };
 
 const SECTION_TYPE_VALUES: readonly string[] = SECTION_TYPES;
+const SECTION_STATUS_VALUES: readonly string[] = SECTION_STATUSES;
+const SECTION_LAYOUT_PRESET_VALUES: readonly string[] = SECTION_LAYOUT_PRESETS;
 
 function logSectionAction(
   event: string,
@@ -55,8 +72,20 @@ function getOptionalText(formData: FormData, name: string) {
   return value || null;
 }
 
+function getCheckbox(formData: FormData, name: string) {
+  return formData.get(name) === "on";
+}
+
 function isSectionType(value: string): value is SectionType {
   return SECTION_TYPE_VALUES.includes(value);
+}
+
+function isSectionStatus(value: string): value is SectionStatus {
+  return SECTION_STATUS_VALUES.includes(value);
+}
+
+function isSectionLayoutPreset(value: string): value is SectionLayoutPreset {
+  return SECTION_LAYOUT_PRESET_VALUES.includes(value);
 }
 
 function isMoveDirection(value: string): value is MoveSectionDirection {
@@ -67,7 +96,15 @@ function getFields(formData: FormData) {
   return {
     section_type: getString(formData, "section_type"),
     title: getString(formData, "title"),
+    subtitle: getString(formData, "subtitle"),
     body: getString(formData, "body"),
+    include_in_toc: getCheckbox(formData, "include_in_toc") ? "true" : "false",
+    section_status: getString(formData, "section_status"),
+    page_break_before: getCheckbox(formData, "page_break_before")
+      ? "true"
+      : "false",
+    layout_preset: getString(formData, "layout_preset"),
+    editor_notes: getString(formData, "editor_notes"),
   };
 }
 
@@ -179,6 +216,8 @@ export async function createSectionAction(
 ): Promise<SectionFormState> {
   const bookId = getString(formData, "book_id");
   const sectionType = getString(formData, "section_type") || "chapter";
+  const sectionStatus = getString(formData, "section_status") || "draft";
+  const layoutPreset = getString(formData, "layout_preset") || "default";
   const fields = getFields(formData);
 
   if (!bookId) {
@@ -191,6 +230,20 @@ export async function createSectionAction(
   if (!isSectionType(sectionType)) {
     return {
       message: "Tipo sezione non valido.",
+      fields,
+    };
+  }
+
+  if (!isSectionStatus(sectionStatus)) {
+    return {
+      message: "Stato sezione non valido.",
+      fields,
+    };
+  }
+
+  if (!isSectionLayoutPreset(layoutPreset)) {
+    return {
+      message: "Layout sezione non valido.",
       fields,
     };
   }
@@ -213,11 +266,19 @@ export async function createSectionAction(
     };
   }
 
+  const sectionBody = getOptionalText(formData, "body");
+  const sectionTitle = getOptionalText(formData, "title");
   const result = await createSection(supabase, {
     bookId,
     sectionType,
-    title: getOptionalText(formData, "title"),
-    body: getOptionalText(formData, "body"),
+    title: sectionTitle,
+    subtitle: getOptionalText(formData, "subtitle"),
+    body: sectionBody,
+    includeInToc: getCheckbox(formData, "include_in_toc"),
+    sectionStatus,
+    pageBreakBefore: getCheckbox(formData, "page_break_before"),
+    layoutPreset,
+    editorNotes: getOptionalText(formData, "editor_notes"),
   });
 
   if (result.data === null) {
@@ -225,6 +286,29 @@ export async function createSectionAction(
       message: result.error,
       fields,
     };
+  }
+
+  if (sectionBody) {
+    const blockResult = await createSectionBlock(supabase, {
+      bookId,
+      sectionId: result.data.sectionId,
+      blockType: "text",
+      title: sectionTitle || "Testo principale",
+      body: sectionBody,
+      sortOrder: 1,
+      layoutPreset,
+      printVisibility: "print",
+      editorNotes: null,
+    });
+
+    if (blockResult.data === null) {
+      revalidateBookContent(bookId);
+      redirect(
+        getContentPath(bookId, {
+          error: `Sezione creata, ma ${blockResult.error}`,
+        }),
+      );
+    }
   }
 
   revalidateBookContent(bookId);
@@ -238,6 +322,8 @@ export async function updateSectionAction(
   const bookId = getString(formData, "book_id");
   const sectionId = getString(formData, "section_id");
   const sectionType = getString(formData, "section_type");
+  const sectionStatus = getString(formData, "section_status");
+  const layoutPreset = getString(formData, "layout_preset");
   const fields = getFields(formData);
 
   if (!bookId || !sectionId) {
@@ -250,6 +336,20 @@ export async function updateSectionAction(
   if (!isSectionType(sectionType)) {
     return {
       message: "Tipo sezione non valido.",
+      fields,
+    };
+  }
+
+  if (!isSectionStatus(sectionStatus)) {
+    return {
+      message: "Stato sezione non valido.",
+      fields,
+    };
+  }
+
+  if (!isSectionLayoutPreset(layoutPreset)) {
+    return {
+      message: "Layout sezione non valido.",
       fields,
     };
   }
@@ -277,7 +377,13 @@ export async function updateSectionAction(
     sectionId,
     sectionType,
     title: getOptionalText(formData, "title"),
+    subtitle: getOptionalText(formData, "subtitle"),
     body: getOptionalText(formData, "body"),
+    includeInToc: getCheckbox(formData, "include_in_toc"),
+    sectionStatus,
+    pageBreakBefore: getCheckbox(formData, "page_break_before"),
+    layoutPreset,
+    editorNotes: getOptionalText(formData, "editor_notes"),
   });
 
   if (result.data === null) {
@@ -358,4 +464,67 @@ export async function moveSectionAction(formData: FormData) {
 
   revalidateBookContent(bookId);
   redirect(getContentPath(bookId, { status: "reordered" }));
+}
+
+export async function createImagePlaceholderBlockAction(formData: FormData) {
+  const bookId = getString(formData, "book_id");
+  const sectionId = getString(formData, "section_id");
+  const title = getOptionalText(formData, "placeholder_title");
+  const prompt = getOptionalText(formData, "placeholder_prompt");
+  const editorNotes = getOptionalText(formData, "placeholder_notes");
+
+  if (!bookId) {
+    redirect("/libri");
+  }
+
+  if (!sectionId) {
+    redirect(getContentPath(bookId, { error: "Sezione non valida." }));
+  }
+
+  const { supabase, error } = await getAuthenticatedSupabase(
+    "create-image-placeholder",
+  );
+
+  if (!supabase) {
+    redirect(getContentPath(bookId, { error }));
+  }
+
+  const bookAccessError = await getBookAccessError(supabase, bookId);
+
+  if (bookAccessError) {
+    redirect(getContentPath(bookId, { error: bookAccessError }));
+  }
+
+  const assetResult = await createAsset(supabase, {
+    bookId,
+    assetType: "image",
+    title: title || "Placeholder immagine",
+    altText: null,
+    prompt,
+    status: "placeholder",
+  });
+
+  if (assetResult.data === null) {
+    redirect(getContentPath(bookId, { error: assetResult.error }));
+  }
+
+  const blockResult = await createSectionBlock(supabase, {
+    bookId,
+    sectionId,
+    assetId: assetResult.data.assetId,
+    blockType: "image_prompt",
+    title: title || "Placeholder immagine",
+    body: prompt,
+    layoutPreset: "image_text",
+    printVisibility: "print",
+    editorNotes,
+  });
+
+  if (blockResult.data === null) {
+    await deleteAsset(supabase, bookId, assetResult.data.assetId);
+    redirect(getContentPath(bookId, { error: blockResult.error }));
+  }
+
+  revalidateBookContent(bookId);
+  redirect(getContentPath(bookId, { status: "block_created" }));
 }
