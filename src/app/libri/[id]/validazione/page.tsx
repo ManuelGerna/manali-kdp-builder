@@ -9,8 +9,10 @@ import { getBookDetail } from "@/lib/kdp/books";
 import { listSectionBlocks } from "@/lib/kdp/section-blocks";
 import {
   buildPreExportValidation,
+  getExportReadiness,
   VALIDATION_CATEGORIES,
   VALIDATION_CATEGORY_LABELS,
+  type ExportReadinessStatus,
   type ValidationCheck,
   type ValidationStatus,
 } from "@/lib/kdp/validation";
@@ -33,6 +35,18 @@ const STATUS_LABELS: Record<ValidationStatus, string> = {
 
 function getStatusClassName(status: ValidationStatus) {
   return `validation-status validation-status-${status}`;
+}
+
+function getReadinessStatusClassName(status: ExportReadinessStatus) {
+  if (status === "blocked") {
+    return getStatusClassName("failed");
+  }
+
+  if (status === "available_with_warnings") {
+    return getStatusClassName("warning");
+  }
+
+  return getStatusClassName("passed");
 }
 
 function ValidationCheckItem({ check }: { check: ValidationCheck }) {
@@ -180,6 +194,7 @@ export default async function BookValidationPage({
     sections,
     settings,
   });
+  const exportReadiness = getExportReadiness(report);
 
   return (
     <AppShell
@@ -225,6 +240,18 @@ export default async function BookValidationPage({
               <FieldRow label="Attenzioni" value={report.summary.warning} />
               <FieldRow label="Da sistemare" value={report.summary.failed} />
             </ul>
+          </div>
+        </Card>
+
+        <Card title="Stato export PDF">
+          <div className="export-readiness-card">
+            <span className={getReadinessStatusClassName(exportReadiness.status)}>
+              {exportReadiness.label}
+            </span>
+            <p>{exportReadiness.description}</p>
+            <button className="secondary-button" disabled type="button">
+              PDF presto
+            </button>
           </div>
         </Card>
 

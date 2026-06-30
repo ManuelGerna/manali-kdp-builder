@@ -396,6 +396,22 @@ button {
   opacity: 0.72;
 }
 
+.workflow-item-blocked {
+  opacity: 0.72;
+}
+
+.workflow-item-available_with_warnings .workflow-index {
+  border: 1px solid #dcc17e;
+  background: #fbf6eb;
+  color: var(--warning);
+}
+
+.workflow-item-ready .workflow-index {
+  border: 1px solid #a8c7b4;
+  background: #eef7f1;
+  color: var(--success);
+}
+
 .content-layout {
   display: grid;
   gap: 16px;
@@ -863,6 +879,21 @@ button {
   margin: 0;
   color: var(--muted);
   line-height: 1.55;
+}
+
+.export-readiness-card {
+  display: grid;
+  gap: 12px;
+}
+
+.export-readiness-card p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.export-readiness-card .secondary-button {
+  width: fit-content;
 }
 
 .validation-counts {

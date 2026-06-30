@@ -5,6 +5,7 @@ import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { FieldRow } from "@/components/ui/field-row";
 import { StatusPill } from "@/components/ui/status-pill";
+import { listAssets } from "@/lib/kdp/assets";
 import {
   AI_USAGE_LABELS,
   BOOK_STATUSES,
@@ -20,6 +21,12 @@ import {
   type TrimSize,
 } from "@/lib/kdp/constants";
 import { getBookDetail } from "@/lib/kdp/books";
+import { listSectionBlocks } from "@/lib/kdp/section-blocks";
+import {
+  buildPreExportValidation,
+  getExportReadiness,
+  type ExportReadiness,
+} from "@/lib/kdp/validation";
 import {
   createClient,
   hasSupabaseServerConfig,
@@ -65,6 +72,27 @@ function formatSectionType(sectionType: string) {
     SECTION_TYPE_LABELS[sectionType as SectionType] ??
     sectionType.replaceAll("_", " ")
   );
+}
+
+function getPdfExportGateCopy(readiness: ExportReadiness) {
+  if (readiness.status === "blocked") {
+    return {
+      buttonLabel: "Export PDF bloccato",
+      description: readiness.description,
+    };
+  }
+
+  if (readiness.status === "available_with_warnings") {
+    return {
+      buttonLabel: "Export PDF quasi pronto",
+      description: readiness.description,
+    };
+  }
+
+  return {
+    buttonLabel: "Export PDF pronto",
+    description: readiness.description,
+  };
 }
 
 export default async function BookDetailPage({ params }: BookDetailPageProps) {
@@ -144,6 +172,32 @@ export default async function BookDetailPage({ params }: BookDetailPageProps) {
   }
 
   const { book, settings, sections } = detailResult.data;
+  const [blocksResult, assetsResult] = await Promise.all([
+    listSectionBlocks(supabase, book.id),
+    listAssets(supabase, book.id),
+  ]);
+  let exportReadiness: ExportReadiness;
+
+  if (blocksResult.data === null || assetsResult.data === null) {
+    exportReadiness = {
+      description:
+        "Non riesco a verificare lo stato export. Apri la validazione prima di procedere.",
+      label: "Bloccato",
+      status: "blocked",
+    };
+  } else {
+    exportReadiness = getExportReadiness(
+      buildPreExportValidation({
+        assets: assetsResult.data,
+        blocks: blocksResult.data,
+        book,
+        sections,
+        settings,
+      }),
+    );
+  }
+
+  const pdfExportGate = getPdfExportGateCopy(exportReadiness);
 
   return (
     <AppShell
@@ -289,13 +343,19 @@ export default async function BookDetailPage({ params }: BookDetailPageProps) {
                 </Link>
               </div>
             </li>
-            <li className="workflow-item is-disabled">
+            <li className={`workflow-item workflow-item-${exportReadiness.status}`}>
               <span className="workflow-index">6</span>
               <div className="workflow-content">
                 <h3>Export PDF</h3>
-                <p>Generazione interior PDF non ancora disponibile.</p>
+                <p>{pdfExportGate.description}</p>
+                <Link
+                  className="secondary-button"
+                  href={`/libri/${book.id}/validazione`}
+                >
+                  Validazione pre-export
+                </Link>
                 <button className="secondary-button" disabled type="button">
-                  Export PDF (presto)
+                  {pdfExportGate.buttonLabel}
                 </button>
               </div>
             </li>

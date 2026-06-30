@@ -42,6 +42,17 @@ export type ValidationSummary = {
   warning: number;
 };
 
+export type ExportReadinessStatus =
+  | "available_with_warnings"
+  | "blocked"
+  | "ready";
+
+export type ExportReadiness = {
+  description: string;
+  label: string;
+  status: ExportReadinessStatus;
+};
+
 export type PreExportValidationReport = {
   checks: ValidationCheck[];
   summary: ValidationSummary;
@@ -173,6 +184,33 @@ function summarize(checks: ValidationCheck[]): ValidationSummary {
     finalMessage,
     passed,
     warning,
+  };
+}
+
+export function getExportReadiness(
+  report: PreExportValidationReport,
+): ExportReadiness {
+  if (report.summary.failed > 0) {
+    return {
+      description: "Risolvi gli elementi da sistemare nella validazione.",
+      label: "Bloccato",
+      status: "blocked",
+    };
+  }
+
+  if (report.summary.warning > 0) {
+    return {
+      description:
+        "Sono presenti attenzioni. Controlla la validazione prima dell'export.",
+      label: "Disponibile con avvisi",
+      status: "available_with_warnings",
+    };
+  }
+
+  return {
+    description: "Il libretto e' pronto per il prossimo step PDF.",
+    label: "Pronto",
+    status: "ready",
   };
 }
 
