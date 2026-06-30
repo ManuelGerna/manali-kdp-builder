@@ -334,6 +334,188 @@ button {
   gap: 8px;
 }
 
+.content-layout {
+  display: grid;
+  gap: 16px;
+}
+
+.section-list {
+  display: grid;
+  gap: 14px;
+}
+
+.section-card {
+  display: grid;
+  gap: 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  padding: 18px;
+}
+
+.section-card-header {
+  display: grid;
+  gap: 8px;
+}
+
+.section-card h2 {
+  margin: 0;
+  font-size: 1.08rem;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.section-subtitle {
+  margin: 6px 0 0;
+  color: var(--muted);
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.section-meta {
+  margin: 0 0 6px;
+  color: var(--muted);
+  font-size: 0.86rem;
+  font-weight: 800;
+  line-height: 1.4;
+}
+
+.section-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.section-chip {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface-muted);
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 900;
+  line-height: 1;
+  padding: 7px 9px;
+}
+
+.section-content-grid {
+  display: grid;
+  gap: 14px;
+}
+
+.section-content-area {
+  display: grid;
+  gap: 8px;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
+.section-content-area h3,
+.section-blocks-panel h3,
+.section-block-item h4 {
+  margin: 0;
+  font-size: 0.95rem;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.section-body-preview,
+.section-empty-body,
+.section-internal-notes {
+  margin: 0;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.section-body-preview {
+  border-left: 3px solid var(--line);
+  color: var(--text);
+  padding-left: 12px;
+}
+
+.section-empty-body {
+  color: var(--muted);
+}
+
+.section-internal-notes {
+  border-left: 3px solid #dcc17e;
+  color: #5e4d31;
+  padding-left: 12px;
+}
+
+.section-blocks-panel {
+  display: grid;
+  gap: 12px;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+
+.section-blocks-header,
+.section-block-item-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.section-block-list {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.section-block-item {
+  display: grid;
+  gap: 8px;
+  border-left: 3px solid var(--line);
+  padding-left: 12px;
+}
+
+.section-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.inline-form {
+  margin: 0;
+}
+
+.danger-button {
+  color: var(--danger);
+}
+
+.danger-button:hover {
+  border-color: var(--danger);
+}
+
+.section-edit-panel {
+  display: grid;
+  gap: 12px;
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+}
+
+.section-edit-toggle {
+  width: fit-content;
+  list-style: none;
+}
+
+.section-edit-toggle::-webkit-details-marker {
+  display: none;
+}
+
+.section-edit-form {
+  padding-top: 12px;
+}
+
 .panel {
   display: grid;
   gap: 16px;
@@ -470,6 +652,24 @@ button {
 .field {
   display: grid;
   gap: 7px;
+}
+
+.checkbox-field {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  color: var(--text);
+  font-size: 0.9rem;
+  font-weight: 800;
+  line-height: 1.4;
+}
+
+.checkbox-field input {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  margin: 2px 0 0;
+  accent-color: var(--brand);
 }
 
 .field label {
@@ -613,6 +813,10 @@ button {
 
   .copy-field-button {
     width: auto;
+  }
+
+  .section-content-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 

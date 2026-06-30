@@ -8,8 +8,10 @@ import { StatusPill } from "@/components/ui/status-pill";
 import {
   AI_USAGE_LABELS,
   BOOK_STATUSES,
+  SECTION_TYPE_LABELS,
   type AiUsageType,
   type BookStatus,
+  type SectionType,
 } from "@/lib/kdp/constants";
 import { getBookDetail } from "@/lib/kdp/books";
 import {
@@ -38,7 +40,10 @@ function formatBoolean(value: boolean) {
 }
 
 function formatSectionType(sectionType: string) {
-  return sectionType.replaceAll("_", " ");
+  return (
+    SECTION_TYPE_LABELS[sectionType as SectionType] ??
+    sectionType.replaceAll("_", " ")
+  );
 }
 
 export default async function BookDetailPage({ params }: BookDetailPageProps) {
@@ -189,9 +194,12 @@ export default async function BookDetailPage({ params }: BookDetailPageProps) {
 
         <Card title="Azioni">
           <div className="card-actions">
-            <button className="secondary-button" disabled type="button">
+            <Link
+              className="secondary-button"
+              href={`/libri/${book.id}/contenuti`}
+            >
               Contenuti
-            </button>
+            </Link>
             <Link className="secondary-button" href={`/libri/${book.id}/kdp`}>
               Dati KDP copiabili
             </Link>
