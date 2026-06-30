@@ -53,14 +53,26 @@ function getEditableLayoutPreset(layoutPreset: string): SectionLayoutPreset {
   return "default";
 }
 
-export function SectionEditForm({ section }: { section: KdpSection }) {
+export function SectionEditForm({
+  bodyFallbackFromBlocks,
+  section,
+}: {
+  bodyFallbackFromBlocks?: string | null;
+  section: KdpSection;
+}) {
+  const hasSectionBody = Boolean(section.body?.trim());
+  const fallbackBody = bodyFallbackFromBlocks?.trim() || "";
+  const showBlockBodyFallback = !hasSectionBody && Boolean(fallbackBody);
+  const initialBody = showBlockBodyFallback
+    ? fallbackBody
+    : (section.body ?? "");
   const initialState: SectionFormState = {
     message: null,
     fields: {
       section_type: getEditableSectionType(section.section_type),
       title: section.title ?? "",
       subtitle: section.subtitle ?? "",
-      body: section.body ?? "",
+      body: initialBody,
       include_in_toc: section.include_in_toc ? "true" : "false",
       section_status: getEditableSectionStatus(section.section_status),
       page_break_before: section.page_break_before ? "true" : "false",
@@ -80,6 +92,12 @@ export function SectionEditForm({ section }: { section: KdpSection }) {
     <form action={formAction} className="form-grid section-edit-form">
       <input name="book_id" type="hidden" value={section.book_id} />
       <input name="section_id" type="hidden" value={section.id} />
+      {showBlockBodyFallback ? (
+        <>
+          <input name="body_source" type="hidden" value="blocks" />
+          <input name="body_fallback_text" type="hidden" value={fallbackBody} />
+        </>
+      ) : null}
 
       {state.message ? (
         <p className="form-note form-note-error" role="alert">
@@ -194,11 +212,14 @@ export function SectionEditForm({ section }: { section: KdpSection }) {
       <div className="field">
         <label htmlFor={`body_${section.id}`}>Testo pubblicabile</label>
         <textarea
-          defaultValue={state.fields?.body ?? section.body ?? ""}
+          defaultValue={state.fields?.body ?? initialBody}
           id={`body_${section.id}`}
           name="body"
           placeholder="Testo finale destinato al PDF"
         />
+        {showBlockBodyFallback ? (
+          <p className="field-note">Testo ricavato dai blocchi importati.</p>
+        ) : null}
       </div>
 
       <div className="field">

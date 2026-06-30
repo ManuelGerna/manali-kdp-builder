@@ -77,6 +77,26 @@ function getOptionalText(formData: FormData, name: string) {
   return value || null;
 }
 
+function normalizeLineEndings(value: string) {
+  return value.replace(/\r\n/g, "\n");
+}
+
+function getEditableSectionBody(formData: FormData) {
+  const body = getString(formData, "body");
+  const fallbackBody = getString(formData, "body_fallback_text");
+  const usesBlockFallback = getString(formData, "body_source") === "blocks";
+
+  if (
+    usesBlockFallback &&
+    fallbackBody &&
+    normalizeLineEndings(body) === normalizeLineEndings(fallbackBody)
+  ) {
+    return null;
+  }
+
+  return body || null;
+}
+
 function getCheckbox(formData: FormData, name: string) {
   return formData.get(name) === "on";
 }
@@ -416,7 +436,7 @@ export async function updateSectionAction(
     sectionType,
     title: getOptionalText(formData, "title"),
     subtitle: getOptionalText(formData, "subtitle"),
-    body: getOptionalText(formData, "body"),
+    body: getEditableSectionBody(formData),
     includeInToc: getCheckbox(formData, "include_in_toc"),
     sectionStatus,
     pageBreakBefore: getCheckbox(formData, "page_break_before"),
