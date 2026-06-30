@@ -266,6 +266,19 @@ export default async function BookDetailPage({ params }: BookDetailPageProps) {
             <li className="workflow-item">
               <span className="workflow-index">4</span>
               <div className="workflow-content">
+                <h3>Validazione pre-export</h3>
+                <p>Controlli su contenuti, indice e coerenza prima del PDF.</p>
+                <Link
+                  className="secondary-button"
+                  href={`/libri/${book.id}/validazione`}
+                >
+                  Validazione pre-export
+                </Link>
+              </div>
+            </li>
+            <li className="workflow-item">
+              <span className="workflow-index">5</span>
+              <div className="workflow-content">
                 <h3>Dati KDP copiabili</h3>
                 <p>Campi editoriali e paperback da copiare in Amazon KDP.</p>
                 <Link
@@ -277,7 +290,7 @@ export default async function BookDetailPage({ params }: BookDetailPageProps) {
               </div>
             </li>
             <li className="workflow-item is-disabled">
-              <span className="workflow-index">5</span>
+              <span className="workflow-index">6</span>
               <div className="workflow-content">
                 <h3>Export PDF</h3>
                 <p>Generazione interior PDF non ancora disponibile.</p>
