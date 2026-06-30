@@ -844,6 +844,113 @@ button {
   color: var(--brand);
 }
 
+.validation-layout {
+  display: grid;
+  gap: 16px;
+}
+
+.validation-summary {
+  display: grid;
+  gap: 16px;
+}
+
+.validation-final {
+  display: grid;
+  gap: 10px;
+}
+
+.validation-final p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.validation-counts {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.validation-category-list {
+  display: grid;
+  gap: 16px;
+}
+
+.validation-check-list {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.validation-check {
+  display: grid;
+  gap: 10px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 12px;
+}
+
+.validation-check:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.validation-check-main {
+  display: grid;
+  gap: 10px;
+}
+
+.validation-check h3,
+.validation-check p {
+  margin: 0;
+}
+
+.validation-check h3 {
+  font-size: 0.98rem;
+  line-height: 1.35;
+}
+
+.validation-check p {
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.validation-check .secondary-button {
+  width: fit-content;
+}
+
+.validation-status {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface-muted);
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 900;
+  line-height: 1;
+  padding: 7px 9px;
+}
+
+.validation-status-passed {
+  border-color: #a8c7b4;
+  color: var(--success);
+}
+
+.validation-status-warning {
+  border-color: #dcc17e;
+  color: var(--warning);
+}
+
+.validation-status-failed {
+  border-color: #d4aaa4;
+  color: var(--danger);
+}
+
 .status-pill {
   display: inline-flex;
   width: fit-content;
