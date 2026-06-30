@@ -61,10 +61,27 @@ type LayoutState = {
   y: number;
 };
 
+type BookPreview = ReturnType<typeof buildBookPreview>;
+type SectionPageMap = Map<string, number>;
+
+type RenderTechnicalPdfDocumentInput = {
+  book: KdpBook;
+  preview: BookPreview;
+  settings: KdpBookSettings;
+  tocPageMap?: SectionPageMap;
+};
+
+type RenderTechnicalPdfDocumentResult = {
+  pageCount: number;
+  pageMap: SectionPageMap;
+  state: LayoutState;
+};
+
 const POINTS_PER_INCH = 72;
 const MIN_CONTENT_WIDTH = 144;
 const MIN_CONTENT_TOP = 42;
 const MIN_CONTENT_BOTTOM = 36;
+const TOC_PAGE_NUMBER_RESERVED_WIDTH = 34;
 
 const PAGE_SIZES: Record<string, PageSize> = {
   "5x8": {
@@ -292,6 +309,10 @@ function isAtPageTop(state: LayoutState) {
   return Math.abs(state.y - getContentTopY(state)) < 1;
 }
 
+function getVisiblePageNumber(state: LayoutState) {
+  return Math.max(0, state.pageIndex - 1);
+}
+
 function ensureSpace(state: LayoutState, height: number) {
   if (state.y - height < getContentBottomY(state)) {
     addPage(state);
@@ -413,6 +434,30 @@ function drawHorizontalRule(
       y,
     },
     thickness: options?.thickness ?? 0.5,
+  });
+}
+
+function drawDottedLeader(
+  state: LayoutState,
+  startX: number,
+  endX: number,
+  y: number,
+) {
+  const leader = ". ";
+  const size = Math.max(7, state.bodyFontSize - 3);
+  const leaderWidth = state.fonts.body.widthOfTextAtSize(leader, size);
+  const count = Math.floor((endX - startX) / leaderWidth);
+
+  if (count <= 0) {
+    return;
+  }
+
+  state.page.drawText(leader.repeat(count), {
+    color: rgb(0.68, 0.68, 0.68),
+    font: state.fonts.body,
+    size,
+    x: startX,
+    y,
   });
 }
 
@@ -583,16 +628,24 @@ function drawTitlePage(state: LayoutState, book: KdpBook) {
 
 function drawIndexItem(
   state: LayoutState,
-  item: ReturnType<typeof buildBookPreview>["toc"][number],
+  item: BookPreview["toc"][number],
+  pageMap?: SectionPageMap,
 ) {
   const numberText = `${item.index}.`;
+  const pageNumber = pageMap?.get(item.id);
+  const pageNumberText = pageNumber ? String(pageNumber) : "";
   const titleSize = state.bodyFontSize;
   const smallSize = Math.max(8, state.bodyFontSize - 2);
   const titleLineHeight = titleSize * 1.28;
   const smallLineHeight = smallSize * 1.25;
   const numberX = state.x;
   const titleX = state.x + 26;
-  const titleMaxWidth = Math.max(96, state.x + state.contentWidth - titleX);
+  const pageColumnWidth = Math.max(
+    TOC_PAGE_NUMBER_RESERVED_WIDTH,
+    state.fonts.body.widthOfTextAtSize("0000", titleSize),
+  );
+  const pageColumnX = state.x + state.contentWidth - pageColumnWidth;
+  const titleMaxWidth = Math.max(96, pageColumnX - titleX - 12);
   const titleLines = wrapText(
     item.title,
     state.fonts.bodyBold,
@@ -627,6 +680,32 @@ function drawIndexItem(
     y: textY,
   });
 
+  if (pageNumberText) {
+    const pageNumberWidth = state.fonts.body.widthOfTextAtSize(
+      pageNumberText,
+      titleSize,
+    );
+
+    state.page.drawText(pageNumberText, {
+      color: rgb(0.18, 0.18, 0.18),
+      font: state.fonts.body,
+      size: titleSize,
+      x: state.x + state.contentWidth - pageNumberWidth,
+      y: textY,
+    });
+
+    const firstTitleWidth = state.fonts.bodyBold.widthOfTextAtSize(
+      firstTitleLine,
+      titleSize,
+    );
+    drawDottedLeader(
+      state,
+      titleX + firstTitleWidth + 6,
+      pageColumnX - 8,
+      textY + 1,
+    );
+  }
+
   textY -= titleLineHeight;
 
   for (const line of titleLines.slice(1)) {
@@ -654,7 +733,11 @@ function drawIndexItem(
   state.y = textY - 8;
 }
 
-function drawIndexPage(state: LayoutState, preview: ReturnType<typeof buildBookPreview>) {
+function drawIndexPage(
+  state: LayoutState,
+  preview: BookPreview,
+  pageMap?: SectionPageMap,
+) {
   addPage(state);
   drawParagraph(state, "Indice", {
     font: state.fonts.headingBold,
@@ -672,16 +755,26 @@ function drawIndexPage(state: LayoutState, preview: ReturnType<typeof buildBookP
   }
 
   for (const item of [...preview.toc].sort((first, second) => first.index - second.index)) {
-    drawIndexItem(state, item);
+    drawIndexItem(state, item, pageMap);
   }
 }
 
-function drawSection(state: LayoutState, section: PreviewSection) {
+function prepareSectionStart(state: LayoutState, section: PreviewSection) {
   if (section.pageBreakBefore && !isAtPageTop(state)) {
     addPage(state);
   }
 
   ensureSpace(state, state.lineHeight * 4.5);
+}
+
+function drawSection(
+  state: LayoutState,
+  section: PreviewSection,
+  pageMap?: SectionPageMap,
+) {
+  prepareSectionStart(state, section);
+  pageMap?.set(section.id, getVisiblePageNumber(state));
+
   drawHeading(state, section.title, 16);
 
   if (section.subtitle) {
@@ -822,6 +915,53 @@ async function createLayoutState(settings: KdpBookSettings) {
   return state;
 }
 
+function applyPdfMetadata(
+  state: LayoutState,
+  book: KdpBook,
+  pageCount: number,
+) {
+  state.doc.setTitle(sanitizePdfText(book.title));
+
+  if (book.author_name) {
+    state.doc.setAuthor(sanitizePdfText(book.author_name));
+  }
+
+  state.doc.setSubject("Interior manuscript export");
+  state.doc.setKeywords([`page-count:${pageCount}`]);
+  state.doc.setCreator("KDP Builder");
+  state.doc.setProducer("KDP Builder");
+}
+
+async function renderTechnicalPdfDocument({
+  book,
+  preview,
+  settings,
+  tocPageMap,
+}: RenderTechnicalPdfDocumentInput): Promise<RenderTechnicalPdfDocumentResult> {
+  const state = await createLayoutState(settings);
+  const pageMap: SectionPageMap = new Map();
+
+  drawTitlePage(state, book);
+  drawIndexPage(state, preview, tocPageMap);
+  addPage(state);
+
+  if (preview.sections.length === 0) {
+    drawParagraph(state, "Nessuna sezione disponibile per il contenuto.");
+  } else {
+    for (const section of preview.sections) {
+      drawSection(state, section, pageMap);
+    }
+  }
+
+  drawPageFurniture(state, book, settings);
+
+  return {
+    pageCount: state.doc.getPageCount(),
+    pageMap,
+    state,
+  };
+}
+
 export function getTechnicalPdfFileName(title: string) {
   const slug = slugify(title);
 
@@ -839,21 +979,19 @@ export async function generateTechnicalKdpPdf(input: GenerateTechnicalPdfInput) 
     sections,
     settings,
   });
-  const state = await createLayoutState(settings);
+  const firstPass = await renderTechnicalPdfDocument({
+    book,
+    preview,
+    settings,
+  });
+  const finalPass = await renderTechnicalPdfDocument({
+    book,
+    preview,
+    settings,
+    tocPageMap: firstPass.pageMap,
+  });
 
-  drawTitlePage(state, book);
-  drawIndexPage(state, preview);
-  addPage(state);
+  applyPdfMetadata(finalPass.state, book, finalPass.pageCount);
 
-  if (preview.sections.length === 0) {
-    drawParagraph(state, "Nessuna sezione disponibile per il contenuto.");
-  } else {
-    for (const section of preview.sections) {
-      drawSection(state, section);
-    }
-  }
-
-  drawPageFurniture(state, book, settings);
-
-  return state.doc.save();
+  return finalPass.state.doc.save();
 }
