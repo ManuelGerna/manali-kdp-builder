@@ -460,6 +460,13 @@ button {
   line-height: 1.4;
 }
 
+.section-owner-meta {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
 .section-chip-row {
   display: flex;
   flex-wrap: wrap;
@@ -861,6 +868,126 @@ button {
   color: var(--brand);
 }
 
+.draft-import-layout,
+.draft-import-workspace,
+.draft-preview,
+.draft-section-list,
+.draft-block-list,
+.draft-notes-preview {
+  display: grid;
+  gap: 16px;
+}
+
+.draft-import-textarea {
+  min-height: 360px;
+}
+
+.draft-preview {
+  border-top: 1px solid var(--line);
+  padding-top: 16px;
+}
+
+.draft-preview-header {
+  display: grid;
+  gap: 12px;
+}
+
+.draft-preview-header h2 {
+  margin: 0;
+}
+
+.draft-import-confirm-form {
+  display: flex;
+}
+
+.draft-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+}
+
+.draft-stat-grid div {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #fafbf8;
+  padding: 12px;
+}
+
+.draft-stat-grid dt,
+.draft-stat-grid dd {
+  margin: 0;
+}
+
+.draft-stat-grid dt {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-weight: 900;
+}
+
+.draft-stat-grid dd {
+  margin-top: 4px;
+  color: var(--text);
+  font-size: 1.15rem;
+  font-weight: 900;
+}
+
+.draft-section-preview {
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: #ffffff;
+  padding: 14px;
+}
+
+.draft-section-preview h3,
+.draft-block-preview h4 {
+  margin: 0;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.draft-block-list,
+.draft-notes-preview ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.draft-block-preview {
+  display: grid;
+  gap: 7px;
+  border-left: 3px solid var(--line);
+  padding-left: 12px;
+}
+
+.draft-block-image_prompt {
+  border-left-color: var(--brand);
+}
+
+.draft-block-page_break {
+  border-left-color: #dcc17e;
+}
+
+.draft-prompt-preview {
+  margin: 0;
+  color: var(--brand);
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+.draft-notes-preview {
+  border-left: 3px solid #dcc17e;
+  color: #5e4d31;
+  padding-left: 12px;
+}
+
+.draft-notes-preview li {
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
 .validation-layout {
   display: grid;
   gap: 16px;
@@ -1204,6 +1331,15 @@ button {
 
   .section-content-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .draft-preview-header {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: end;
+  }
+
+  .draft-stat-grid {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
   }
 
   .settings-margin-grid {

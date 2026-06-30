@@ -8,6 +8,7 @@ import {
   type AiUsageType,
 } from "@/lib/kdp/constants";
 import { createBookWithDefaultSettings } from "@/lib/kdp/books";
+import { createOwnershipActor } from "@/lib/kdp/ownership";
 import {
   createClient,
   hasSupabaseServerConfig,
@@ -135,7 +136,10 @@ export async function createBook(
     authorName,
     language,
     aiUsageType,
-    userId: user.id,
+    actor: createOwnershipActor({
+      email: user.email,
+      userId: user.id,
+    }),
   });
 
   if (result.data === null) {

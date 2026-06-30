@@ -6,6 +6,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { FieldRow } from "@/components/ui/field-row";
 import { StatusPill } from "@/components/ui/status-pill";
 import { listAssets } from "@/lib/kdp/assets";
+import { formatInternalOwner } from "@/lib/kdp/ownership";
 import {
   AI_USAGE_LABELS,
   BOOK_STATUSES,
@@ -219,9 +220,14 @@ export default async function BookDetailPage({ params }: BookDetailPageProps) {
       eyebrow="Dettaglio libro"
       description={book.subtitle || "Dettaglio reale del libretto KDP."}
       actions={
-        <Link className="secondary-button" href="/libri">
-          Torna ai libri
-        </Link>
+        <>
+          <Link className="secondary-button" href={`/libri/${book.id}/importa`}>
+            Importa bozza
+          </Link>
+          <Link className="secondary-button" href="/libri">
+            Torna ai libri
+          </Link>
+        </>
       }
     >
       <div className="grid two">
@@ -237,6 +243,14 @@ export default async function BookDetailPage({ params }: BookDetailPageProps) {
               value={formatAiUsage(book.ai_usage_type)}
             />
             <FieldRow label="Sezioni" value={sections.length} />
+            <FieldRow
+              label="Creato da"
+              value={formatInternalOwner(book.created_by_email)}
+            />
+            <FieldRow
+              label="Ultima modifica"
+              value={formatInternalOwner(book.updated_by_email)}
+            />
           </ul>
         </Card>
 

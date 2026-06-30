@@ -20,6 +20,10 @@ import {
 } from "@/lib/kdp/constants";
 import { updateBookSettings } from "@/lib/kdp/books";
 import {
+  createOwnershipActor,
+  type OwnershipActor,
+} from "@/lib/kdp/ownership";
+import {
   createClient,
   hasSupabaseServerConfig,
 } from "@/lib/supabase/server";
@@ -165,7 +169,7 @@ async function getAuthenticatedSupabase(actionName: string) {
 
     return {
       supabase: null,
-      userId: null,
+      actor: null,
       error:
         "Supabase non configurato. Completa le variabili del progetto KDP Builder.",
     };
@@ -183,7 +187,7 @@ async function getAuthenticatedSupabase(actionName: string) {
   if (!supabase) {
     return {
       supabase: null,
-      userId: null,
+      actor: null,
       error: "Supabase non disponibile in questo momento.",
     };
   }
@@ -206,7 +210,10 @@ async function getAuthenticatedSupabase(actionName: string) {
 
   return {
     supabase,
-    userId: user.id,
+    actor: createOwnershipActor({
+      email: user.email,
+      userId: user.id,
+    }),
     error: null,
   };
 }
@@ -214,13 +221,13 @@ async function getAuthenticatedSupabase(actionName: string) {
 async function getBookAccessError(
   supabase: KdpSupabaseClient,
   bookId: string,
-  userId: string,
+  actor: OwnershipActor,
 ) {
   const { data, error } = await supabase
     .from("kdp_books")
     .select("id")
     .eq("id", bookId)
-    .eq("created_by", userId)
+    .eq("created_by", actor.userId)
     .maybeSingle();
 
   if (error) {
@@ -334,17 +341,17 @@ export async function updateSettingsAction(
     };
   }
 
-  const { supabase, userId, error } =
+  const { supabase, actor, error } =
     await getAuthenticatedSupabase("update-settings");
 
-  if (!supabase || !userId) {
+  if (!supabase || !actor) {
     return {
       message: error,
       fields,
     };
   }
 
-  const bookAccessError = await getBookAccessError(supabase, bookId, userId);
+  const bookAccessError = await getBookAccessError(supabase, bookId, actor);
 
   if (bookAccessError) {
     return {
@@ -355,6 +362,7 @@ export async function updateSettingsAction(
 
   const result = await updateBookSettings(supabase, {
     bookId,
+    actor,
     trimSize: fields.trim_size as TrimSize,
     bleed: fields.bleed === "true",
     interiorType: fields.interior_type as InteriorType,
