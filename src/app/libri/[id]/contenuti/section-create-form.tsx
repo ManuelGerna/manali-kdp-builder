@@ -39,25 +39,10 @@ export function SectionCreateForm({ bookId }: { bookId: string }) {
       <input name="book_id" type="hidden" value={bookId} />
 
       {state.message ? (
-        <p className="form-note" role="alert">
+        <p className="form-note form-note-error" role="alert">
           {state.message}
         </p>
       ) : null}
-
-      <div className="field">
-        <label htmlFor="section_type_new">Tipo sezione</label>
-        <select
-          defaultValue={state.fields?.section_type || "chapter"}
-          id="section_type_new"
-          name="section_type"
-        >
-          {SECTION_TYPE_OPTIONS.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-      </div>
 
       <div className="field">
         <label htmlFor="title_new">Titolo</label>
@@ -79,55 +64,72 @@ export function SectionCreateForm({ bookId }: { bookId: string }) {
         />
       </div>
 
-      <div className="field">
-        <label htmlFor="section_status_new">Stato editoriale</label>
-        <select
-          defaultValue={state.fields?.section_status || "draft"}
-          id="section_status_new"
-          name="section_status"
-        >
-          {SECTION_STATUS_OPTIONS.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
+      <div className="form-compact-grid">
+        <div className="field">
+          <label htmlFor="section_type_new">Tipo sezione</label>
+          <select
+            defaultValue={state.fields?.section_type || "chapter"}
+            id="section_type_new"
+            name="section_type"
+          >
+            {SECTION_TYPE_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="field">
+          <label htmlFor="section_status_new">Stato editoriale</label>
+          <select
+            defaultValue={state.fields?.section_status || "draft"}
+            id="section_status_new"
+            name="section_status"
+          >
+            {SECTION_STATUS_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="field">
+          <label htmlFor="layout_preset_new">Layout sezione</label>
+          <select
+            defaultValue={state.fields?.layout_preset || "default"}
+            id="layout_preset_new"
+            name="layout_preset"
+          >
+            {SECTION_LAYOUT_PRESET_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <label className="checkbox-field" htmlFor="include_in_toc_new">
+          <input
+            defaultChecked={includeInToc}
+            id="include_in_toc_new"
+            name="include_in_toc"
+            type="checkbox"
+          />
+          <span>Mostra in indice</span>
+        </label>
+
+        <label className="checkbox-field" htmlFor="page_break_before_new">
+          <input
+            defaultChecked={pageBreakBefore}
+            id="page_break_before_new"
+            name="page_break_before"
+            type="checkbox"
+          />
+          <span>Page break prima</span>
+        </label>
       </div>
-
-      <div className="field">
-        <label htmlFor="layout_preset_new">Layout sezione</label>
-        <select
-          defaultValue={state.fields?.layout_preset || "default"}
-          id="layout_preset_new"
-          name="layout_preset"
-        >
-          {SECTION_LAYOUT_PRESET_OPTIONS.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      <label className="checkbox-field" htmlFor="include_in_toc_new">
-        <input
-          defaultChecked={includeInToc}
-          id="include_in_toc_new"
-          name="include_in_toc"
-          type="checkbox"
-        />
-        <span>Mostra in indice</span>
-      </label>
-
-      <label className="checkbox-field" htmlFor="page_break_before_new">
-        <input
-          defaultChecked={pageBreakBefore}
-          id="page_break_before_new"
-          name="page_break_before"
-          type="checkbox"
-        />
-        <span>Interruzione pagina prima della sezione</span>
-      </label>
 
       <div className="field">
         <label htmlFor="body_new">Testo pubblicabile</label>

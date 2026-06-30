@@ -29,7 +29,9 @@ export function CopyField({ label, value }: CopyFieldProps) {
       <div className="copy-field-header">
         <h3 className="copy-field-label">{label}</h3>
         <button
-          className="secondary-button copy-field-button"
+          className={`secondary-button copy-field-button ${
+            copied ? "is-copied" : ""
+          }`}
           disabled={!value}
           aria-label={`Copia ${label}`}
           onClick={copyValue}

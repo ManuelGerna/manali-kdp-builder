@@ -5,6 +5,10 @@ import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { FieldRow } from "@/components/ui/field-row";
 import { listAssets } from "@/lib/kdp/assets";
+import {
+  getImportRunReport,
+  type DraftImportReport,
+} from "@/lib/kdp/import-runs";
 import { formatInternalOwner } from "@/lib/kdp/ownership";
 import {
   ASSET_STATUS_LABELS,
@@ -44,6 +48,7 @@ type BookContentsPageProps = {
   }>;
   searchParams: Promise<{
     error?: string;
+    run?: string;
     status?: string;
   }>;
 };
@@ -182,6 +187,49 @@ function getPageMessage(searchParams: { error?: string; status?: string }) {
   }
 
   return null;
+}
+
+function ImportReportSummary({ report }: { report: DraftImportReport }) {
+  return (
+    <Card className="import-report-card" title="Report import">
+      <dl className="draft-stat-grid import-report-grid">
+        <div>
+          <dt>Sezioni create</dt>
+          <dd>{report.sectionCount}</dd>
+        </div>
+        <div>
+          <dt>Blocchi creati</dt>
+          <dd>{report.blockCount}</dd>
+        </div>
+        <div>
+          <dt>Immagini placeholder</dt>
+          <dd>{report.imagePlaceholderCount}</dd>
+        </div>
+        <div>
+          <dt>Warning</dt>
+          <dd>{report.warningCount}</dd>
+        </div>
+      </dl>
+
+      {report.duplicate ? (
+        <p className="form-note form-note-warning">
+          Submit gia registrato: non sono stati creati duplicati.
+        </p>
+      ) : null}
+
+      {report.warnings.length > 0 ? (
+        <ul className="import-warning-list">
+          {report.warnings.map((warning) => (
+            <li key={warning}>{warning}</li>
+          ))}
+        </ul>
+      ) : (
+        <p className="form-note form-note-success">
+          Import completato senza warning.
+        </p>
+      )}
+    </Card>
+  );
 }
 
 function SectionCard({
@@ -445,6 +493,12 @@ export default async function BookContentsPage({
     blocksResult.data === null ? blocksResult.error : null,
     assetsResult.data === null ? assetsResult.error : null,
   ].filter((warning): warning is string => Boolean(warning));
+  const importReportResult = resolvedSearchParams.run
+    ? await getImportRunReport(supabase, {
+        bookId: book.id,
+        importToken: resolvedSearchParams.run,
+      })
+    : null;
   const pageMessage = getPageMessage(resolvedSearchParams);
 
   return (
@@ -466,15 +520,27 @@ export default async function BookContentsPage({
       <div className="content-layout">
         {pageMessage ? (
           <p
-            className="form-note"
+            className={`form-note form-note-${
+              pageMessage.tone === "error" ? "error" : "success"
+            }`}
             role={pageMessage.tone === "error" ? "alert" : "status"}
           >
             {pageMessage.text}
           </p>
         ) : null}
 
+        {importReportResult?.data ? (
+          <ImportReportSummary report={importReportResult.data.report} />
+        ) : null}
+
+        {importReportResult?.data === null ? (
+          <p className="form-note form-note-warning" role="status">
+            {importReportResult.error}
+          </p>
+        ) : null}
+
         {dataWarnings.map((warning) => (
-          <p className="form-note" key={warning} role="alert">
+          <p className="form-note form-note-error" key={warning} role="alert">
             {warning}
           </p>
         ))}

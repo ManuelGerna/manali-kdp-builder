@@ -41,6 +41,13 @@ export type UpdateBookSettingsInput = {
   marginOuter: number;
 };
 
+export type ListBooksMode = "active" | "archived";
+
+export type ArchiveBookInput = {
+  actor: OwnershipActor;
+  bookId: string;
+};
+
 export type RepositoryResult<T> =
   | {
       data: T;
@@ -86,6 +93,9 @@ const DEFAULT_SETTINGS_INSERT = {
   header_enabled: DEFAULT_BOOK_SETTINGS.headerEnabled,
   footer_enabled: DEFAULT_BOOK_SETTINGS.footerEnabled,
 } satisfies Omit<TablesInsert<"kdp_book_settings">, "book_id">;
+
+const BOOK_LIST_SELECT =
+  "id,title,subtitle,author_name,language,book_type,status,ai_usage_type,internal_description,created_by,created_by_user_id,created_by_email,updated_by_user_id,updated_by_email,archived_at,archived_by_user_id,archived_by_email,created_at,updated_at";
 
 function redactLogText(value: string | null | undefined) {
   if (!value) {
@@ -169,15 +179,39 @@ function getSettingsUpdateMessage(
   return fallback;
 }
 
+function getBookUpdateMessage(error: PostgrestError | null, fallback: string) {
+  if (!error) {
+    return fallback;
+  }
+
+  if (error.code === "42501") {
+    return "Il database non consente l'aggiornamento del libretto. Verifica grant e policy Supabase.";
+  }
+
+  return fallback;
+}
+
+export function isBookArchived(book: Pick<KdpBook, "archived_at" | "status">) {
+  return Boolean(book.archived_at) || book.status === "archived";
+}
+
 export async function listBooks(
   supabase: KdpSupabaseClient,
+  mode: ListBooksMode = "active",
 ): Promise<RepositoryResult<KdpBook[]>> {
-  const { data, error } = await supabase
+  let query = supabase
     .from("kdp_books")
-    .select(
-      "id,title,subtitle,author_name,language,book_type,status,ai_usage_type,internal_description,created_by,created_by_user_id,created_by_email,updated_by_user_id,updated_by_email,created_at,updated_at",
-    )
-    .order("updated_at", { ascending: false });
+    .select(BOOK_LIST_SELECT);
+
+  if (mode === "archived") {
+    query = query.or("archived_at.not.is.null,status.eq.archived");
+  } else {
+    query = query.is("archived_at", null).neq("status", "archived");
+  }
+
+  const { data, error } = await query.order("updated_at", {
+    ascending: false,
+  });
 
   if (error) {
     return {
@@ -254,6 +288,128 @@ export async function getBookDetail(
     },
     error: null,
     notFound: false,
+  };
+}
+
+export async function archiveBook(
+  supabase: KdpSupabaseClient,
+  input: ArchiveBookInput,
+): Promise<RepositoryResult<{ bookId: string }>> {
+  const { data, error } = await supabase
+    .from("kdp_books")
+    .update({
+      archived_at: new Date().toISOString(),
+      archived_by_user_id: input.actor.userId,
+      archived_by_email: input.actor.email,
+      ...getUpdateOwnershipFields(input.actor),
+    })
+    .eq("id", input.bookId)
+    .is("archived_at", null)
+    .neq("status", "archived")
+    .select("id")
+    .maybeSingle();
+
+  if (error) {
+    logPersistenceError("archive_kdp_book", error, {
+      bookIdTail: idTail(input.bookId),
+    });
+
+    return {
+      data: null,
+      error: getBookUpdateMessage(
+        error,
+        "Non riesco ad archiviare il libretto. Riprova tra poco.",
+      ),
+    };
+  }
+
+  if (!data) {
+    return {
+      data: null,
+      error: "Libretto non trovato, non accessibile o gia' archiviato.",
+    };
+  }
+
+  return {
+    data: {
+      bookId: data.id,
+    },
+    error: null,
+  };
+}
+
+export async function restoreBook(
+  supabase: KdpSupabaseClient,
+  input: ArchiveBookInput,
+): Promise<RepositoryResult<{ bookId: string }>> {
+  const { data: currentBook, error: currentBookError } = await supabase
+    .from("kdp_books")
+    .select("id,status,archived_at")
+    .eq("id", input.bookId)
+    .maybeSingle();
+
+  if (currentBookError) {
+    logPersistenceError("read_kdp_book_for_restore", currentBookError, {
+      bookIdTail: idTail(input.bookId),
+    });
+
+    return {
+      data: null,
+      error: "Non riesco a verificare il libretto da ripristinare.",
+    };
+  }
+
+  if (!currentBook || !isBookArchived(currentBook)) {
+    return {
+      data: null,
+      error: "Libretto non trovato, non accessibile o non archiviato.",
+    };
+  }
+
+  const bookUpdate: TablesUpdate<"kdp_books"> = {
+    archived_at: null,
+    archived_by_user_id: null,
+    archived_by_email: null,
+    ...getUpdateOwnershipFields(input.actor),
+  };
+
+  if (currentBook.status === "archived") {
+    bookUpdate.status = "draft";
+  }
+
+  const { data, error } = await supabase
+    .from("kdp_books")
+    .update(bookUpdate)
+    .eq("id", input.bookId)
+    .select("id")
+    .maybeSingle();
+
+  if (error) {
+    logPersistenceError("restore_kdp_book", error, {
+      bookIdTail: idTail(input.bookId),
+    });
+
+    return {
+      data: null,
+      error: getBookUpdateMessage(
+        error,
+        "Non riesco a ripristinare il libretto. Riprova tra poco.",
+      ),
+    };
+  }
+
+  if (!data) {
+    return {
+      data: null,
+      error: "Libretto non trovato, non accessibile o non archiviato.",
+    };
+  }
+
+  return {
+    data: {
+      bookId: data.id,
+    },
+    error: null,
   };
 }
 

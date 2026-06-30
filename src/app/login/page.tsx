@@ -17,7 +17,7 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
     <main className="login-screen">
       <section className="login-card">
         <div className="login-heading">
-          <span className="brand-mark">K</span>
+          <span className="brand-mark">KB</span>
           <h1>KDP Builder</h1>
           <p>Accesso privato Manali Corporate.</p>
         </div>

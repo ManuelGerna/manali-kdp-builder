@@ -139,7 +139,7 @@ export default async function BookSettingsPage({
       <div className="grid two settings-page-grid">
         <Card title="Formato guidato">
           {status === "saved" ? (
-            <p className="form-note" role="status">
+            <p className="form-note form-note-success" role="status">
               Impostazioni KDP salvate.
             </p>
           ) : null}

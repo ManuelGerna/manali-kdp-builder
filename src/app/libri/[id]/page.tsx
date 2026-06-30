@@ -5,6 +5,10 @@ import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { FieldRow } from "@/components/ui/field-row";
 import { StatusPill } from "@/components/ui/status-pill";
+import {
+  ArchiveBookForm,
+  RestoreBookForm,
+} from "@/app/libri/book-archive-actions";
 import { listAssets } from "@/lib/kdp/assets";
 import { formatInternalOwner } from "@/lib/kdp/ownership";
 import {
@@ -21,7 +25,7 @@ import {
   type SectionType,
   type TrimSize,
 } from "@/lib/kdp/constants";
-import { getBookDetail } from "@/lib/kdp/books";
+import { getBookDetail, isBookArchived, type KdpBook } from "@/lib/kdp/books";
 import { listSectionBlocks } from "@/lib/kdp/section-blocks";
 import {
   buildPreExportValidation,
@@ -39,7 +43,13 @@ type BookDetailPageProps = {
   }>;
 };
 
-function toBookStatus(status: string): BookStatus {
+function toBookStatus(book: KdpBook): BookStatus {
+  if (isBookArchived(book)) {
+    return "archived";
+  }
+
+  const status = book.status;
+
   return BOOK_STATUSES.includes(status as BookStatus)
     ? (status as BookStatus)
     : "draft";
@@ -187,6 +197,7 @@ export default async function BookDetailPage({ params }: BookDetailPageProps) {
   }
 
   const { book, settings, sections } = detailResult.data;
+  const archived = isBookArchived(book);
   const [blocksResult, assetsResult] = await Promise.all([
     listSectionBlocks(supabase, book.id),
     listAssets(supabase, book.id),
@@ -218,21 +229,45 @@ export default async function BookDetailPage({ params }: BookDetailPageProps) {
     <AppShell
       title={book.title}
       eyebrow="Dettaglio libro"
-      description={book.subtitle || "Dettaglio reale del libretto KDP."}
+      description={
+        archived
+          ? "Libretto archiviato, fuori dal flusso quotidiano."
+          : book.subtitle || "Dettaglio reale del libretto KDP."
+      }
       actions={
         <>
-          <Link className="secondary-button" href={`/libri/${book.id}/importa`}>
-            Importa bozza
-          </Link>
-          <Link className="secondary-button" href="/libri">
-            Torna ai libri
+          {archived ? (
+            <RestoreBookForm bookId={book.id} />
+          ) : (
+            <>
+              <Link
+                className="secondary-button"
+                href={`/libri/${book.id}/importa`}
+              >
+                Importa bozza
+              </Link>
+              <ArchiveBookForm bookId={book.id} title={book.title} />
+            </>
+          )}
+          <Link
+            className="secondary-button"
+            href={archived ? "/libri?view=archived" : "/libri"}
+          >
+            {archived ? "Torna agli archiviati" : "Torna ai libri"}
           </Link>
         </>
       }
     >
+      {archived ? (
+        <p className="form-note form-note-warning page-message" role="status">
+          Questo libretto e archiviato. Resta nel database e puo essere
+          ripristinato dalla vista Archiviati.
+        </p>
+      ) : null}
+
       <div className="grid two">
         <Card>
-          <StatusPill status={toBookStatus(book.status)} />
+          <StatusPill status={toBookStatus(book)} />
           <h2>Dati principali</h2>
           <ul className="panel-list">
             <FieldRow label="Autore" value={book.author_name} />
@@ -243,6 +278,12 @@ export default async function BookDetailPage({ params }: BookDetailPageProps) {
               value={formatAiUsage(book.ai_usage_type)}
             />
             <FieldRow label="Sezioni" value={sections.length} />
+            {archived ? (
+              <FieldRow
+                label="Archiviato da"
+                value={formatInternalOwner(book.archived_by_email)}
+              />
+            ) : null}
             <FieldRow
               label="Creato da"
               value={formatInternalOwner(book.created_by_email)}
@@ -280,7 +321,7 @@ export default async function BookDetailPage({ params }: BookDetailPageProps) {
               />
             </ul>
           ) : (
-            <p className="form-note">
+            <p className="form-note form-note-error">
               Impostazioni KDP non trovate per questo libretto.
             </p>
           )}
@@ -288,7 +329,9 @@ export default async function BookDetailPage({ params }: BookDetailPageProps) {
 
         <Card title="Sezioni">
           {sections.length === 0 ? (
-            <p className="form-note">Nessuna sezione ancora creata.</p>
+            <p className="form-note form-note-warning">
+              Nessuna sezione ancora creata.
+            </p>
           ) : (
             <ul className="panel-list">
               {sections.map((section) => (
@@ -399,7 +442,17 @@ export default async function BookDetailPage({ params }: BookDetailPageProps) {
                     ? "Validazione pre-export"
                     : "Controlla validazione"}
                 </Link>
-                <p className="form-note">{pdfExportGate.note}</p>
+                <p
+                  className={`form-note form-note-${
+                    pdfExportGate.statusClass === "failed"
+                      ? "error"
+                      : pdfExportGate.statusClass === "warning"
+                        ? "warning"
+                        : "success"
+                  }`}
+                >
+                  {pdfExportGate.note}
+                </p>
               </div>
             </li>
           </ol>

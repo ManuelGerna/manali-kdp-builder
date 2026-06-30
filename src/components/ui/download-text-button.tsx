@@ -35,7 +35,10 @@ export function DownloadTextButton({
   }
 
   return (
-    <ActionButton onClick={downloadTextFile}>
+    <ActionButton
+      className={`download-button ${downloaded ? "is-downloaded" : ""}`}
+      onClick={downloadTextFile}
+    >
       {downloaded ? "Scaricato" : label}
     </ActionButton>
   );

@@ -14,6 +14,7 @@ import {
 } from "./actions";
 
 const initialState: DraftImportFormState = {
+  importToken: null,
   message: null,
   preview: null,
 };
@@ -110,10 +111,12 @@ function DraftSectionPreview({
 function DraftPreview({
   bookId,
   draftText,
+  importToken,
   preview,
 }: {
   bookId: string;
   draftText: string;
+  importToken: string;
   preview: DraftImportResult;
 }) {
   return (
@@ -125,6 +128,7 @@ function DraftPreview({
         </div>
         <form action={importDraftAction} className="draft-import-confirm-form">
           <input name="book_id" type="hidden" value={bookId} />
+          <input name="import_token" type="hidden" value={importToken} />
           <textarea hidden name="draft_text" readOnly value={draftText} />
           <ImportButton />
         </form>
@@ -176,7 +180,7 @@ export function DraftImportForm({ bookId }: { bookId: string }) {
         <input name="book_id" type="hidden" value={bookId} />
 
         {state.message ? (
-          <p className="form-note" role="alert">
+          <p className="form-note form-note-error" role="alert">
             {state.message}
           </p>
         ) : null}
@@ -195,10 +199,11 @@ export function DraftImportForm({ bookId }: { bookId: string }) {
         <AnalyzeButton />
       </form>
 
-      {state.preview ? (
+      {state.preview && state.importToken ? (
         <DraftPreview
           bookId={bookId}
           draftText={draftText}
+          importToken={state.importToken}
           preview={state.preview}
         />
       ) : null}
