@@ -6,11 +6,13 @@ import { ActionButton } from "@/components/ui/action-button";
 type DownloadTextButtonProps = {
   content: string;
   filename: string;
+  label?: string;
 };
 
 export function DownloadTextButton({
   content,
   filename,
+  label = "Scarica dati KDP .txt",
 }: DownloadTextButtonProps) {
   const [downloaded, setDownloaded] = useState(false);
 
@@ -34,7 +36,7 @@ export function DownloadTextButton({
 
   return (
     <ActionButton onClick={downloadTextFile}>
-      {downloaded ? "Scaricato" : "Scarica dati KDP .txt"}
+      {downloaded ? "Scaricato" : label}
     </ActionButton>
   );
 }

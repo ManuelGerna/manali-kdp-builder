@@ -253,6 +253,19 @@ export default async function BookDetailPage({ params }: BookDetailPageProps) {
             <li className="workflow-item">
               <span className="workflow-index">3</span>
               <div className="workflow-content">
+                <h3>Anteprima libretto</h3>
+                <p>Indice automatico e contenuto ordinato senza note interne.</p>
+                <Link
+                  className="secondary-button"
+                  href={`/libri/${book.id}/anteprima`}
+                >
+                  Anteprima libretto
+                </Link>
+              </div>
+            </li>
+            <li className="workflow-item">
+              <span className="workflow-index">4</span>
+              <div className="workflow-content">
                 <h3>Dati KDP copiabili</h3>
                 <p>Campi editoriali e paperback da copiare in Amazon KDP.</p>
                 <Link
@@ -264,7 +277,7 @@ export default async function BookDetailPage({ params }: BookDetailPageProps) {
               </div>
             </li>
             <li className="workflow-item is-disabled">
-              <span className="workflow-index">4</span>
+              <span className="workflow-index">5</span>
               <div className="workflow-content">
                 <h3>Export PDF</h3>
                 <p>Generazione interior PDF non ancora disponibile.</p>
