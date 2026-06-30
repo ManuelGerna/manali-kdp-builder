@@ -65,7 +65,6 @@ const POINTS_PER_INCH = 72;
 const MIN_CONTENT_WIDTH = 144;
 const MIN_CONTENT_TOP = 42;
 const MIN_CONTENT_BOTTOM = 36;
-const TECHNICAL_PDF_VERSION = "PDF tecnico V2";
 
 const PAGE_SIZES: Record<string, PageSize> = {
   "5x8": {
@@ -105,6 +104,27 @@ function sanitizePdfText(value: string) {
     .replace(/\u2026/g, "...")
     .replace(/\u00a0/g, " ")
     .replace(/[^\x09\x0a\x0d\x20-\x7e\u00a0-\u00ff]/g, "");
+}
+
+function normalizeComparableText(value: string | null | undefined) {
+  if (!value) {
+    return "";
+  }
+
+  return sanitizePdfText(value)
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function hasSameEditorialTitle(
+  first: string | null | undefined,
+  second: string | null | undefined,
+) {
+  const firstTitle = normalizeComparableText(first);
+  const secondTitle = normalizeComparableText(second);
+
+  return Boolean(firstTitle && secondTitle && firstTitle === secondTitle);
 }
 
 function slugify(value: string) {
@@ -396,62 +416,6 @@ function drawHorizontalRule(
   });
 }
 
-function drawTechnicalTestNotice(
-  state: LayoutState,
-  notice: TechnicalPdfNotice,
-) {
-  const padding = 12;
-  const titleSize = 11;
-  const bodySize = 9;
-  const bodyLineHeight = 12;
-  const bodyLines = [
-    "Non pronto per Amazon KDP.",
-    "Usare solo per controllo interno di contenuti, margini e layout.",
-    `Stato validazione: ${notice.readinessStatus} (${notice.readinessLabel})`,
-    `Data generazione: ${notice.generatedAt}`,
-  ].flatMap((line) =>
-    wrapText(line, state.fonts.body, bodySize, state.contentWidth - padding * 2),
-  );
-  const boxHeight =
-    padding * 2 + titleSize + 8 + bodyLines.length * bodyLineHeight;
-
-  ensureSpace(state, boxHeight + 18);
-
-  const topY = state.y;
-  state.page.drawRectangle({
-    borderColor: rgb(0.74, 0.22, 0.16),
-    borderWidth: 1,
-    color: rgb(1, 0.95, 0.92),
-    height: boxHeight,
-    width: state.contentWidth,
-    x: state.x,
-    y: topY - boxHeight,
-  });
-
-  state.page.drawText("PDF TECNICO DI PROVA", {
-    color: rgb(0.54, 0.08, 0.05),
-    font: state.fonts.bodyBold,
-    size: titleSize,
-    x: state.x + padding,
-    y: topY - padding - titleSize,
-  });
-
-  let textY = topY - padding - titleSize - 8 - bodySize;
-
-  for (const line of bodyLines) {
-    state.page.drawText(sanitizePdfText(line), {
-      color: rgb(0.22, 0.12, 0.1),
-      font: state.fonts.body,
-      size: bodySize,
-      x: state.x + padding,
-      y: textY,
-    });
-    textY -= bodyLineHeight;
-  }
-
-  state.y -= boxHeight + 18;
-}
-
 function drawHeading(state: LayoutState, value: string, size: number) {
   ensureSpace(state, size * 3.2);
   drawParagraph(state, value, {
@@ -461,24 +425,23 @@ function drawHeading(state: LayoutState, value: string, size: number) {
   });
 }
 
-function drawMutedLabel(state: LayoutState, value: string) {
-  drawParagraph(state, value, {
-    color: rgb(0.42, 0.42, 0.42),
-    font: state.fonts.bodyBold,
-    paragraphSpacing: 4,
-    size: Math.max(8, state.bodyFontSize - 2),
-  });
-}
-
 function getImagePrompt(block: PreviewBlock) {
   return block.body || block.assetPrompt || block.assetAltText || "";
 }
 
-function drawImagePlaceholder(state: LayoutState, block: PreviewBlock) {
+function drawImagePlaceholder(
+  state: LayoutState,
+  block: PreviewBlock,
+  sectionTitle: string,
+) {
   const prompt = getImagePrompt(block);
   const padding = 12;
-  const label = "[IMMAGINE DA INSERIRE]";
-  const title = block.title || block.assetTitle;
+  const label = "[Immagine da inserire]";
+  const title =
+    !hasSameEditorialTitle(block.title, sectionTitle) &&
+    !hasSameEditorialTitle(block.assetTitle, sectionTitle)
+      ? block.title || block.assetTitle
+      : null;
   const innerWidth = state.contentWidth - padding * 2;
   const labelSize = Math.max(8, state.bodyFontSize - 2);
   const detailSize = Math.max(8, state.bodyFontSize - 1);
@@ -537,7 +500,11 @@ function drawImagePlaceholder(state: LayoutState, block: PreviewBlock) {
   state.y -= boxHeight + 16;
 }
 
-function drawBlock(state: LayoutState, block: PreviewBlock) {
+function drawBlock(
+  state: LayoutState,
+  block: PreviewBlock,
+  sectionTitle: string,
+) {
   if (block.isPageBreak) {
     if (!isAtPageTop(state)) {
       addPage(state);
@@ -546,16 +513,23 @@ function drawBlock(state: LayoutState, block: PreviewBlock) {
   }
 
   if (block.isImagePlaceholder) {
-    drawImagePlaceholder(state, block);
+    drawImagePlaceholder(state, block, sectionTitle);
     return;
   }
 
   if (block.blockType === "heading") {
-    drawHeading(state, block.title || block.body || block.blockTypeLabel, 15);
+    const headingText = hasSameEditorialTitle(block.title, sectionTitle)
+      ? block.body
+      : block.title || block.body;
+
+    if (headingText && !hasSameEditorialTitle(headingText, sectionTitle)) {
+      drawHeading(state, headingText, 15);
+    }
+
     return;
   }
 
-  if (block.title) {
+  if (block.title && !hasSameEditorialTitle(block.title, sectionTitle)) {
     ensureSpace(state, state.lineHeight * 2.4);
     drawParagraph(state, block.title, {
       font: state.fonts.bodyBold,
@@ -574,23 +548,11 @@ function drawBlock(state: LayoutState, block: PreviewBlock) {
   });
 }
 
-function drawTitlePage(
-  state: LayoutState,
-  book: KdpBook,
-  settings: KdpBookSettings,
-  technicalNotice?: TechnicalPdfNotice,
-) {
+function drawTitlePage(state: LayoutState, book: KdpBook) {
   const titleSize = clamp(state.pageWidth / 16, 22, 28);
   const subtitleSize = clamp(titleSize * 0.56, 13, 16);
-  const ruleWidth = Math.min(state.contentWidth * 0.42, 132);
-  const ruleStartX = (state.pageWidth - ruleWidth) / 2;
 
   state.y = state.pageHeight * 0.69;
-  drawHorizontalRule(state, state.y + 22, {
-    color: rgb(0.62, 0.62, 0.62),
-    endX: ruleStartX + ruleWidth,
-    startX: ruleStartX,
-  });
 
   drawCenteredParagraph(state, book.title, {
     font: state.fonts.headingBold,
@@ -617,57 +579,6 @@ function drawTitlePage(
       size: 12,
     });
   }
-
-  if (technicalNotice) {
-    state.y -= 18;
-    drawTechnicalTestNotice(state, technicalNotice);
-
-    state.y = getContentBottomY(state) + 42;
-    drawCenteredParagraph(state, TECHNICAL_PDF_VERSION, {
-      color: rgb(0.42, 0.42, 0.42),
-      font: state.fonts.bodyItalic,
-      maxWidth: state.contentWidth,
-      paragraphSpacing: 8,
-      size: 8,
-    });
-
-    if (settings.bleed) {
-      drawCenteredParagraph(
-        state,
-        "Nota tecnica: bleed attivo nelle impostazioni. Il PDF tecnico V2 non applica abbondanza grafica avanzata.",
-        {
-          color: rgb(0.42, 0.42, 0.42),
-          font: state.fonts.bodyItalic,
-          maxWidth: state.contentWidth,
-          size: 8,
-        },
-      );
-    }
-  }
-}
-
-function drawDottedLeader(
-  state: LayoutState,
-  startX: number,
-  endX: number,
-  y: number,
-) {
-  const leader = ". ";
-  const size = Math.max(7, state.bodyFontSize - 3);
-  const leaderWidth = state.fonts.body.widthOfTextAtSize(leader, size);
-  const count = Math.floor((endX - startX) / leaderWidth);
-
-  if (count <= 0) {
-    return;
-  }
-
-  state.page.drawText(leader.repeat(count), {
-    color: rgb(0.68, 0.68, 0.68),
-    font: state.fonts.body,
-    size,
-    x: startX,
-    y,
-  });
 }
 
 function drawIndexItem(
@@ -675,16 +586,13 @@ function drawIndexItem(
   item: ReturnType<typeof buildBookPreview>["toc"][number],
 ) {
   const numberText = `${item.index}.`;
-  const pageText = "pag. --";
   const titleSize = state.bodyFontSize;
   const smallSize = Math.max(8, state.bodyFontSize - 2);
   const titleLineHeight = titleSize * 1.28;
   const smallLineHeight = smallSize * 1.25;
   const numberX = state.x;
   const titleX = state.x + 26;
-  const pageTextWidth = state.fonts.body.widthOfTextAtSize(pageText, smallSize);
-  const pageX = state.x + state.contentWidth - pageTextWidth;
-  const titleMaxWidth = Math.max(96, pageX - titleX - 14);
+  const titleMaxWidth = Math.max(96, state.x + state.contentWidth - titleX);
   const titleLines = wrapText(
     item.title,
     state.fonts.bodyBold,
@@ -694,16 +602,9 @@ function drawIndexItem(
   const subtitleLines = item.subtitle
     ? wrapText(item.subtitle, state.fonts.body, smallSize, titleMaxWidth)
     : [];
-  const metadataLines = wrapText(
-    `${item.sectionTypeLabel} - ${item.layoutPresetLabel}`,
-    state.fonts.body,
-    smallSize,
-    titleMaxWidth,
-  );
   const itemHeight =
     titleLines.length * titleLineHeight +
     subtitleLines.length * smallLineHeight +
-    metadataLines.length * smallLineHeight +
     10;
 
   ensureSpace(state, itemHeight);
@@ -725,24 +626,6 @@ function drawIndexItem(
     x: titleX,
     y: textY,
   });
-  state.page.drawText(pageText, {
-    color: rgb(0.46, 0.46, 0.46),
-    font: state.fonts.body,
-    size: smallSize,
-    x: pageX,
-    y: textY,
-  });
-
-  const firstTitleWidth = state.fonts.bodyBold.widthOfTextAtSize(
-    firstTitleLine,
-    titleSize,
-  );
-  drawDottedLeader(
-    state,
-    titleX + firstTitleWidth + 6,
-    pageX - 8,
-    textY + 1,
-  );
 
   textY -= titleLineHeight;
 
@@ -761,17 +644,6 @@ function drawIndexItem(
     state.page.drawText(sanitizePdfText(line), {
       color: rgb(0.38, 0.38, 0.38),
       font: state.fonts.body,
-      size: smallSize,
-      x: titleX,
-      y: textY,
-    });
-    textY -= smallLineHeight;
-  }
-
-  for (const line of metadataLines) {
-    state.page.drawText(sanitizePdfText(line), {
-      color: rgb(0.5, 0.5, 0.5),
-      font: state.fonts.bodyItalic,
       size: smallSize,
       x: titleX,
       y: textY,
@@ -810,10 +682,6 @@ function drawSection(state: LayoutState, section: PreviewSection) {
   }
 
   ensureSpace(state, state.lineHeight * 4.5);
-  drawMutedLabel(
-    state,
-    `${section.index}. ${section.sectionTypeLabel} - ${section.layoutPresetLabel}`,
-  );
   drawHeading(state, section.title, 16);
 
   if (section.subtitle) {
@@ -830,7 +698,7 @@ function drawSection(state: LayoutState, section: PreviewSection) {
   }
 
   for (const block of section.blocks) {
-    drawBlock(state, block);
+    drawBlock(state, block, section.title);
   }
 
   state.y -= state.lineHeight * 0.25;
@@ -842,7 +710,7 @@ function drawPageFurniture(
   settings: KdpBookSettings,
 ) {
   const pages = state.doc.getPages();
-  const footerSize = 8;
+  const footerSize = 10;
   const headerSize = 8;
 
   pages.forEach((page, index) => {
@@ -902,10 +770,10 @@ function drawPageFurniture(
       footerText,
       footerSize,
     );
-    const footerY = Math.max(14, Math.min(state.marginBottom * 0.45, 28));
+    const footerY = Math.max(24, Math.min(state.marginBottom * 0.55, 36));
 
     page.drawText(footerText, {
-      color: rgb(0.44, 0.44, 0.44),
+      color: rgb(0.32, 0.32, 0.32),
       font: state.fonts.body,
       size: footerSize,
       x: x + (contentWidth - footerWidth) / 2,
@@ -962,14 +830,8 @@ export function getTechnicalPdfFileName(title: string) {
     : "libretto-interior-technical.pdf";
 }
 
-export async function generateTechnicalKdpPdf({
-  assets,
-  blocks,
-  book,
-  sections,
-  settings,
-  technicalNotice,
-}: GenerateTechnicalPdfInput) {
+export async function generateTechnicalKdpPdf(input: GenerateTechnicalPdfInput) {
+  const { assets, blocks, book, sections, settings } = input;
   const preview = buildBookPreview({
     assets,
     blocks,
@@ -979,7 +841,7 @@ export async function generateTechnicalKdpPdf({
   });
   const state = await createLayoutState(settings);
 
-  drawTitlePage(state, book, settings, technicalNotice);
+  drawTitlePage(state, book);
   drawIndexPage(state, preview);
   addPage(state);
 
