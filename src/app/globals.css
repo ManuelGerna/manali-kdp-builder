@@ -379,12 +379,16 @@ button {
 }
 
 .archive-button {
-  color: var(--warning);
+  border-color: rgba(148, 100, 22, 0.32);
+  background: linear-gradient(180deg, #fffafd 0, #fff6df 100%);
+  box-shadow: none;
+  color: #77520f;
 }
 
 .archive-button:hover {
   border-color: var(--warning-line);
   background: var(--warning-bg);
+  color: var(--warning);
 }
 
 .restore-button {
