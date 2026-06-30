@@ -184,19 +184,23 @@ export function buildBookPreview({
       subtitle: section.subtitle,
       title: getSectionTitle(section),
     }));
-  const previewSections = orderedSections.map((section, index) => ({
-    blocks: (blocksBySection.get(section.id) ?? [])
+  const previewSections = orderedSections.map((section, index) => {
+    const previewBlocks = (blocksBySection.get(section.id) ?? [])
       .filter(isVisiblePreviewBlock)
-      .map((block) => toPreviewBlock(block, assetById)),
-    body: section.body,
-    id: section.id,
-    index: index + 1,
-    layoutPresetLabel: formatLayoutPreset(section.layout_preset),
-    pageBreakBefore: section.page_break_before,
-    sectionTypeLabel: formatSectionType(section.section_type),
-    subtitle: section.subtitle,
-    title: getSectionTitle(section),
-  }));
+      .map((block) => toPreviewBlock(block, assetById));
+
+    return {
+      blocks: previewBlocks,
+      body: previewBlocks.length > 0 ? null : section.body,
+      id: section.id,
+      index: index + 1,
+      layoutPresetLabel: formatLayoutPreset(section.layout_preset),
+      pageBreakBefore: section.page_break_before,
+      sectionTypeLabel: formatSectionType(section.section_type),
+      subtitle: section.subtitle,
+      title: getSectionTitle(section),
+    };
+  });
 
   return {
     book,
