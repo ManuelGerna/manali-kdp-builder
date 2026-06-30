@@ -388,6 +388,7 @@ button {
   line-height: 1.5;
 }
 
+.workflow-content .button,
 .workflow-content .secondary-button {
   width: fit-content;
 }
@@ -892,6 +893,7 @@ button {
   line-height: 1.55;
 }
 
+.export-readiness-card .button,
 .export-readiness-card .secondary-button {
   width: fit-content;
 }
