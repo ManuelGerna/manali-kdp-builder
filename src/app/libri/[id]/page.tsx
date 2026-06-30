@@ -8,10 +8,16 @@ import { StatusPill } from "@/components/ui/status-pill";
 import {
   AI_USAGE_LABELS,
   BOOK_STATUSES,
+  INTERIOR_TYPE_LABELS,
+  PAPER_TYPE_LABELS,
   SECTION_TYPE_LABELS,
+  TRIM_SIZE_LABELS,
   type AiUsageType,
   type BookStatus,
+  type InteriorType,
+  type PaperType,
   type SectionType,
+  type TrimSize,
 } from "@/lib/kdp/constants";
 import { getBookDetail } from "@/lib/kdp/books";
 import {
@@ -37,6 +43,21 @@ function formatAiUsage(aiUsageType: string) {
 
 function formatBoolean(value: boolean) {
   return value ? "Si" : "No";
+}
+
+function formatTrimSize(trimSize: string) {
+  return TRIM_SIZE_LABELS[trimSize as TrimSize] ?? trimSize;
+}
+
+function formatInteriorType(interiorType: string) {
+  return (
+    INTERIOR_TYPE_LABELS[interiorType as InteriorType] ??
+    interiorType.replaceAll("_", " ")
+  );
+}
+
+function formatPaperType(paperType: string) {
+  return PAPER_TYPE_LABELS[paperType as PaperType] ?? paperType;
 }
 
 function formatSectionType(sectionType: string) {
@@ -154,10 +175,19 @@ export default async function BookDetailPage({ params }: BookDetailPageProps) {
         <Card title="Formato V1">
           {settings ? (
             <ul className="panel-list">
-              <FieldRow label="Trim size" value={settings.trim_size} />
+              <FieldRow
+                label="Trim size"
+                value={formatTrimSize(settings.trim_size)}
+              />
               <FieldRow label="Bleed" value={formatBoolean(settings.bleed)} />
-              <FieldRow label="Interior" value={settings.interior_type} />
-              <FieldRow label="Paper" value={settings.paper_type} />
+              <FieldRow
+                label="Interior"
+                value={formatInteriorType(settings.interior_type)}
+              />
+              <FieldRow
+                label="Paper"
+                value={formatPaperType(settings.paper_type)}
+              />
               <FieldRow label="Body font" value={settings.body_font} />
               <FieldRow label="Heading font" value={settings.heading_font} />
               <FieldRow label="Font size" value={settings.body_font_size} />
@@ -192,21 +222,58 @@ export default async function BookDetailPage({ params }: BookDetailPageProps) {
           )}
         </Card>
 
-        <Card title="Azioni">
-          <div className="card-actions">
-            <Link
-              className="secondary-button"
-              href={`/libri/${book.id}/contenuti`}
-            >
-              Contenuti
-            </Link>
-            <Link className="secondary-button" href={`/libri/${book.id}/kdp`}>
-              Dati KDP copiabili
-            </Link>
-            <button className="secondary-button" disabled type="button">
-              Export PDF
-            </button>
-          </div>
+        <Card title="Flusso guidato">
+          <ol className="workflow-list">
+            <li className="workflow-item">
+              <span className="workflow-index">1</span>
+              <div className="workflow-content">
+                <h3>Impostazioni KDP</h3>
+                <p>Formato, carta, font e margini del libretto.</p>
+                <Link
+                  className="secondary-button"
+                  href={`/libri/${book.id}/impostazioni`}
+                >
+                  Impostazioni KDP
+                </Link>
+              </div>
+            </li>
+            <li className="workflow-item">
+              <span className="workflow-index">2</span>
+              <div className="workflow-content">
+                <h3>Contenuti</h3>
+                <p>Sezioni e testi che finiranno nel futuro PDF.</p>
+                <Link
+                  className="secondary-button"
+                  href={`/libri/${book.id}/contenuti`}
+                >
+                  Contenuti
+                </Link>
+              </div>
+            </li>
+            <li className="workflow-item">
+              <span className="workflow-index">3</span>
+              <div className="workflow-content">
+                <h3>Dati KDP copiabili</h3>
+                <p>Campi editoriali e paperback da copiare in Amazon KDP.</p>
+                <Link
+                  className="secondary-button"
+                  href={`/libri/${book.id}/kdp`}
+                >
+                  Dati KDP copiabili
+                </Link>
+              </div>
+            </li>
+            <li className="workflow-item is-disabled">
+              <span className="workflow-index">4</span>
+              <div className="workflow-content">
+                <h3>Export PDF</h3>
+                <p>Generazione interior PDF non ancora disponibile.</p>
+                <button className="secondary-button" disabled type="button">
+                  Export PDF (presto)
+                </button>
+              </div>
+            </li>
+          </ol>
         </Card>
       </div>
     </AppShell>

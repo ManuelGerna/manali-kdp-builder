@@ -334,6 +334,68 @@ button {
   gap: 8px;
 }
 
+.workflow-list {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.workflow-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 12px;
+}
+
+.workflow-item:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.workflow-index {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--surface-muted);
+  color: var(--brand);
+  font-size: 0.84rem;
+  font-weight: 900;
+}
+
+.workflow-content {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.workflow-content h3,
+.workflow-content p {
+  margin: 0;
+}
+
+.workflow-content h3 {
+  font-size: 0.98rem;
+  line-height: 1.35;
+}
+
+.workflow-content p {
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.workflow-content .secondary-button {
+  width: fit-content;
+}
+
+.workflow-item.is-disabled {
+  opacity: 0.72;
+}
+
 .content-layout {
   display: grid;
   gap: 16px;
@@ -649,6 +711,17 @@ button {
   gap: 14px;
 }
 
+.settings-margin-grid {
+  display: grid;
+  gap: 14px;
+}
+
+.settings-form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
 .field {
   display: grid;
   gap: 7px;
@@ -817,6 +890,10 @@ button {
 
   .section-content-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .settings-margin-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
 

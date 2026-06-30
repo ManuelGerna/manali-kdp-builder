@@ -1,8 +1,12 @@
 import {
   AI_USAGE_LABELS,
   DEFAULT_BOOK_SETTINGS,
+  INTERIOR_TYPE_LABELS,
   LANGUAGE_OPTIONS,
+  PAPER_TYPE_LABELS,
   type AiUsageType,
+  type InteriorType,
+  type PaperType,
 } from "@/lib/kdp/constants";
 import type { KdpBook, KdpBookSettings } from "@/lib/kdp/books";
 
@@ -103,19 +107,14 @@ function getBleedLabel(bleed: boolean) {
 }
 
 function getInteriorLabel(interiorType: string) {
-  if (interiorType === "black_and_white") {
-    return "Black & white interior";
-  }
-
-  return interiorType;
+  return (
+    INTERIOR_TYPE_LABELS[interiorType as InteriorType] ??
+    interiorType.replaceAll("_", " ")
+  );
 }
 
 function getPaperLabel(paperType: string) {
-  if (paperType === "white") {
-    return "White paper";
-  }
-
-  return paperType;
+  return PAPER_TYPE_LABELS[paperType as PaperType] ?? paperType;
 }
 
 function slugify(value: string) {
