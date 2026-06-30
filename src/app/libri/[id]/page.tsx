@@ -77,9 +77,14 @@ function formatSectionType(sectionType: string) {
 function getPdfExportGateCopy(readiness: ExportReadiness) {
   if (readiness.status === "blocked") {
     return {
-      buttonLabel: "Export PDF finale bloccato",
+      buttonLabel: "Scarica PDF tecnico di prova",
       description:
-        "Bloccato per KDP. Risolvi gli elementi da sistemare nella validazione. Il PDF tecnico di prova resta disponibile solo per test interno.",
+        "Bloccato per KDP. Risolvi gli elementi da sistemare nella validazione.",
+      hrefSuffix: "export/pdf?mode=technical",
+      note:
+        "Disponibile solo come test interno. Non caricare questo PDF su Amazon KDP.",
+      statusClass: "failed",
+      statusLabel: "Export PDF finale bloccato",
     };
   }
 
@@ -87,12 +92,20 @@ function getPdfExportGateCopy(readiness: ExportReadiness) {
     return {
       buttonLabel: "Scarica PDF tecnico",
       description: readiness.description,
+      hrefSuffix: "export/pdf?mode=technical",
+      note: "Controlla le attenzioni prima di caricare su KDP.",
+      statusClass: "warning",
+      statusLabel: "Export PDF quasi pronto",
     };
   }
 
   return {
     buttonLabel: "Scarica PDF tecnico",
     description: readiness.description,
+    hrefSuffix: "export/pdf",
+    note: "Il libretto e' pronto per il prossimo step PDF.",
+    statusClass: "passed",
+    statusLabel: "Export PDF pronto",
   };
 }
 
@@ -348,45 +361,31 @@ export default async function BookDetailPage({ params }: BookDetailPageProps) {
               <span className="workflow-index">6</span>
               <div className="workflow-content">
                 <h3>Export PDF</h3>
+                <span
+                  className={`validation-status validation-status-${pdfExportGate.statusClass}`}
+                >
+                  {pdfExportGate.statusLabel}
+                </span>
                 <p>{pdfExportGate.description}</p>
-                {exportReadiness.status === "blocked" ? (
-                  <>
-                    <button className="secondary-button" disabled type="button">
-                      {pdfExportGate.buttonLabel}
-                    </button>
-                    <Link
-                      className="secondary-button"
-                      href={`/libri/${book.id}/validazione`}
-                    >
-                      Validazione pre-export
-                    </Link>
-                    <Link
-                      className="secondary-button"
-                      href={`/libri/${book.id}/export/pdf?mode=technical`}
-                    >
-                      Scarica PDF tecnico di prova
-                    </Link>
-                    <p className="form-note">
-                      Disponibile solo come test interno. Non caricare questo
-                      PDF su Amazon KDP.
-                    </p>
-                  </>
-                ) : (
-                  <>
-                    <Link
-                      className="button"
-                      href={`/libri/${book.id}/export/pdf`}
-                    >
-                      {pdfExportGate.buttonLabel}
-                    </Link>
-                    <Link
-                      className="secondary-button"
-                      href={`/libri/${book.id}/validazione`}
-                    >
-                      Controlla validazione
-                    </Link>
-                  </>
-                )}
+                <Link
+                  className={
+                    exportReadiness.status === "ready"
+                      ? "button"
+                      : "secondary-button"
+                  }
+                  href={`/libri/${book.id}/${pdfExportGate.hrefSuffix}`}
+                >
+                  {pdfExportGate.buttonLabel}
+                </Link>
+                <Link
+                  className="secondary-button"
+                  href={`/libri/${book.id}/validazione`}
+                >
+                  {exportReadiness.status === "blocked"
+                    ? "Validazione pre-export"
+                    : "Controlla validazione"}
+                </Link>
+                <p className="form-note">{pdfExportGate.note}</p>
               </div>
             </li>
           </ol>
