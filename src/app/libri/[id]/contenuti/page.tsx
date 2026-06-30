@@ -195,6 +195,25 @@ function groupBlocksBySection(blocks: KdpSectionBlock[]) {
   return grouped;
 }
 
+function getEditableBodyFallbackFromBlocks(blocks: KdpSectionBlock[]) {
+  const printableTextParts = blocks
+    .filter(
+      (block) =>
+        block.block_type === "text" && block.print_visibility === "print",
+    )
+    .map((block) =>
+      [block.title, block.body]
+        .filter((value): value is string => Boolean(value?.trim()))
+        .join("\n")
+        .trim(),
+    )
+    .filter(Boolean);
+
+  return printableTextParts.length > 0
+    ? printableTextParts.join("\n\n")
+    : null;
+}
+
 function getPageMessage(searchParams: { error?: string; status?: string }) {
   if (searchParams.error) {
     return {
@@ -271,6 +290,7 @@ function SectionCard({
 }) {
   const title = section.title || "Senza titolo";
   const includeInToc = section.include_in_toc !== false;
+  const bodyFallbackFromBlocks = getEditableBodyFallbackFromBlocks(blocks);
 
   return (
     <article className="section-card">
@@ -403,7 +423,10 @@ function SectionCard({
         <summary className="secondary-button section-edit-toggle">
           Modifica
         </summary>
-        <SectionEditForm section={section} />
+        <SectionEditForm
+          bodyFallbackFromBlocks={bodyFallbackFromBlocks}
+          section={section}
+        />
       </details>
     </article>
   );
