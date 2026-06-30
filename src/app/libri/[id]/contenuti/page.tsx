@@ -159,6 +159,30 @@ function formatAssetStatus(assetStatus: string) {
   );
 }
 
+function getSectionStatusChipClass(sectionStatus: string) {
+  if (sectionStatus === "ready") {
+    return "section-chip-success";
+  }
+
+  if (sectionStatus === "needs_review") {
+    return "section-chip-error";
+  }
+
+  if (sectionStatus === "archived") {
+    return "section-chip-warning";
+  }
+
+  return "";
+}
+
+function getPrintVisibilityChipClass(printVisibility: string) {
+  if (printVisibility === "print") {
+    return "section-chip-success";
+  }
+
+  return "section-chip-warning";
+}
+
 function groupBlocksBySection(blocks: KdpSectionBlock[]) {
   const grouped = new Map<string, KdpSectionBlock[]>();
 
@@ -263,7 +287,11 @@ function SectionCard({
       </div>
 
       <div className="section-chip-row" aria-label="Metadati sezione">
-        <span className="section-chip">
+        <span
+          className={`section-chip ${getSectionStatusChipClass(
+            section.section_status,
+          )}`}
+        >
           {formatSectionStatus(section.section_status)}
         </span>
         <span className="section-chip">
@@ -316,7 +344,11 @@ function SectionCard({
                   <p className="section-meta">
                     {block.sort_order}. {formatBlockType(block.block_type)}
                   </p>
-                  <span className="section-chip">
+                  <span
+                    className={`section-chip ${getPrintVisibilityChipClass(
+                      block.print_visibility,
+                    )}`}
+                  >
                     {formatPrintVisibility(block.print_visibility)}
                   </span>
                 </div>

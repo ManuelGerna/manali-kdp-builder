@@ -226,7 +226,7 @@ export default async function DraftImportPage({
           </Card>
 
           <Card title="Formato supportato">
-            <ul className="panel-list">
+            <ul className="panel-list panel-list-long">
               <FieldRow
                 label="Sezioni"
                 value="Titoli brevi, titoli maiuscoli, righe con emoji iniziale o separatore"
