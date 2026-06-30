@@ -82,7 +82,7 @@ function getPdfExportAction(bookId: string, status: ExportReadinessStatus) {
 
 function ValidationCheckItem({ check }: { check: ValidationCheck }) {
   return (
-    <li className="validation-check">
+    <li className={`validation-check validation-check-${check.status}`}>
       <div className="validation-check-main">
         <span className={getStatusClassName(check.status)}>
           {STATUS_LABELS[check.status]}
