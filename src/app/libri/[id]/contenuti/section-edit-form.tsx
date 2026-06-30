@@ -54,18 +54,13 @@ function getEditableLayoutPreset(layoutPreset: string): SectionLayoutPreset {
 }
 
 export function SectionEditForm({
-  bodyFallbackFromBlocks,
+  hasContentBlocks,
   section,
 }: {
-  bodyFallbackFromBlocks?: string | null;
+  hasContentBlocks: boolean;
   section: KdpSection;
 }) {
-  const hasSectionBody = Boolean(section.body?.trim());
-  const fallbackBody = bodyFallbackFromBlocks?.trim() || "";
-  const showBlockBodyFallback = !hasSectionBody && Boolean(fallbackBody);
-  const initialBody = showBlockBodyFallback
-    ? fallbackBody
-    : (section.body ?? "");
+  const initialBody = section.body ?? "";
   const initialState: SectionFormState = {
     message: null,
     fields: {
@@ -92,12 +87,6 @@ export function SectionEditForm({
     <form action={formAction} className="form-grid section-edit-form">
       <input name="book_id" type="hidden" value={section.book_id} />
       <input name="section_id" type="hidden" value={section.id} />
-      {showBlockBodyFallback ? (
-        <>
-          <input name="body_source" type="hidden" value="blocks" />
-          <input name="body_fallback_text" type="hidden" value={fallbackBody} />
-        </>
-      ) : null}
 
       {state.message ? (
         <p className="form-note form-note-error" role="alert">
@@ -209,18 +198,39 @@ export function SectionEditForm({
         </label>
       </div>
 
-      <div className="field">
-        <label htmlFor={`body_${section.id}`}>Testo pubblicabile</label>
-        <textarea
-          defaultValue={state.fields?.body ?? initialBody}
-          id={`body_${section.id}`}
-          name="body"
-          placeholder="Testo finale destinato al PDF"
-        />
-        {showBlockBodyFallback ? (
-          <p className="field-note">Testo ricavato dai blocchi importati.</p>
-        ) : null}
-      </div>
+      {hasContentBlocks ? (
+        <details className="section-technical-fallback">
+          <summary className="secondary-button section-edit-toggle">
+            Fallback tecnico section.body
+          </summary>
+          <div className="field">
+            <label htmlFor={`body_${section.id}`}>Testo pubblicabile</label>
+            <textarea
+              defaultValue={state.fields?.body ?? initialBody}
+              id={`body_${section.id}`}
+              name="body"
+              placeholder="Fallback tecnico per sezioni senza blocchi"
+            />
+            <p className="field-note">
+              I blocchi contenuto restano la fonte principale per anteprima e
+              PDF.
+            </p>
+          </div>
+        </details>
+      ) : (
+        <div className="field">
+          <label htmlFor={`body_${section.id}`}>Testo pubblicabile</label>
+          <textarea
+            defaultValue={state.fields?.body ?? initialBody}
+            id={`body_${section.id}`}
+            name="body"
+            placeholder="Testo finale destinato al PDF"
+          />
+          <p className="field-note">
+            Usato come fallback quando la sezione non ha blocchi contenuto.
+          </p>
+        </div>
+      )}
 
       <div className="field">
         <label htmlFor={`editor_notes_${section.id}`}>Note interne</label>

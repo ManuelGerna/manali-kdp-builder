@@ -7,6 +7,7 @@ import type {
 } from "@/lib/kdp/constants";
 import {
   getCreateOwnershipFields,
+  getUpdateOwnershipFields,
   type OwnershipActor,
 } from "@/lib/kdp/ownership";
 import type { createClient } from "@/lib/supabase/server";
@@ -28,6 +29,15 @@ export type SectionBlockInput = {
   layoutPreset: BlockLayoutPreset;
   printVisibility: PrintVisibility;
   editorNotes: string | null;
+};
+
+export type UpdateTextSectionBlockInput = {
+  actor: OwnershipActor;
+  blockId: string;
+  body: string | null;
+  bookId: string;
+  sectionId: string;
+  title: string | null;
 };
 
 type LogContext = Record<string, boolean | number | string | null | undefined>;
@@ -200,6 +210,55 @@ export async function createSectionBlock(
         error,
         "Non riesco a creare il blocco contenuto. Controlla i dati e riprova.",
       ),
+    };
+  }
+
+  return {
+    data: {
+      blockId: data.id,
+    },
+    error: null,
+  };
+}
+
+export async function updateTextSectionBlock(
+  supabase: KdpSupabaseClient,
+  input: UpdateTextSectionBlockInput,
+): Promise<RepositoryResult<{ blockId: string }>> {
+  const { data, error } = await supabase
+    .from("kdp_section_blocks")
+    .update({
+      title: input.title,
+      body: input.body,
+      ...getUpdateOwnershipFields(input.actor),
+    })
+    .eq("book_id", input.bookId)
+    .eq("section_id", input.sectionId)
+    .eq("id", input.blockId)
+    .eq("block_type", "text")
+    .select("id")
+    .maybeSingle();
+
+  if (error) {
+    logBlockError("update_text_section_block", error, {
+      blockIdTail: idTail(input.blockId),
+      bookIdTail: idTail(input.bookId),
+      sectionIdTail: idTail(input.sectionId),
+    });
+
+    return {
+      data: null,
+      error: getBlockPersistenceMessage(
+        error,
+        "Non riesco ad aggiornare il blocco testo. Controlla i dati e riprova.",
+      ),
+    };
+  }
+
+  if (!data) {
+    return {
+      data: null,
+      error: "Blocco testo non trovato o non accessibile.",
     };
   }
 

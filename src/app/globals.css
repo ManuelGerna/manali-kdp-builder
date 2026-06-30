@@ -673,6 +673,28 @@ button {
   padding-left: 12px;
 }
 
+.section-panel-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.84rem;
+  font-weight: 800;
+  line-height: 1.45;
+}
+
+.block-edit-panel,
+.section-technical-fallback {
+  display: grid;
+  gap: 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: rgba(255, 250, 254, 0.72);
+  padding: 10px;
+}
+
+.block-edit-form {
+  padding-top: 2px;
+}
+
 .section-actions {
   display: flex;
   flex-wrap: wrap;
