@@ -309,8 +309,8 @@ function isAtPageTop(state: LayoutState) {
   return Math.abs(state.y - getContentTopY(state)) < 1;
 }
 
-function getVisiblePageNumber(state: LayoutState) {
-  return Math.max(0, state.pageIndex - 1);
+function getManuscriptPageNumber(state: LayoutState) {
+  return Math.max(0, state.pageIndex - 2);
 }
 
 function ensureSpace(state: LayoutState, height: number) {
@@ -773,7 +773,7 @@ function drawSection(
   pageMap?: SectionPageMap,
 ) {
   prepareSectionStart(state, section);
-  pageMap?.set(section.id, getVisiblePageNumber(state));
+  pageMap?.set(section.id, getManuscriptPageNumber(state));
 
   drawHeading(state, section.title, 16);
 
@@ -807,7 +807,7 @@ function drawPageFurniture(
   const headerSize = 8;
 
   pages.forEach((page, index) => {
-    if (index === 0) {
+    if (index <= 1) {
       return;
     }
 
@@ -858,7 +858,7 @@ function drawPageFurniture(
       return;
     }
 
-    const footerText = String(index);
+    const footerText = String(index - 1);
     const footerWidth = state.fonts.body.widthOfTextAtSize(
       footerText,
       footerSize,
