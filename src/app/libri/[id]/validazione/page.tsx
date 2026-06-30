@@ -49,6 +49,37 @@ function getReadinessStatusClassName(status: ExportReadinessStatus) {
   return getStatusClassName("passed");
 }
 
+function getPdfExportAction(bookId: string, status: ExportReadinessStatus) {
+  if (status === "blocked") {
+    return {
+      buttonClassName: "secondary-button",
+      buttonLabel: "Scarica PDF tecnico di prova",
+      href: `/libri/${bookId}/export/pdf?mode=technical`,
+      note:
+        "Bloccato per KDP. Disponibile solo come test interno: non caricare questo PDF su Amazon KDP.",
+      statusLabel: "Export PDF finale bloccato",
+    };
+  }
+
+  if (status === "available_with_warnings") {
+    return {
+      buttonClassName: "secondary-button",
+      buttonLabel: "Scarica PDF tecnico",
+      href: `/libri/${bookId}/export/pdf?mode=technical`,
+      note: "Controlla le attenzioni prima di caricare su KDP.",
+      statusLabel: "Export PDF quasi pronto",
+    };
+  }
+
+  return {
+    buttonClassName: "button",
+    buttonLabel: "Scarica PDF tecnico",
+    href: `/libri/${bookId}/export/pdf`,
+    note: "Il libretto e' pronto per il prossimo step PDF.",
+    statusLabel: "Export PDF pronto",
+  };
+}
+
 function ValidationCheckItem({ check }: { check: ValidationCheck }) {
   return (
     <li className="validation-check">
@@ -195,6 +226,7 @@ export default async function BookValidationPage({
     settings,
   });
   const exportReadiness = getExportReadiness(report);
+  const pdfExportAction = getPdfExportAction(book.id, exportReadiness.status);
 
   return (
     <AppShell
@@ -248,28 +280,15 @@ export default async function BookValidationPage({
             <span className={getReadinessStatusClassName(exportReadiness.status)}>
               {exportReadiness.label}
             </span>
+            <p>{pdfExportAction.statusLabel}</p>
             <p>{exportReadiness.description}</p>
-            {exportReadiness.status === "blocked" ? (
-              <>
-                <p>
-                  Bloccato per KDP. Disponibile solo come test interno: non
-                  caricare questo PDF su Amazon KDP.
-                </p>
-                <button className="secondary-button" disabled type="button">
-                  Export PDF finale bloccato
-                </button>
-                <Link
-                  className="secondary-button"
-                  href={`/libri/${book.id}/export/pdf?mode=technical`}
-                >
-                  Scarica PDF tecnico di prova
-                </Link>
-              </>
-            ) : (
-              <Link className="button" href={`/libri/${book.id}/export/pdf`}>
-                Scarica PDF tecnico
-              </Link>
-            )}
+            <Link
+              className={pdfExportAction.buttonClassName}
+              href={pdfExportAction.href}
+            >
+              {pdfExportAction.buttonLabel}
+            </Link>
+            <p>{pdfExportAction.note}</p>
           </div>
         </Card>
 
