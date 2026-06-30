@@ -12,7 +12,10 @@ import {
   type SectionStatus,
   type SectionType,
 } from "@/lib/kdp/constants";
-import { createSectionBlock } from "@/lib/kdp/section-blocks";
+import {
+  createSectionBlock,
+  updateTextSectionBlock,
+} from "@/lib/kdp/section-blocks";
 import {
   createSection,
   deleteSection,
@@ -75,26 +78,6 @@ function getString(formData: FormData, name: string) {
 function getOptionalText(formData: FormData, name: string) {
   const value = getString(formData, name);
   return value || null;
-}
-
-function normalizeLineEndings(value: string) {
-  return value.replace(/\r\n/g, "\n");
-}
-
-function getEditableSectionBody(formData: FormData) {
-  const body = getString(formData, "body");
-  const fallbackBody = getString(formData, "body_fallback_text");
-  const usesBlockFallback = getString(formData, "body_source") === "blocks";
-
-  if (
-    usesBlockFallback &&
-    fallbackBody &&
-    normalizeLineEndings(body) === normalizeLineEndings(fallbackBody)
-  ) {
-    return null;
-  }
-
-  return body || null;
 }
 
 function getCheckbox(formData: FormData, name: string) {
@@ -331,30 +314,6 @@ export async function createSectionAction(
     };
   }
 
-  if (sectionBody) {
-    const blockResult = await createSectionBlock(supabase, {
-      actor,
-      bookId,
-      sectionId: result.data.sectionId,
-      blockType: "text",
-      title: sectionTitle || "Testo principale",
-      body: sectionBody,
-      sortOrder: 1,
-      layoutPreset,
-      printVisibility: "print",
-      editorNotes: null,
-    });
-
-    if (blockResult.data === null) {
-      revalidateBookContent(bookId);
-      redirect(
-        getContentPath(bookId, {
-          error: `Sezione creata, ma ${blockResult.error}`,
-        }),
-      );
-    }
-  }
-
   const ownershipError = await touchBookAfterContentChange(
     supabase,
     bookId,
@@ -436,7 +395,7 @@ export async function updateSectionAction(
     sectionType,
     title: getOptionalText(formData, "title"),
     subtitle: getOptionalText(formData, "subtitle"),
-    body: getEditableSectionBody(formData),
+    body: getOptionalText(formData, "body"),
     includeInToc: getCheckbox(formData, "include_in_toc"),
     sectionStatus,
     pageBreakBefore: getCheckbox(formData, "page_break_before"),
@@ -561,6 +520,134 @@ export async function moveSectionAction(formData: FormData) {
 
   revalidateBookContent(bookId);
   redirect(getContentPath(bookId, { status: "reordered" }));
+}
+
+export async function createTextBlockAction(formData: FormData) {
+  const bookId = getString(formData, "book_id");
+  const sectionId = getString(formData, "section_id");
+  const title = getOptionalText(formData, "block_title");
+  const body = getOptionalText(formData, "block_body");
+
+  if (!bookId) {
+    redirect("/libri");
+  }
+
+  if (!sectionId) {
+    redirect(getContentPath(bookId, { error: "Sezione non valida." }));
+  }
+
+  if (!body) {
+    redirect(
+      getContentPath(bookId, {
+        error: "Inserisci il testo del nuovo blocco.",
+      }),
+    );
+  }
+
+  const { supabase, actor, error } =
+    await getAuthenticatedSupabase("create-text-block");
+
+  if (!supabase || !actor) {
+    redirect(getContentPath(bookId, { error }));
+  }
+
+  const bookAccessError = await getBookAccessError(supabase, bookId);
+
+  if (bookAccessError) {
+    redirect(getContentPath(bookId, { error: bookAccessError }));
+  }
+
+  const blockResult = await createSectionBlock(supabase, {
+    actor,
+    bookId,
+    sectionId,
+    blockType: "text",
+    title,
+    body,
+    layoutPreset: "default",
+    printVisibility: "print",
+    editorNotes: null,
+  });
+
+  if (blockResult.data === null) {
+    redirect(getContentPath(bookId, { error: blockResult.error }));
+  }
+
+  const ownershipError = await touchBookAfterContentChange(
+    supabase,
+    bookId,
+    actor,
+  );
+
+  if (ownershipError) {
+    redirect(getContentPath(bookId, { error: ownershipError }));
+  }
+
+  revalidateBookContent(bookId);
+  redirect(getContentPath(bookId, { status: "text_block_created" }));
+}
+
+export async function updateTextBlockAction(formData: FormData) {
+  const bookId = getString(formData, "book_id");
+  const sectionId = getString(formData, "section_id");
+  const blockId = getString(formData, "block_id");
+  const title = getOptionalText(formData, "block_title");
+  const body = getOptionalText(formData, "block_body");
+
+  if (!bookId) {
+    redirect("/libri");
+  }
+
+  if (!sectionId || !blockId) {
+    redirect(getContentPath(bookId, { error: "Blocco testo non valido." }));
+  }
+
+  if (!title && !body) {
+    redirect(
+      getContentPath(bookId, {
+        error: "Inserisci almeno titolo o testo del blocco.",
+      }),
+    );
+  }
+
+  const { supabase, actor, error } =
+    await getAuthenticatedSupabase("update-text-block");
+
+  if (!supabase || !actor) {
+    redirect(getContentPath(bookId, { error }));
+  }
+
+  const bookAccessError = await getBookAccessError(supabase, bookId);
+
+  if (bookAccessError) {
+    redirect(getContentPath(bookId, { error: bookAccessError }));
+  }
+
+  const blockResult = await updateTextSectionBlock(supabase, {
+    actor,
+    blockId,
+    body,
+    bookId,
+    sectionId,
+    title,
+  });
+
+  if (blockResult.data === null) {
+    redirect(getContentPath(bookId, { error: blockResult.error }));
+  }
+
+  const ownershipError = await touchBookAfterContentChange(
+    supabase,
+    bookId,
+    actor,
+  );
+
+  if (ownershipError) {
+    redirect(getContentPath(bookId, { error: ownershipError }));
+  }
+
+  revalidateBookContent(bookId);
+  redirect(getContentPath(bookId, { status: "block_updated" }));
 }
 
 export async function createImagePlaceholderBlockAction(formData: FormData) {

@@ -36,8 +36,10 @@ import {
 import type { Tables } from "@/types/database";
 import {
   CreateImagePlaceholderBlockForm,
+  CreateTextBlockForm,
   DeleteSectionForm,
   MoveSectionForm,
+  UpdateTextBlockForm,
 } from "./section-actions";
 import { SectionCreateForm } from "./section-create-form";
 import { SectionEditForm } from "./section-edit-form";
@@ -72,10 +74,12 @@ type BookResult =
 
 const STATUS_MESSAGES: Record<string, string> = {
   block_created: "Placeholder immagine creato.",
+  block_updated: "Blocco testo aggiornato.",
   created: "Sezione creata.",
   deleted: "Sezione eliminata.",
   imported: "Import completato.",
   reordered: "Ordine sezioni aggiornato.",
+  text_block_created: "Blocco testo creato.",
   updated: "Sezione aggiornata.",
 };
 
@@ -195,23 +199,10 @@ function groupBlocksBySection(blocks: KdpSectionBlock[]) {
   return grouped;
 }
 
-function getEditableBodyFallbackFromBlocks(blocks: KdpSectionBlock[]) {
-  const printableTextParts = blocks
-    .filter(
-      (block) =>
-        block.block_type === "text" && block.print_visibility === "print",
-    )
-    .map((block) =>
-      [block.title, block.body]
-        .filter((value): value is string => Boolean(value?.trim()))
-        .join("\n")
-        .trim(),
-    )
-    .filter(Boolean);
-
-  return printableTextParts.length > 0
-    ? printableTextParts.join("\n\n")
-    : null;
+function isPrintableContentBlock(block: KdpSectionBlock) {
+  return (
+    block.print_visibility === "print" && block.block_type !== "internal_note"
+  );
 }
 
 function getPageMessage(searchParams: { error?: string; status?: string }) {
@@ -290,7 +281,7 @@ function SectionCard({
 }) {
   const title = section.title || "Senza titolo";
   const includeInToc = section.include_in_toc !== false;
-  const bodyFallbackFromBlocks = getEditableBodyFallbackFromBlocks(blocks);
+  const hasPrintableContentBlocks = blocks.some(isPrintableContentBlock);
 
   return (
     <article className="section-card">
@@ -331,14 +322,19 @@ function SectionCard({
       </p>
 
       <div className="section-content-grid">
-        <section className="section-content-area">
-          <h3>Testo pubblicabile</h3>
-          {section.body ? (
-            <p className="section-body-preview">{section.body}</p>
-          ) : (
-            <p className="section-empty-body">Testo vuoto.</p>
-          )}
-        </section>
+        {!hasPrintableContentBlocks ? (
+          <section className="section-content-area">
+            <h3>Testo pubblicabile</h3>
+            {section.body ? (
+              <p className="section-body-preview">{section.body}</p>
+            ) : (
+              <p className="section-empty-body">
+                Fallback manuale vuoto. Aggiungi un blocco testo o compila il
+                fallback tecnico dalla modifica sezione.
+              </p>
+            )}
+          </section>
+        ) : null}
 
         <section className="section-content-area">
           <h3>Note interne</h3>
@@ -355,6 +351,10 @@ function SectionCard({
           <h3>Blocchi contenuto</h3>
           <span className="section-chip">{blocks.length}</span>
         </div>
+        <p className="section-panel-note">
+          Blocchi contenuto: questa e&apos; la fonte principale usata per
+          anteprima e PDF.
+        </p>
 
         {blocks.length > 0 ? (
           <ul className="section-block-list">
@@ -381,12 +381,27 @@ function SectionCard({
                     {block.editor_notes}
                   </p>
                 ) : null}
+                {block.block_type === "text" ? (
+                  <details className="block-edit-panel">
+                    <summary className="secondary-button section-edit-toggle">
+                      Modifica blocco
+                    </summary>
+                    <UpdateTextBlockForm block={block} />
+                  </details>
+                ) : null}
               </li>
             ))}
           </ul>
         ) : (
           <p className="section-empty-body">Nessun blocco dedicato.</p>
         )}
+
+        <details className="section-edit-panel">
+          <summary className="secondary-button section-edit-toggle">
+            Aggiungi blocco testo
+          </summary>
+          <CreateTextBlockForm bookId={section.book_id} sectionId={section.id} />
+        </details>
 
         <details className="section-edit-panel">
           <summary className="secondary-button section-edit-toggle">
@@ -424,7 +439,7 @@ function SectionCard({
           Modifica
         </summary>
         <SectionEditForm
-          bodyFallbackFromBlocks={bodyFallbackFromBlocks}
+          hasContentBlocks={hasPrintableContentBlocks}
           section={section}
         />
       </details>
