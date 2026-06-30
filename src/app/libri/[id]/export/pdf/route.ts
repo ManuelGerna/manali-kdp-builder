@@ -59,8 +59,18 @@ function logPdfExportError(
   });
 }
 
+function formatGenerationDate(value: Date) {
+  return new Intl.DateTimeFormat("it-IT", {
+    dateStyle: "short",
+    timeStyle: "short",
+    timeZone: "Europe/Rome",
+  }).format(value);
+}
+
 export async function GET(_request: Request, { params }: PdfExportRouteProps) {
   const { id } = await params;
+  const requestUrl = new URL(_request.url);
+  const isTechnicalMode = requestUrl.searchParams.get("mode") === "technical";
 
   if (!hasSupabaseServerConfig()) {
     return jsonError("Supabase non configurato.", 500);
@@ -128,7 +138,7 @@ export async function GET(_request: Request, { params }: PdfExportRouteProps) {
   });
   const readiness = getExportReadiness(validationReport);
 
-  if (readiness.status === "blocked") {
+  if (readiness.status === "blocked" && !isTechnicalMode) {
     return jsonError(
       "Export PDF bloccato. Risolvi gli elementi da sistemare nella validazione.",
       409,
@@ -142,6 +152,14 @@ export async function GET(_request: Request, { params }: PdfExportRouteProps) {
       book,
       sections,
       settings,
+      technicalNotice:
+        isTechnicalMode && readiness.status !== "ready"
+          ? {
+              generatedAt: formatGenerationDate(new Date()),
+              readinessLabel: readiness.label,
+              readinessStatus: readiness.status,
+            }
+          : undefined,
     });
     const pdfBuffer = new ArrayBuffer(pdfBytes.byteLength);
     new Uint8Array(pdfBuffer).set(pdfBytes);

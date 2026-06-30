@@ -21,6 +21,13 @@ type GenerateTechnicalPdfInput = {
   book: KdpBook;
   sections: KdpSection[];
   settings: KdpBookSettings;
+  technicalNotice?: TechnicalPdfNotice;
+};
+
+type TechnicalPdfNotice = {
+  generatedAt: string;
+  readinessLabel: string;
+  readinessStatus: string;
 };
 
 type PageSize = {
@@ -312,6 +319,62 @@ function drawCenteredParagraph(
   state.y -= options.paragraphSpacing ?? lineHeight * 0.5;
 }
 
+function drawTechnicalTestNotice(
+  state: LayoutState,
+  notice: TechnicalPdfNotice,
+) {
+  const padding = 12;
+  const titleSize = 11;
+  const bodySize = 9;
+  const bodyLineHeight = 12;
+  const bodyLines = [
+    "Non pronto per Amazon KDP.",
+    "Usare solo per controllo interno di contenuti, margini e layout.",
+    `Stato validazione: ${notice.readinessStatus} (${notice.readinessLabel})`,
+    `Data generazione: ${notice.generatedAt}`,
+  ].flatMap((line) =>
+    wrapText(line, state.fonts.body, bodySize, state.contentWidth - padding * 2),
+  );
+  const boxHeight =
+    padding * 2 + titleSize + 8 + bodyLines.length * bodyLineHeight;
+
+  ensureSpace(state, boxHeight + 18);
+
+  const topY = state.y;
+  state.page.drawRectangle({
+    borderColor: rgb(0.74, 0.22, 0.16),
+    borderWidth: 1,
+    color: rgb(1, 0.95, 0.92),
+    height: boxHeight,
+    width: state.contentWidth,
+    x: state.x,
+    y: topY - boxHeight,
+  });
+
+  state.page.drawText("PDF TECNICO DI PROVA", {
+    color: rgb(0.54, 0.08, 0.05),
+    font: state.fonts.bodyBold,
+    size: titleSize,
+    x: state.x + padding,
+    y: topY - padding - titleSize,
+  });
+
+  let textY = topY - padding - titleSize - 8 - bodySize;
+
+  for (const line of bodyLines) {
+    state.page.drawText(sanitizePdfText(line), {
+      color: rgb(0.22, 0.12, 0.1),
+      font: state.fonts.body,
+      size: bodySize,
+      x: state.x + padding,
+      y: textY,
+    });
+    textY -= bodyLineHeight;
+  }
+
+  state.y -= boxHeight + 18;
+}
+
 function drawHeading(state: LayoutState, value: string, size: number) {
   ensureSpace(state, size * 2.6);
   drawParagraph(state, value, {
@@ -409,7 +472,12 @@ function drawBlock(state: LayoutState, block: PreviewBlock) {
   });
 }
 
-function drawTitlePage(state: LayoutState, book: KdpBook, settings: KdpBookSettings) {
+function drawTitlePage(
+  state: LayoutState,
+  book: KdpBook,
+  settings: KdpBookSettings,
+  technicalNotice?: TechnicalPdfNotice,
+) {
   state.y = state.pageHeight * 0.66;
 
   drawCenteredParagraph(state, book.title, {
@@ -434,6 +502,10 @@ function drawTitlePage(state: LayoutState, book: KdpBook, settings: KdpBookSetti
       maxWidth: state.contentWidth,
       size: 12,
     });
+  }
+
+  if (technicalNotice) {
+    drawTechnicalTestNotice(state, technicalNotice);
   }
 
   state.y = state.marginBottom + 36;
@@ -570,6 +642,7 @@ export async function generateTechnicalKdpPdf({
   book,
   sections,
   settings,
+  technicalNotice,
 }: GenerateTechnicalPdfInput) {
   const preview = buildBookPreview({
     assets,
@@ -580,7 +653,7 @@ export async function generateTechnicalKdpPdf({
   });
   const state = await createLayoutState(settings);
 
-  drawTitlePage(state, book, settings);
+  drawTitlePage(state, book, settings, technicalNotice);
   drawIndexPage(state, preview);
   addPage(state);
 

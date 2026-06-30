@@ -77,8 +77,9 @@ function formatSectionType(sectionType: string) {
 function getPdfExportGateCopy(readiness: ExportReadiness) {
   if (readiness.status === "blocked") {
     return {
-      buttonLabel: "Export PDF bloccato",
-      description: readiness.description,
+      buttonLabel: "Export PDF finale bloccato",
+      description:
+        "Bloccato per KDP. Risolvi gli elementi da sistemare nella validazione. Il PDF tecnico di prova resta disponibile solo per test interno.",
     };
   }
 
@@ -350,15 +351,25 @@ export default async function BookDetailPage({ params }: BookDetailPageProps) {
                 <p>{pdfExportGate.description}</p>
                 {exportReadiness.status === "blocked" ? (
                   <>
+                    <button className="secondary-button" disabled type="button">
+                      {pdfExportGate.buttonLabel}
+                    </button>
                     <Link
                       className="secondary-button"
                       href={`/libri/${book.id}/validazione`}
                     >
                       Validazione pre-export
                     </Link>
-                    <button className="secondary-button" disabled type="button">
-                      {pdfExportGate.buttonLabel}
-                    </button>
+                    <Link
+                      className="secondary-button"
+                      href={`/libri/${book.id}/export/pdf?mode=technical`}
+                    >
+                      Scarica PDF tecnico di prova
+                    </Link>
+                    <p className="form-note">
+                      Disponibile solo come test interno. Non caricare questo
+                      PDF su Amazon KDP.
+                    </p>
                   </>
                 ) : (
                   <>

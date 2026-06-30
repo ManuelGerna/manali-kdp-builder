@@ -250,9 +250,21 @@ export default async function BookValidationPage({
             </span>
             <p>{exportReadiness.description}</p>
             {exportReadiness.status === "blocked" ? (
-              <button className="secondary-button" disabled type="button">
-                Export PDF bloccato
-              </button>
+              <>
+                <p>
+                  Bloccato per KDP. Disponibile solo come test interno: non
+                  caricare questo PDF su Amazon KDP.
+                </p>
+                <button className="secondary-button" disabled type="button">
+                  Export PDF finale bloccato
+                </button>
+                <Link
+                  className="secondary-button"
+                  href={`/libri/${book.id}/export/pdf?mode=technical`}
+                >
+                  Scarica PDF tecnico di prova
+                </Link>
+              </>
             ) : (
               <Link className="button" href={`/libri/${book.id}/export/pdf`}>
                 Scarica PDF tecnico
