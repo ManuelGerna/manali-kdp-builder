@@ -297,6 +297,105 @@ export const VALIDATION_STATUSES = [
 
 export type ValidationStatus = (typeof VALIDATION_STATUSES)[number];
 
+export const TRIM_SIZES = ["6x9", "5x8", "8.5x11"] as const;
+
+export type TrimSize = (typeof TRIM_SIZES)[number];
+
+export const TRIM_SIZE_LABELS: Record<TrimSize, string> = {
+  "6x9": "6 x 9 in",
+  "5x8": "5 x 8 in",
+  "8.5x11": "8.5 x 11 in",
+};
+
+export const TRIM_SIZE_OPTIONS = TRIM_SIZES.map((value) => ({
+  value,
+  label: TRIM_SIZE_LABELS[value],
+}));
+
+export const BLEED_OPTIONS = [
+  {
+    value: "false",
+    label: "No bleed",
+  },
+  {
+    value: "true",
+    label: "Bleed",
+  },
+] as const;
+
+export const INTERIOR_TYPES = [
+  "black_and_white",
+  "standard_color",
+  "premium_color",
+] as const;
+
+export type InteriorType = (typeof INTERIOR_TYPES)[number];
+
+export const INTERIOR_TYPE_LABELS: Record<InteriorType, string> = {
+  black_and_white: "Bianco e nero",
+  standard_color: "Colore standard",
+  premium_color: "Colore premium",
+};
+
+export const INTERIOR_TYPE_OPTIONS = INTERIOR_TYPES.map((value) => ({
+  value,
+  label: INTERIOR_TYPE_LABELS[value],
+}));
+
+export const PAPER_TYPES = ["white", "cream"] as const;
+
+export type PaperType = (typeof PAPER_TYPES)[number];
+
+export const PAPER_TYPE_LABELS: Record<PaperType, string> = {
+  white: "Carta bianca",
+  cream: "Carta crema",
+};
+
+export const PAPER_TYPE_OPTIONS = PAPER_TYPES.map((value) => ({
+  value,
+  label: PAPER_TYPE_LABELS[value],
+}));
+
+export const BODY_FONTS = ["Lora", "Georgia", "serif"] as const;
+
+export type BodyFont = (typeof BODY_FONTS)[number];
+
+export const BODY_FONT_OPTIONS = BODY_FONTS.map((value) => ({
+  value,
+  label: value,
+}));
+
+export const HEADING_FONTS = [
+  "Cormorant Garamond",
+  "Georgia",
+  "sans",
+] as const;
+
+export type HeadingFont = (typeof HEADING_FONTS)[number];
+
+export const HEADING_FONT_OPTIONS = HEADING_FONTS.map((value) => ({
+  value,
+  label: value,
+}));
+
+export const BODY_FONT_SIZES = [10, 11, 12, 13] as const;
+
+export type BodyFontSize = (typeof BODY_FONT_SIZES)[number];
+
+export const BODY_FONT_SIZE_OPTIONS = BODY_FONT_SIZES.map((value) => ({
+  value,
+  label: `${value} pt`,
+}));
+
+export const LINE_HEIGHTS = [1.35, 1.5, 1.65] as const;
+
+export type LineHeight = (typeof LINE_HEIGHTS)[number];
+
+export const LINE_HEIGHT_OPTIONS = LINE_HEIGHTS.map((value) => ({
+  value,
+  label: String(value),
+}));
+
 export const DEFAULT_BOOK_SETTINGS = {
   trimSize: "6x9",
   bleed: false,

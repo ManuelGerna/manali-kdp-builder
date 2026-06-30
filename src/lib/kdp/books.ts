@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { PostgrestError } from "@supabase/supabase-js";
 import { DEFAULT_BOOK_SETTINGS } from "@/lib/kdp/constants";
 import type { createClient } from "@/lib/supabase/server";
-import type { Tables, TablesInsert } from "@/types/database";
+import type { Tables, TablesInsert, TablesUpdate } from "@/types/database";
 
 type KdpSupabaseClient = Awaited<ReturnType<typeof createClient>>;
 
@@ -17,6 +17,22 @@ export type CreateBookInput = {
   language: string;
   aiUsageType: string;
   userId: string;
+};
+
+export type UpdateBookSettingsInput = {
+  bookId: string;
+  trimSize: string;
+  bleed: boolean;
+  interiorType: string;
+  paperType: string;
+  bodyFont: string;
+  headingFont: string;
+  bodyFontSize: number;
+  lineHeight: number;
+  marginTop: number;
+  marginBottom: number;
+  marginInner: number;
+  marginOuter: number;
 };
 
 export type RepositoryResult<T> =
@@ -91,7 +107,7 @@ function logPersistenceError(
   error: PostgrestError | null,
   context: LogContext = {},
 ) {
-  console.error("[kdp-books:create]", {
+  console.error("[kdp-books:persistence]", {
     operation,
     code: error?.code ?? "unknown",
     message: redactLogText(error?.message),
@@ -123,6 +139,25 @@ function getPersistenceMessage(
 
   if (error.code === "23505") {
     return "Esiste gia' un record collegato a questo libretto.";
+  }
+
+  return fallback;
+}
+
+function getSettingsUpdateMessage(
+  error: PostgrestError | null,
+  fallback: string,
+) {
+  if (!error) {
+    return fallback;
+  }
+
+  if (error.code === "42501") {
+    return "Il database non consente l'aggiornamento delle impostazioni KDP. Verifica grant e policy Supabase.";
+  }
+
+  if (error.code === "23514") {
+    return "Le impostazioni selezionate non rispettano i vincoli KDP configurati nel database.";
   }
 
   return fallback;
@@ -290,5 +325,60 @@ export async function createBookWithDefaultSettings(
       settingsError,
       "Creazione interrotta: non sono riuscito a salvare le impostazioni KDP. Il libretto non e' stato mantenuto.",
     ),
+  };
+}
+
+export async function updateBookSettings(
+  supabase: KdpSupabaseClient,
+  input: UpdateBookSettingsInput,
+): Promise<RepositoryResult<{ settingsId: string }>> {
+  const settingsUpdate = {
+    trim_size: input.trimSize,
+    bleed: input.bleed,
+    interior_type: input.interiorType,
+    paper_type: input.paperType,
+    body_font: input.bodyFont,
+    heading_font: input.headingFont,
+    body_font_size: input.bodyFontSize,
+    line_height: input.lineHeight,
+    margin_top: input.marginTop,
+    margin_bottom: input.marginBottom,
+    margin_inner: input.marginInner,
+    margin_outer: input.marginOuter,
+  } satisfies TablesUpdate<"kdp_book_settings">;
+
+  const { data, error } = await supabase
+    .from("kdp_book_settings")
+    .update(settingsUpdate)
+    .eq("book_id", input.bookId)
+    .select("id")
+    .maybeSingle();
+
+  if (error) {
+    logPersistenceError("update_kdp_book_settings", error, {
+      bookIdTail: idTail(input.bookId),
+    });
+
+    return {
+      data: null,
+      error: getSettingsUpdateMessage(
+        error,
+        "Non riesco a salvare le impostazioni KDP. Controlla i valori e riprova.",
+      ),
+    };
+  }
+
+  if (!data) {
+    return {
+      data: null,
+      error: "Impostazioni KDP non trovate per questo libretto.",
+    };
+  }
+
+  return {
+    data: {
+      settingsId: data.id,
+    },
+    error: null,
   };
 }

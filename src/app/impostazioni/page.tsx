@@ -7,7 +7,7 @@ export default function SettingsPage() {
   return (
     <AppShell
       title="Impostazioni"
-      description="Preferenze iniziali per il progetto KDP Builder."
+      description="Preferenze base del progetto. Le impostazioni operative dei singoli libretti si modificano dentro ogni libretto."
     >
       <div className="grid two">
         <Card title="App">
@@ -19,6 +19,13 @@ export default function SettingsPage() {
             />
             <FieldRow label="Accesso" value="Privato" />
           </ul>
+        </Card>
+
+        <Card title="Flusso operativo">
+          <p className="form-note">
+            Formato, carta, font e margini sono impostazioni specifiche del
+            libretto: apri un libro e usa la pagina Impostazioni KDP.
+          </p>
         </Card>
 
         <Card title="Default V1">
