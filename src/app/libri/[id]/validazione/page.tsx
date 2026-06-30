@@ -249,9 +249,15 @@ export default async function BookValidationPage({
               {exportReadiness.label}
             </span>
             <p>{exportReadiness.description}</p>
-            <button className="secondary-button" disabled type="button">
-              PDF presto
-            </button>
+            {exportReadiness.status === "blocked" ? (
+              <button className="secondary-button" disabled type="button">
+                Export PDF bloccato
+              </button>
+            ) : (
+              <Link className="button" href={`/libri/${book.id}/export/pdf`}>
+                Scarica PDF tecnico
+              </Link>
+            )}
           </div>
         </Card>
 

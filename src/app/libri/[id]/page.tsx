@@ -84,13 +84,13 @@ function getPdfExportGateCopy(readiness: ExportReadiness) {
 
   if (readiness.status === "available_with_warnings") {
     return {
-      buttonLabel: "Export PDF quasi pronto",
+      buttonLabel: "Scarica PDF tecnico",
       description: readiness.description,
     };
   }
 
   return {
-    buttonLabel: "Export PDF pronto",
+    buttonLabel: "Scarica PDF tecnico",
     description: readiness.description,
   };
 }
@@ -348,15 +348,34 @@ export default async function BookDetailPage({ params }: BookDetailPageProps) {
               <div className="workflow-content">
                 <h3>Export PDF</h3>
                 <p>{pdfExportGate.description}</p>
-                <Link
-                  className="secondary-button"
-                  href={`/libri/${book.id}/validazione`}
-                >
-                  Validazione pre-export
-                </Link>
-                <button className="secondary-button" disabled type="button">
-                  {pdfExportGate.buttonLabel}
-                </button>
+                {exportReadiness.status === "blocked" ? (
+                  <>
+                    <Link
+                      className="secondary-button"
+                      href={`/libri/${book.id}/validazione`}
+                    >
+                      Validazione pre-export
+                    </Link>
+                    <button className="secondary-button" disabled type="button">
+                      {pdfExportGate.buttonLabel}
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <Link
+                      className="button"
+                      href={`/libri/${book.id}/export/pdf`}
+                    >
+                      {pdfExportGate.buttonLabel}
+                    </Link>
+                    <Link
+                      className="secondary-button"
+                      href={`/libri/${book.id}/validazione`}
+                    >
+                      Controlla validazione
+                    </Link>
+                  </>
+                )}
               </div>
             </li>
           </ol>
