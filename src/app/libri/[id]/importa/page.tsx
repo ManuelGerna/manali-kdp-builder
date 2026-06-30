@@ -4,6 +4,7 @@ import { AppShell } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { FieldRow } from "@/components/ui/field-row";
+import { isBookArchived } from "@/lib/kdp/books";
 import {
   createClient,
   hasSupabaseServerConfig,
@@ -21,7 +22,10 @@ type DraftImportPageProps = {
   }>;
 };
 
-type BookForImport = Pick<Tables<"kdp_books">, "id" | "subtitle" | "title">;
+type BookForImport = Pick<
+  Tables<"kdp_books">,
+  "archived_at" | "id" | "status" | "subtitle" | "title"
+>;
 
 type BookResult =
   | {
@@ -45,7 +49,7 @@ async function getBookForImport(
 ): Promise<BookResult> {
   const { data, error } = await supabase
     .from("kdp_books")
-    .select("id,title,subtitle")
+    .select("id,title,subtitle,status,archived_at")
     .eq("id", bookId)
     .maybeSingle();
 
@@ -68,6 +72,15 @@ async function getBookForImport(
       data: null,
       error: "Libretto non trovato o non accessibile.",
       notFound: true,
+    };
+  }
+
+  if (isBookArchived(data)) {
+    return {
+      data: null,
+      error:
+        "Questo libretto e' archiviato. Ripristinalo prima di importare nuovi contenuti.",
+      notFound: false,
     };
   }
 
@@ -198,7 +211,9 @@ export default async function DraftImportPage({
       <div className="draft-import-layout">
         {pageMessage ? (
           <p
-            className="form-note"
+            className={`form-note form-note-${
+              pageMessage.tone === "error" ? "error" : "success"
+            }`}
             role={pageMessage.tone === "error" ? "alert" : "status"}
           >
             {pageMessage.text}
@@ -234,7 +249,11 @@ export default async function DraftImportPage({
               />
               <FieldRow
                 label="Salvataggio"
-                value="Le sezioni vengono aggiunte in coda, senza cancellare contenuti esistenti"
+                value="Import transazionale V2: sezioni e blocchi vengono aggiunti in coda senza contenuti parziali"
+              />
+              <FieldRow
+                label="Doppio click"
+                value="Il submit finale usa un token import: click ripetuti non duplicano i contenuti"
               />
             </ul>
           </Card>

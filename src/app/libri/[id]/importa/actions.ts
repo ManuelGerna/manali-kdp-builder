@@ -1,20 +1,18 @@
 "use server";
 
+import { createHash, randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { createAsset, deleteAsset } from "@/lib/kdp/assets";
-import { touchBookOwnership } from "@/lib/kdp/books";
 import {
   parseStructuredDraft,
   type DraftImportResult,
 } from "@/lib/kdp/draft-import";
-import { createOwnershipActor, type OwnershipActor } from "@/lib/kdp/ownership";
-import { createSectionBlock } from "@/lib/kdp/section-blocks";
-import { createSection } from "@/lib/kdp/sections";
+import { createOwnershipActor } from "@/lib/kdp/ownership";
 import {
   createClient,
   hasSupabaseServerConfig,
 } from "@/lib/supabase/server";
+import type { Json } from "@/types/database";
 
 type KdpSupabaseClient = Awaited<ReturnType<typeof createClient>>;
 
@@ -22,6 +20,7 @@ export type DraftImportFormState = {
   fields?: {
     draft_text?: string;
   };
+  importToken: string | null;
   message: string | null;
   preview: DraftImportResult | null;
 };
@@ -50,6 +49,16 @@ function getString(formData: FormData, name: string) {
   return String(formData.get(name) ?? "").trim();
 }
 
+function getDraftHash(value: string) {
+  return createHash("sha256").update(value, "utf8").digest("hex");
+}
+
+function isUuid(value: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    value,
+  );
+}
+
 function getImportPath(
   bookId: string,
   params: { error?: string; status?: string } = {},
@@ -69,8 +78,19 @@ function getImportPath(
   return `/libri/${bookId}/importa${query ? `?${query}` : ""}`;
 }
 
-function getContentPath(bookId: string, status: string) {
-  return `/libri/${bookId}/contenuti?status=${status}`;
+function getContentPathWithReport(
+  bookId: string,
+  params: { run?: string; status: string },
+) {
+  const searchParams = new URLSearchParams({
+    status: params.status,
+  });
+
+  if (params.run) {
+    searchParams.set("run", params.run);
+  }
+
+  return `/libri/${bookId}/contenuti?${searchParams.toString()}`;
 }
 
 async function getAuthenticatedSupabase(actionName: string) {
@@ -136,7 +156,7 @@ async function getBookAccessError(
 ) {
   const { data, error } = await supabase
     .from("kdp_books")
-    .select("id")
+    .select("id,status,archived_at")
     .eq("id", bookId)
     .maybeSingle();
 
@@ -152,6 +172,10 @@ async function getBookAccessError(
 
   if (!data) {
     return "Libretto non trovato o non accessibile.";
+  }
+
+  if (data.archived_at || data.status === "archived") {
+    return "Questo libretto e' archiviato. Ripristinalo prima di importare nuovi contenuti.";
   }
 
   return null;
@@ -187,6 +211,7 @@ export async function analyzeDraftAction(
   if (validationError) {
     return {
       fields,
+      importToken: null,
       message: validationError,
       preview: null,
     };
@@ -198,6 +223,7 @@ export async function analyzeDraftAction(
   if (!supabase) {
     return {
       fields,
+      importToken: null,
       message: error,
       preview: null,
     };
@@ -208,6 +234,7 @@ export async function analyzeDraftAction(
   if (bookAccessError) {
     return {
       fields,
+      importToken: null,
       message: bookAccessError,
       preview: null,
     };
@@ -218,6 +245,7 @@ export async function analyzeDraftAction(
   if (preview.sections.length === 0) {
     return {
       fields,
+      importToken: null,
       message: "Non ho rilevato sezioni importabili nella bozza.",
       preview: null,
     };
@@ -225,92 +253,55 @@ export async function analyzeDraftAction(
 
   return {
     fields,
+    importToken: randomUUID(),
     message: null,
     preview,
   };
 }
 
-async function importDraftSectionBlocks(
-  supabase: KdpSupabaseClient,
-  input: {
-    actor: OwnershipActor;
-    bookId: string;
-    sectionId: string;
-    section: DraftImportResult["sections"][number];
-  },
-) {
-  let sortOrder = 1;
-
-  for (const block of input.section.blocks) {
-    if (block.blockType === "image_prompt") {
-      const assetResult = await createAsset(supabase, {
-        actor: input.actor,
-        altText: null,
-        assetType: "image",
-        bookId: input.bookId,
-        prompt: block.prompt,
-        status: "placeholder",
-        title: block.title || "Immagine da inserire",
-      });
-
-      if (assetResult.data === null) {
-        return assetResult.error;
-      }
-
-      const blockResult = await createSectionBlock(supabase, {
-        actor: input.actor,
-        assetId: assetResult.data.assetId,
-        blockType: "image_prompt",
-        body: block.body,
-        bookId: input.bookId,
-        editorNotes: block.editorNotes,
-        layoutPreset: "image_text",
-        printVisibility: "print",
-        sectionId: input.sectionId,
-        sortOrder,
-        title: block.title,
-      });
-
-      if (blockResult.data === null) {
-        await deleteAsset(supabase, input.bookId, assetResult.data.assetId);
-
-        return blockResult.error;
-      }
-
-      sortOrder += 1;
-      continue;
-    }
-
-    const blockResult = await createSectionBlock(supabase, {
-      actor: input.actor,
-      blockType: block.blockType,
-      body: block.body,
-      bookId: input.bookId,
-      editorNotes: block.editorNotes,
-      layoutPreset: "default",
-      printVisibility: "print",
-      sectionId: input.sectionId,
-      sortOrder,
-      title: block.title,
-    });
-
-    if (blockResult.data === null) {
-      return blockResult.error;
-    }
-
-    sortOrder += 1;
+function getImportFailureMessage(error: { code?: string; message?: string }) {
+  if (error.message?.includes("book_not_found_or_archived")) {
+    return "Libretto non trovato, non accessibile o archiviato. Ripristinalo prima di importare.";
   }
 
-  return null;
+  if (
+    error.message?.includes("empty_import_payload") ||
+    error.message?.includes("invalid_import_request") ||
+    error.message?.includes("invalid_import_hash")
+  ) {
+    return "Import non valido. Rianalizza la bozza e riprova.";
+  }
+
+  if (
+    error.message?.includes("invalid_section") ||
+    error.message?.includes("invalid_block")
+  ) {
+    return "La preview contiene dati non validi. Rianalizza la bozza e riprova.";
+  }
+
+  if (error.code === "42501") {
+    return "Il database non consente l'import. Verifica grant e policy Supabase.";
+  }
+
+  return "Import interrotto. Nessun contenuto parziale e' stato mantenuto.";
 }
 
 export async function importDraftAction(formData: FormData) {
   const bookId = getString(formData, "book_id");
   const draftText = getString(formData, "draft_text");
+  const importToken = getString(formData, "import_token");
   const validationError = validateDraftText(bookId, draftText);
 
   if (validationError) {
     redirect(getImportPath(bookId || "missing", { error: validationError }));
+  }
+
+  if (!importToken || !isUuid(importToken)) {
+    redirect(
+      getImportPath(bookId, {
+        error: "Token import non valido. Rianalizza la bozza e riprova.",
+      }),
+    );
   }
 
   const { supabase, actor, error } =
@@ -336,48 +327,38 @@ export async function importDraftAction(formData: FormData) {
     );
   }
 
-  for (const section of parsedDraft.sections) {
-    const sectionResult = await createSection(supabase, {
-      actor,
-      body: null,
-      bookId,
-      editorNotes: section.editorNotes.join("\n") || null,
-      includeInToc: true,
-      layoutPreset: "default",
-      pageBreakBefore: false,
-      sectionStatus: "draft",
-      sectionType: "chapter",
-      subtitle: null,
-      title: section.title,
+  const { error: importError } = await supabase.rpc(
+    "import_kdp_structured_draft_v2",
+    {
+      p_actor_email: actor.email,
+      p_book_id: bookId,
+      p_draft_hash: getDraftHash(draftText),
+      p_import_token: importToken,
+      p_sections: parsedDraft.sections as unknown as Json,
+    },
+  );
+
+  if (importError) {
+    logDraftImportAction("import_rpc_failed", {
+      bookIdTail: idTail(bookId),
+      errorCode: importError.code,
+      errorName: importError.name,
     });
 
-    if (sectionResult.data === null) {
-      redirect(getImportPath(bookId, { error: sectionResult.error }));
-    }
-
-    const blockError = await importDraftSectionBlocks(supabase, {
-      actor,
-      bookId,
-      section,
-      sectionId: sectionResult.data.sectionId,
-    });
-
-    if (blockError) {
-      redirect(getImportPath(bookId, { error: blockError }));
-    }
-  }
-
-  const ownershipResult = await touchBookOwnership(supabase, {
-    actor,
-    bookId,
-  });
-
-  if (ownershipResult.data === null) {
-    redirect(getImportPath(bookId, { error: ownershipResult.error }));
+    redirect(
+      getImportPath(bookId, {
+        error: getImportFailureMessage(importError),
+      }),
+    );
   }
 
   revalidatePath(`/libri/${bookId}`);
   revalidatePath(`/libri/${bookId}/contenuti`);
   revalidatePath(`/libri/${bookId}/importa`);
-  redirect(getContentPath(bookId, "imported"));
+  redirect(
+    getContentPathWithReport(bookId, {
+      run: importToken,
+      status: "imported",
+    }),
+  );
 }

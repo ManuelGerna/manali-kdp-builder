@@ -142,12 +142,12 @@ export function SettingsForm({
       <input name="book_id" type="hidden" value={bookId} />
 
       {state.message ? (
-        <p className="form-note" role="alert">
+        <p className="form-note form-note-error" role="alert">
           {state.message}
         </p>
       ) : null}
 
-      <div className="grid two">
+      <div className="form-compact-grid">
         <div className="field">
           <label htmlFor="trim_size">Trim size</label>
           <select
@@ -177,9 +177,7 @@ export function SettingsForm({
             ))}
           </select>
         </div>
-      </div>
 
-      <div className="grid two">
         <div className="field">
           <label htmlFor="interior_type">Tipo interno</label>
           <select
@@ -211,9 +209,7 @@ export function SettingsForm({
             ))}
           </select>
         </div>
-      </div>
 
-      <div className="grid two">
         <div className="field">
           <label htmlFor="body_font">Body font</label>
           <select
@@ -243,9 +239,7 @@ export function SettingsForm({
             ))}
           </select>
         </div>
-      </div>
 
-      <div className="grid two">
         <div className="field">
           <label htmlFor="body_font_size">Body font size</label>
           <select

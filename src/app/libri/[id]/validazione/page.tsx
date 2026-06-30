@@ -288,7 +288,17 @@ export default async function BookValidationPage({
             >
               {pdfExportAction.buttonLabel}
             </Link>
-            <p>{pdfExportAction.note}</p>
+            <p
+              className={`form-note form-note-${
+                exportReadiness.status === "blocked"
+                  ? "error"
+                  : exportReadiness.status === "available_with_warnings"
+                    ? "warning"
+                    : "success"
+              }`}
+            >
+              {pdfExportAction.note}
+            </p>
           </div>
         </Card>
 

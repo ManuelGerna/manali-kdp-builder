@@ -25,6 +25,9 @@ export type Database = {
           created_by_email: string | null;
           updated_by_user_id: string | null;
           updated_by_email: string | null;
+          archived_at: string | null;
+          archived_by_user_id: string | null;
+          archived_by_email: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -43,6 +46,9 @@ export type Database = {
           created_by_email?: string | null;
           updated_by_user_id?: string | null;
           updated_by_email?: string | null;
+          archived_at?: string | null;
+          archived_by_user_id?: string | null;
+          archived_by_email?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -61,6 +67,9 @@ export type Database = {
           created_by_email?: string | null;
           updated_by_user_id?: string | null;
           updated_by_email?: string | null;
+          archived_at?: string | null;
+          archived_by_user_id?: string | null;
+          archived_by_email?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -399,9 +408,61 @@ export type Database = {
           },
         ];
       };
+      kdp_import_runs: {
+        Row: {
+          id: string;
+          book_id: string;
+          import_token: string;
+          draft_hash: string;
+          report: Json;
+          created_by_user_id: string | null;
+          created_by_email: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          book_id: string;
+          import_token: string;
+          draft_hash: string;
+          report?: Json;
+          created_by_user_id?: string | null;
+          created_by_email?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          book_id?: string;
+          import_token?: string;
+          draft_hash?: string;
+          report?: Json;
+          created_by_user_id?: string | null;
+          created_by_email?: string | null;
+          created_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "kdp_import_runs_book_id_fkey";
+            columns: ["book_id"];
+            isOneToOne: false;
+            referencedRelation: "kdp_books";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
     };
     Views: Record<string, never>;
-    Functions: Record<string, never>;
+    Functions: {
+      import_kdp_structured_draft_v2: {
+        Args: {
+          p_book_id: string;
+          p_import_token: string;
+          p_draft_hash: string;
+          p_actor_email: string;
+          p_sections: Json;
+        };
+        Returns: Json;
+      };
+    };
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;
   };

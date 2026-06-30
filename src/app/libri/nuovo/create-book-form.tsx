@@ -25,35 +25,33 @@ export function CreateBookForm() {
   return (
     <form action={formAction} className="form-grid">
       {state.message ? (
-        <p className="form-note" role="alert">
+        <p className="form-note form-note-error" role="alert">
           {state.message}
         </p>
       ) : null}
 
-      <div className="grid two">
-        <div className="field">
-          <label htmlFor="title">Titolo</label>
-          <input
-            id="title"
-            name="title"
-            placeholder="Titolo del libretto"
-            required
-            defaultValue={state.fields?.title ?? ""}
-          />
-        </div>
-
-        <div className="field">
-          <label htmlFor="subtitle">Sottotitolo</label>
-          <input
-            id="subtitle"
-            name="subtitle"
-            placeholder="Sottotitolo opzionale"
-            defaultValue={state.fields?.subtitle ?? ""}
-          />
-        </div>
+      <div className="field">
+        <label htmlFor="title">Titolo</label>
+        <input
+          id="title"
+          name="title"
+          placeholder="Titolo del libretto"
+          required
+          defaultValue={state.fields?.title ?? ""}
+        />
       </div>
 
-      <div className="grid two">
+      <div className="field">
+        <label htmlFor="subtitle">Sottotitolo</label>
+        <input
+          id="subtitle"
+          name="subtitle"
+          placeholder="Sottotitolo opzionale"
+          defaultValue={state.fields?.subtitle ?? ""}
+        />
+      </div>
+
+      <div className="form-compact-grid">
         <div className="field">
           <label htmlFor="author_name">Autore / pen name</label>
           <input
@@ -79,21 +77,21 @@ export function CreateBookForm() {
             ))}
           </select>
         </div>
-      </div>
 
-      <div className="field">
-        <label htmlFor="ai_usage_type">Uso AI</label>
-        <select
-          id="ai_usage_type"
-          name="ai_usage_type"
-          defaultValue={state.fields?.ai_usage_type ?? "none"}
-        >
-          {AI_USAGE_OPTIONS.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
+        <div className="field">
+          <label htmlFor="ai_usage_type">Uso AI</label>
+          <select
+            id="ai_usage_type"
+            name="ai_usage_type"
+            defaultValue={state.fields?.ai_usage_type ?? "none"}
+          >
+            {AI_USAGE_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </div>
       </div>
 
       <SubmitButton />

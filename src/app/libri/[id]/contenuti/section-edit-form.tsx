@@ -82,28 +82,10 @@ export function SectionEditForm({ section }: { section: KdpSection }) {
       <input name="section_id" type="hidden" value={section.id} />
 
       {state.message ? (
-        <p className="form-note" role="alert">
+        <p className="form-note form-note-error" role="alert">
           {state.message}
         </p>
       ) : null}
-
-      <div className="field">
-        <label htmlFor={`section_type_${section.id}`}>Tipo sezione</label>
-        <select
-          defaultValue={
-            state.fields?.section_type ||
-            getEditableSectionType(section.section_type)
-          }
-          id={`section_type_${section.id}`}
-          name="section_type"
-        >
-          {SECTION_TYPE_OPTIONS.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-      </div>
 
       <div className="field">
         <label htmlFor={`title_${section.id}`}>Titolo</label>
@@ -125,64 +107,89 @@ export function SectionEditForm({ section }: { section: KdpSection }) {
         />
       </div>
 
-      <div className="field">
-        <label htmlFor={`section_status_${section.id}`}>Stato editoriale</label>
-        <select
-          defaultValue={
-            state.fields?.section_status ||
-            getEditableSectionStatus(section.section_status)
-          }
-          id={`section_status_${section.id}`}
-          name="section_status"
+      <div className="form-compact-grid">
+        <div className="field">
+          <label htmlFor={`section_type_${section.id}`}>Tipo sezione</label>
+          <select
+            defaultValue={
+              state.fields?.section_type ||
+              getEditableSectionType(section.section_type)
+            }
+            id={`section_type_${section.id}`}
+            name="section_type"
+          >
+            {SECTION_TYPE_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="field">
+          <label htmlFor={`section_status_${section.id}`}>
+            Stato editoriale
+          </label>
+          <select
+            defaultValue={
+              state.fields?.section_status ||
+              getEditableSectionStatus(section.section_status)
+            }
+            id={`section_status_${section.id}`}
+            name="section_status"
+          >
+            {SECTION_STATUS_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div className="field">
+          <label htmlFor={`layout_preset_${section.id}`}>Layout sezione</label>
+          <select
+            defaultValue={
+              state.fields?.layout_preset ||
+              getEditableLayoutPreset(section.layout_preset)
+            }
+            id={`layout_preset_${section.id}`}
+            name="layout_preset"
+          >
+            {SECTION_LAYOUT_PRESET_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <label
+          className="checkbox-field"
+          htmlFor={`include_in_toc_${section.id}`}
         >
-          {SECTION_STATUS_OPTIONS.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-      </div>
+          <input
+            defaultChecked={includeInToc}
+            id={`include_in_toc_${section.id}`}
+            name="include_in_toc"
+            type="checkbox"
+          />
+          <span>Mostra in indice</span>
+        </label>
 
-      <div className="field">
-        <label htmlFor={`layout_preset_${section.id}`}>Layout sezione</label>
-        <select
-          defaultValue={
-            state.fields?.layout_preset ||
-            getEditableLayoutPreset(section.layout_preset)
-          }
-          id={`layout_preset_${section.id}`}
-          name="layout_preset"
+        <label
+          className="checkbox-field"
+          htmlFor={`page_break_before_${section.id}`}
         >
-          {SECTION_LAYOUT_PRESET_OPTIONS.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </select>
+          <input
+            defaultChecked={pageBreakBefore}
+            id={`page_break_before_${section.id}`}
+            name="page_break_before"
+            type="checkbox"
+          />
+          <span>Page break prima</span>
+        </label>
       </div>
-
-      <label className="checkbox-field" htmlFor={`include_in_toc_${section.id}`}>
-        <input
-          defaultChecked={includeInToc}
-          id={`include_in_toc_${section.id}`}
-          name="include_in_toc"
-          type="checkbox"
-        />
-        <span>Mostra in indice</span>
-      </label>
-
-      <label
-        className="checkbox-field"
-        htmlFor={`page_break_before_${section.id}`}
-      >
-        <input
-          defaultChecked={pageBreakBefore}
-          id={`page_break_before_${section.id}`}
-          name="page_break_before"
-          type="checkbox"
-        />
-        <span>Interruzione pagina prima della sezione</span>
-      </label>
 
       <div className="field">
         <label htmlFor={`body_${section.id}`}>Testo pubblicabile</label>

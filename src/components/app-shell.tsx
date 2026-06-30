@@ -22,10 +22,10 @@ export function AppShell({
       <header className="topbar">
         <div className="topbar-inner">
           <Link className="brand-lockup" href="/libri" aria-label="KDP Builder">
-            <span className="brand-mark">K</span>
+            <span className="brand-mark">KB</span>
             <span className="brand-text">
               <span className="brand-name">KDP Builder</span>
-              <span className="brand-domain">kdp.manalicorporate.com</span>
+              <span className="brand-domain">Manali Corporate</span>
             </span>
           </Link>
 
