@@ -36,6 +36,8 @@ import {
 import type { Tables } from "@/types/database";
 import {
   CreateImagePlaceholderBlockForm,
+  CreateInternalNoteBlockForm,
+  CreatePageBreakBlockForm,
   CreateTextBlockForm,
   DeleteSectionBlockForm,
   DeleteSectionForm,
@@ -85,6 +87,7 @@ const STATUS_MESSAGES: Record<string, string> = {
   created: "Sezione creata.",
   deleted: "Sezione eliminata.",
   imported: "Import completato.",
+  internal_note_created: "Nota interna aggiunta.",
   page_break_inserted: "Interruzione pagina inserita.",
   page_break_removed: "Interruzione pagina rimossa.",
   page_break_unchanged: "Interruzione pagina gia corretta.",
@@ -308,18 +311,39 @@ function SectionCard({
   const title = section.title || "Senza titolo";
   const includeInToc = section.include_in_toc !== false;
   const hasPrintableContentBlocks = blocks.some(isPrintableContentBlock);
+  const printableBlockCount = blocks.filter(isPrintableContentBlock).length;
 
   return (
     <article className="section-card">
       <div className="section-card-header">
-        <div>
+        <div className="section-card-title-area">
           <p className="section-meta">
-            {index + 1}. {formatSectionType(section.section_type)}
+            Sezione {index + 1} - {formatSectionType(section.section_type)}
           </p>
           <h2>{title}</h2>
           {section.subtitle ? (
             <p className="section-subtitle">{section.subtitle}</p>
           ) : null}
+        </div>
+
+        <div className="section-actions section-actions-compact">
+          <MoveSectionForm
+            bookId={section.book_id}
+            direction="up"
+            disabled={isFirst}
+            sectionId={section.id}
+          />
+          <MoveSectionForm
+            bookId={section.book_id}
+            direction="down"
+            disabled={isLast}
+            sectionId={section.id}
+          />
+          <DeleteSectionForm
+            bookId={section.book_id}
+            sectionId={section.id}
+            title={title}
+          />
         </div>
       </div>
 
@@ -332,54 +356,64 @@ function SectionCard({
           {formatSectionStatus(section.section_status)}
         </span>
         <span className="section-chip">
-          Layout: {formatLayoutPreset(section.layout_preset)}
-        </span>
-        <span className="section-chip">
           Indice: {includeInToc ? "si" : "no"}
+        </span>
+        <span className="section-chip">Blocchi: {blocks.length}</span>
+        <span className="section-chip">Stampabili: {printableBlockCount}</span>
+        <span className="section-chip">
+          Layout: {formatLayoutPreset(section.layout_preset)}
         </span>
         {section.page_break_before ? (
           <span className="section-chip">Page break prima</span>
         ) : null}
       </div>
 
-      <p className="section-owner-meta">
-        Creato da: {formatInternalOwner(section.created_by_email)} - Ultima
-        modifica: {formatInternalOwner(section.updated_by_email)}
-      </p>
+      <details className="section-details-panel">
+        <summary className="secondary-button section-edit-toggle">
+          Dettagli sezione
+        </summary>
+        <p className="section-owner-meta">
+          Creato da: {formatInternalOwner(section.created_by_email)} - Ultima
+          modifica: {formatInternalOwner(section.updated_by_email)}
+        </p>
 
-      <div className="section-content-grid">
-        {!hasPrintableContentBlocks ? (
+        <div className="section-content-grid">
           <section className="section-content-area">
-            <h3>Testo pubblicabile</h3>
+            <h3>Fallback tecnico</h3>
             {section.body ? (
               <p className="section-body-preview">{section.body}</p>
             ) : (
               <p className="section-empty-body">
-                Fallback manuale vuoto. Aggiungi un blocco testo o compila il
-                fallback tecnico dalla modifica sezione.
+                section.body vuoto. Anteprima e PDF useranno i blocchi
+                stampabili quando presenti.
               </p>
             )}
+            {hasPrintableContentBlocks ? (
+              <p className="field-note">
+                I blocchi stampabili hanno priorita su questo fallback.
+              </p>
+            ) : null}
           </section>
-        ) : null}
 
-        <section className="section-content-area">
-          <h3>Note interne</h3>
-          {section.editor_notes ? (
-            <p className="section-internal-notes">{section.editor_notes}</p>
-          ) : (
-            <p className="section-empty-body">Nessuna nota interna.</p>
-          )}
-        </section>
-      </div>
+          <section className="section-content-area">
+            <h3>Note interne sezione</h3>
+            {section.editor_notes ? (
+              <p className="section-internal-notes">{section.editor_notes}</p>
+            ) : (
+              <p className="section-empty-body">Nessuna nota interna.</p>
+            )}
+          </section>
+        </div>
+      </details>
 
       <section className="section-blocks-panel">
         <div className="section-blocks-header">
           <h3>Blocchi contenuto</h3>
-          <span className="section-chip">{blocks.length}</span>
+          <span className="section-chip">{blocks.length} totali</span>
         </div>
         <p className="section-panel-note">
-          Blocchi contenuto: solo quelli Stampabile finiscono in anteprima e
-          PDF.
+          Aggiungi e riordina i blocchi della sezione. Solo i blocchi
+          stampabili finiscono in anteprima e PDF.
         </p>
 
         {blocks.length > 0 ? (
@@ -390,9 +424,14 @@ function SectionCard({
               const hasPageBreakAfter =
                 blocks[blockIndex + 1]?.block_type === "page_break";
               const showPageBreakToggle = canTogglePageBreakAfterBlock(block);
+              const isInternalNote = block.block_type === "internal_note";
+              const isPageBreak = block.block_type === "page_break";
 
               return (
-                <li className="section-block-item" key={block.id}>
+                <li
+                  className={`section-block-item section-block-item-${block.block_type}`}
+                  key={block.id}
+                >
                   <div className="section-block-item-header">
                     <p className="section-meta">
                       {block.sort_order}. {blockTypeLabel}
@@ -419,7 +458,20 @@ function SectionCard({
                   </div>
                   {block.title ? <h4>{block.title}</h4> : null}
                   {block.body ? (
-                    <p className="section-body-preview">{block.body}</p>
+                    <p
+                      className={
+                        isInternalNote
+                          ? "section-internal-notes"
+                          : "section-body-preview"
+                      }
+                    >
+                      {block.body}
+                    </p>
+                  ) : null}
+                  {isPageBreak ? (
+                    <p className="section-empty-body">
+                      Interruzione pagina nel flusso stampabile.
+                    </p>
                   ) : null}
                   {block.editor_notes ? (
                     <p className="section-internal-notes">
@@ -428,8 +480,8 @@ function SectionCard({
                   ) : null}
                   <div className="section-block-controls">
                     <div
-                      className="section-block-primary-actions"
-                      aria-label="Azioni blocco"
+                      className="section-block-action-group"
+                      aria-label="Azioni principali blocco"
                     >
                       {block.block_type === "text" ? (
                         <details className="block-edit-panel block-inline-edit-panel">
@@ -462,7 +514,7 @@ function SectionCard({
                         sectionId={block.section_id}
                       />
                     </div>
-                    <div className="section-block-secondary-actions">
+                    <div className="section-block-action-group section-block-output-actions">
                       <UpdateSectionBlockVisibilityForm block={block} />
                       {showPageBreakToggle ? (
                         <PageBreakAfterBlockForm
@@ -478,51 +530,51 @@ function SectionCard({
           </ul>
         ) : (
           <p className="section-empty-body">
-            Nessun blocco contenuto in questa sezione.
+            Nessun blocco in questa sezione. Inizia da un blocco testo.
           </p>
         )}
 
-        <details className="section-edit-panel">
-          <summary className="secondary-button section-edit-toggle">
-            Aggiungi blocco testo
-          </summary>
-          <CreateTextBlockForm bookId={section.book_id} sectionId={section.id} />
-        </details>
+        <div className="block-add-toolbar" aria-label="Aggiungi blocco">
+          <details className="section-edit-panel block-add-panel">
+            <summary className="secondary-button section-edit-toggle">
+              + Blocco testo
+            </summary>
+            <CreateTextBlockForm
+              bookId={section.book_id}
+              sectionId={section.id}
+            />
+          </details>
 
-        <details className="section-edit-panel">
-          <summary className="secondary-button section-edit-toggle">
-            Placeholder immagine
-          </summary>
-          <CreateImagePlaceholderBlockForm
+          <details className="section-edit-panel block-add-panel">
+            <summary className="secondary-button section-edit-toggle">
+              + Placeholder immagine
+            </summary>
+            <CreateImagePlaceholderBlockForm
+              bookId={section.book_id}
+              sectionId={section.id}
+            />
+          </details>
+
+          <CreatePageBreakBlockForm
             bookId={section.book_id}
             sectionId={section.id}
           />
-        </details>
-      </section>
 
-      <div className="section-actions">
-        <MoveSectionForm
-          bookId={section.book_id}
-          direction="up"
-          disabled={isFirst}
-          sectionId={section.id}
-        />
-        <MoveSectionForm
-          bookId={section.book_id}
-          direction="down"
-          disabled={isLast}
-          sectionId={section.id}
-        />
-        <DeleteSectionForm
-          bookId={section.book_id}
-          sectionId={section.id}
-          title={title}
-        />
-      </div>
+          <details className="section-edit-panel block-add-panel">
+            <summary className="secondary-button section-edit-toggle">
+              + Nota interna
+            </summary>
+            <CreateInternalNoteBlockForm
+              bookId={section.book_id}
+              sectionId={section.id}
+            />
+          </details>
+        </div>
+      </section>
 
       <details className="section-edit-panel">
         <summary className="secondary-button section-edit-toggle">
-          Modifica
+          Modifica sezione
         </summary>
         <SectionEditForm
           hasContentBlocks={hasPrintableContentBlocks}
@@ -661,11 +713,19 @@ export default async function BookContentsPage({
     <AppShell
       title="Contenuti libretto"
       eyebrow={book.title}
-      description={book.subtitle || "Builder editoriale per sezioni, blocchi e note."}
+      description={
+        book.subtitle || "Editor manuale per sezioni, blocchi e controllo PDF."
+      }
       actions={
         <>
-          <Link className="secondary-button" href={`/libri/${book.id}/importa`}>
-            Importa bozza
+          <a className="button" href="#nuova-sezione">
+            + Aggiungi sezione
+          </a>
+          <Link
+            className="secondary-button"
+            href={`/libri/${book.id}/anteprima`}
+          >
+            Anteprima
           </Link>
           <Link className="secondary-button" href={`/libri/${book.id}`}>
             Torna al libretto
@@ -701,12 +761,27 @@ export default async function BookContentsPage({
           </p>
         ))}
 
-        <div className="grid two" id="nuova-sezione">
-          <Card title="Aggiungi sezione">
-            <SectionCreateForm bookId={book.id} />
+        <section className="editor-focus-panel" aria-label="Flusso editoriale">
+          <p>
+            Scrivi il libretto direttamente qui. I blocchi stampabili sono
+            quelli che finiranno in anteprima e PDF.
+          </p>
+        </section>
+
+        <div className="grid two editor-top-grid" id="nuova-sezione">
+          <Card className="section-create-card">
+            <details
+              className="section-create-details"
+              open={sections.length === 0}
+            >
+              <summary className="button section-create-summary">
+                + Aggiungi sezione
+              </summary>
+              <SectionCreateForm bookId={book.id} />
+            </details>
           </Card>
 
-          <Card title="Riepilogo">
+          <Card title="Riepilogo editoriale">
             <ul className="panel-list">
               <FieldRow label="Titolo" value={book.title} />
               <FieldRow label="Sezioni" value={sections.length} />
@@ -721,6 +796,14 @@ export default async function BookContentsPage({
                 value={sections.length + 1}
               />
             </ul>
+            <div className="editor-support-actions">
+              <Link
+                className="ghost-button"
+                href={`/libri/${book.id}/importa`}
+              >
+                Importa bozza strutturata
+              </Link>
+            </div>
           </Card>
         </div>
 

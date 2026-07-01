@@ -3,6 +3,8 @@
 import { useFormStatus } from "react-dom";
 import {
   createImagePlaceholderBlockAction,
+  createInternalNoteBlockAction,
+  createPageBreakBlockAction,
   createTextBlockAction,
   deleteSectionBlockAction,
   deleteSectionAction,
@@ -63,6 +65,22 @@ function PlaceholderButton() {
   );
 }
 
+function QuickAddButton({
+  pendingLabel,
+  submitLabel,
+}: {
+  pendingLabel: string;
+  submitLabel: string;
+}) {
+  const { pending } = useFormStatus();
+
+  return (
+    <button className="secondary-button" disabled={pending} type="submit">
+      {pending ? pendingLabel : submitLabel}
+    </button>
+  );
+}
+
 function TextBlockButton({
   pendingLabel,
   submitLabel,
@@ -75,6 +93,14 @@ function TextBlockButton({
   return (
     <button className="button" disabled={pending} type="submit">
       {pending ? pendingLabel : submitLabel}
+    </button>
+  );
+}
+
+function ResetButton({ label = "Annulla modifiche" }: { label?: string }) {
+  return (
+    <button className="secondary-button" type="reset">
+      {label}
     </button>
   );
 }
@@ -317,6 +343,28 @@ export function CreateImagePlaceholderBlockForm({
   );
 }
 
+export function CreatePageBreakBlockForm({
+  bookId,
+  sectionId,
+}: {
+  bookId: string;
+  sectionId: string;
+}) {
+  return (
+    <form
+      action={createPageBreakBlockAction}
+      className="inline-form block-action-form"
+    >
+      <input name="book_id" type="hidden" value={bookId} />
+      <input name="section_id" type="hidden" value={sectionId} />
+      <QuickAddButton
+        pendingLabel="Creazione..."
+        submitLabel="+ Interruzione pagina"
+      />
+    </form>
+  );
+}
+
 export function UpdateTextBlockForm({
   block,
 }: {
@@ -351,10 +399,13 @@ export function UpdateTextBlockForm({
         />
       </div>
 
-      <TextBlockButton
-        pendingLabel="Salvataggio..."
-        submitLabel="Salva blocco"
-      />
+      <div className="form-actions">
+        <TextBlockButton
+          pendingLabel="Salvataggio..."
+          submitLabel="Salva blocco"
+        />
+        <ResetButton />
+      </div>
     </form>
   );
 }
@@ -390,7 +441,48 @@ export function CreateTextBlockForm({
         />
       </div>
 
-      <TextBlockButton pendingLabel="Creazione..." submitLabel="Aggiungi" />
+      <TextBlockButton
+        pendingLabel="Creazione..."
+        submitLabel="Aggiungi blocco testo"
+      />
+    </form>
+  );
+}
+
+export function CreateInternalNoteBlockForm({
+  bookId,
+  sectionId,
+}: {
+  bookId: string;
+  sectionId: string;
+}) {
+  return (
+    <form
+      action={createInternalNoteBlockAction}
+      className="form-grid block-edit-form"
+    >
+      <input name="book_id" type="hidden" value={bookId} />
+      <input name="section_id" type="hidden" value={sectionId} />
+
+      <div className="field">
+        <label htmlFor={`new_note_title_${sectionId}`}>Titolo nota</label>
+        <input
+          id={`new_note_title_${sectionId}`}
+          name="note_title"
+          placeholder="Es. Da verificare prima del PDF"
+        />
+      </div>
+
+      <div className="field">
+        <label htmlFor={`new_note_body_${sectionId}`}>Nota interna</label>
+        <textarea
+          id={`new_note_body_${sectionId}`}
+          name="note_body"
+          placeholder="Promemoria editoriale escluso da anteprima e PDF"
+        />
+      </div>
+
+      <TextBlockButton pendingLabel="Creazione..." submitLabel="Aggiungi nota" />
     </form>
   );
 }

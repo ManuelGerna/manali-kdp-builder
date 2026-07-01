@@ -504,6 +504,63 @@ button {
   gap: 16px;
 }
 
+.editor-focus-panel {
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--brand);
+  border-radius: var(--radius);
+  background: #fffafd;
+  padding: 13px 14px;
+}
+
+.editor-focus-panel p {
+  margin: 0;
+  color: var(--text);
+  font-weight: 800;
+  line-height: 1.5;
+}
+
+.editor-top-grid {
+  align-items: start;
+}
+
+.section-create-card {
+  gap: 12px;
+}
+
+.section-create-details {
+  display: grid;
+  gap: 12px;
+}
+
+.section-create-details > summary,
+.section-edit-toggle {
+  list-style: none;
+}
+
+.section-create-details > summary::-webkit-details-marker,
+.section-edit-toggle::-webkit-details-marker {
+  display: none;
+}
+
+.section-create-summary {
+  width: fit-content;
+}
+
+.section-create-form {
+  padding-top: 4px;
+}
+
+.editor-support-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.editor-support-actions .ghost-button {
+  min-height: 38px;
+  padding: 0 10px;
+}
+
 .section-list {
   display: grid;
   gap: 14px;
@@ -522,6 +579,10 @@ button {
 .section-card-header {
   display: grid;
   gap: 8px;
+}
+
+.section-card-title-area {
+  min-width: 0;
 }
 
 .section-card h2 {
@@ -551,6 +612,17 @@ button {
   color: var(--muted);
   font-size: 0.8rem;
   line-height: 1.45;
+}
+
+.section-details-panel {
+  display: grid;
+  gap: 10px;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+}
+
+.section-details-panel[open] {
+  gap: 12px;
 }
 
 .section-chip-row {
@@ -669,8 +741,22 @@ button {
 .section-block-item {
   display: grid;
   gap: 8px;
-  border-left: 3px solid var(--line);
-  padding-left: 12px;
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--line);
+  border-radius: var(--radius);
+  background: #fffafd;
+  padding: 12px;
+}
+
+.section-block-item-internal_note {
+  border-color: var(--warning-line);
+  border-left-color: var(--warning);
+  background: var(--warning-bg);
+}
+
+.section-block-item-page_break {
+  border-left-color: var(--brand);
+  background: var(--surface-tinted);
 }
 
 .section-panel-note {
@@ -695,10 +781,26 @@ button {
   padding-top: 2px;
 }
 
+.form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .section-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.section-actions-compact {
+  align-items: flex-start;
+}
+
+.section-actions-compact .secondary-button {
+  min-height: 36px;
+  padding: 0 10px;
+  font-size: 0.82rem;
 }
 
 .section-block-controls {
@@ -708,6 +810,7 @@ button {
   padding-top: 10px;
 }
 
+.section-block-action-group,
 .section-block-primary-actions,
 .section-block-secondary-actions {
   display: flex;
@@ -716,6 +819,7 @@ button {
   gap: 8px;
 }
 
+.section-block-output-actions,
 .section-block-secondary-actions {
   align-items: flex-end;
 }
@@ -737,6 +841,35 @@ button {
 .block-inline-edit-panel[open] {
   width: 100%;
   border: 1px solid var(--line);
+  background: rgba(255, 250, 254, 0.72);
+  padding: 10px;
+}
+
+.block-add-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 8px;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+}
+
+.block-add-toolbar .block-action-form .secondary-button,
+.block-add-panel > summary {
+  min-height: 40px;
+  padding: 0 12px;
+  font-size: 0.86rem;
+}
+
+.block-add-panel {
+  border-top: 0;
+  padding-top: 0;
+}
+
+.block-add-panel[open] {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
   background: rgba(255, 250, 254, 0.72);
   padding: 10px;
 }
@@ -1503,6 +1636,10 @@ button {
   gap: 7px;
 }
 
+.field-full {
+  grid-column: 1 / -1;
+}
+
 .checkbox-field {
   display: flex;
   align-items: flex-start;
@@ -1696,6 +1833,19 @@ button {
 
   .section-content-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .section-card-header {
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+  }
+
+  .section-actions-compact {
+    justify-content: flex-end;
+  }
+
+  .section-block-controls {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .draft-preview-header {

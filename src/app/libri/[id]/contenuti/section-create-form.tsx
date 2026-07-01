@@ -21,7 +21,7 @@ function SubmitButton() {
 
   return (
     <button className="button" disabled={pending} type="submit">
-      {pending ? "Aggiunta..." : "Aggiungi sezione"}
+      {pending ? "Creazione..." : "+ Crea sezione"}
     </button>
   );
 }
@@ -35,7 +35,7 @@ export function SectionCreateForm({ bookId }: { bookId: string }) {
   const pageBreakBefore = state.fields?.page_break_before === "true";
 
   return (
-    <form action={formAction} className="form-grid">
+    <form action={formAction} className="form-grid section-create-form">
       <input name="book_id" type="hidden" value={bookId} />
 
       {state.message ? (
@@ -44,24 +44,26 @@ export function SectionCreateForm({ bookId }: { bookId: string }) {
         </p>
       ) : null}
 
-      <div className="field">
-        <label htmlFor="title_new">Titolo</label>
-        <input
-          defaultValue={state.fields?.title ?? ""}
-          id="title_new"
-          name="title"
-          placeholder="Titolo sezione"
-        />
-      </div>
+      <div className="form-compact-grid">
+        <div className="field">
+          <label htmlFor="title_new">Titolo</label>
+          <input
+            defaultValue={state.fields?.title ?? ""}
+            id="title_new"
+            name="title"
+            placeholder="Titolo sezione"
+          />
+        </div>
 
-      <div className="field">
-        <label htmlFor="subtitle_new">Sottotitolo</label>
-        <input
-          defaultValue={state.fields?.subtitle ?? ""}
-          id="subtitle_new"
-          name="subtitle"
-          placeholder="Sottotitolo opzionale"
-        />
+        <div className="field">
+          <label htmlFor="subtitle_new">Sottotitolo</label>
+          <input
+            defaultValue={state.fields?.subtitle ?? ""}
+            id="subtitle_new"
+            name="subtitle"
+            placeholder="Sottotitolo opzionale"
+          />
+        </div>
       </div>
 
       <div className="form-compact-grid">
@@ -131,17 +133,17 @@ export function SectionCreateForm({ bookId }: { bookId: string }) {
         </label>
       </div>
 
-      <div className="field">
-        <label htmlFor="body_new">Testo pubblicabile</label>
+      <div className="field field-full">
+        <label htmlFor="body_new">Fallback tecnico section.body</label>
         <textarea
           defaultValue={state.fields?.body ?? ""}
           id="body_new"
           name="body"
-          placeholder="Testo finale destinato al PDF"
+          placeholder="Opzionale. Il testo principale si lavora nei blocchi della sezione."
         />
       </div>
 
-      <div className="field">
+      <div className="field field-full">
         <label htmlFor="editor_notes_new">Note interne</label>
         <textarea
           defaultValue={state.fields?.editor_notes ?? ""}
