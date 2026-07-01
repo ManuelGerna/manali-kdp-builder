@@ -18,6 +18,7 @@ import {
   createSectionBlock,
   deleteSectionBlock,
   insertPageBreakAfterBlock,
+  listSectionBlocks,
   moveSectionBlock,
   removePageBreakAfterBlock,
   updateSectionBlockVisibility,
@@ -547,6 +548,149 @@ export async function moveSectionAction(formData: FormData) {
 
   revalidateBookContent(bookId);
   redirect(getContentPath(bookId, { status: "reordered" }));
+}
+
+export async function createPageBreakBlockAction(formData: FormData) {
+  const bookId = getString(formData, "book_id");
+  const sectionId = getString(formData, "section_id");
+
+  if (!bookId) {
+    redirect("/libri");
+  }
+
+  if (!sectionId) {
+    redirect(getContentPath(bookId, { error: "Sezione non valida." }));
+  }
+
+  const { supabase, actor, error } = await getAuthenticatedSupabase(
+    "create-page-break-block",
+  );
+
+  if (!supabase || !actor) {
+    redirect(getContentPath(bookId, { error }));
+  }
+
+  const bookAccessError = await getBookAccessError(supabase, bookId);
+
+  if (bookAccessError) {
+    redirect(getContentPath(bookId, { error: bookAccessError }));
+  }
+
+  const blocksResult = await listSectionBlocks(supabase, bookId);
+
+  if (blocksResult.data === null) {
+    redirect(getContentPath(bookId, { error: blocksResult.error }));
+  }
+
+  const sectionBlocks = blocksResult.data
+    .filter((block) => block.section_id === sectionId)
+    .sort((first, second) => {
+      if (first.sort_order !== second.sort_order) {
+        return first.sort_order - second.sort_order;
+      }
+
+      return first.created_at.localeCompare(second.created_at);
+    });
+  const lastBlock = sectionBlocks.at(-1);
+
+  if (lastBlock?.block_type === "page_break") {
+    redirect(getContentPath(bookId, { status: "page_break_unchanged" }));
+  }
+
+  const blockResult = await createSectionBlock(supabase, {
+    actor,
+    bookId,
+    sectionId,
+    blockType: "page_break",
+    title: null,
+    body: null,
+    layoutPreset: "default",
+    printVisibility: "print",
+    editorNotes: null,
+  });
+
+  if (blockResult.data === null) {
+    redirect(getContentPath(bookId, { error: blockResult.error }));
+  }
+
+  const ownershipError = await touchBookAfterContentChange(
+    supabase,
+    bookId,
+    actor,
+  );
+
+  if (ownershipError) {
+    redirect(getContentPath(bookId, { error: ownershipError }));
+  }
+
+  revalidateBookContent(bookId);
+  redirect(getContentPath(bookId, { status: "page_break_inserted" }));
+}
+
+export async function createInternalNoteBlockAction(formData: FormData) {
+  const bookId = getString(formData, "book_id");
+  const sectionId = getString(formData, "section_id");
+  const title = getOptionalText(formData, "note_title");
+  const body = getOptionalText(formData, "note_body");
+
+  if (!bookId) {
+    redirect("/libri");
+  }
+
+  if (!sectionId) {
+    redirect(getContentPath(bookId, { error: "Sezione non valida." }));
+  }
+
+  if (!title && !body) {
+    redirect(
+      getContentPath(bookId, {
+        error: "Inserisci almeno titolo o testo della nota interna.",
+      }),
+    );
+  }
+
+  const { supabase, actor, error } = await getAuthenticatedSupabase(
+    "create-internal-note-block",
+  );
+
+  if (!supabase || !actor) {
+    redirect(getContentPath(bookId, { error }));
+  }
+
+  const bookAccessError = await getBookAccessError(supabase, bookId);
+
+  if (bookAccessError) {
+    redirect(getContentPath(bookId, { error: bookAccessError }));
+  }
+
+  const blockResult = await createSectionBlock(supabase, {
+    actor,
+    bookId,
+    sectionId,
+    blockType: "internal_note",
+    title: title || "Nota interna",
+    body,
+    layoutPreset: "default",
+    printVisibility: "internal_only",
+    editorNotes: null,
+  });
+
+  if (blockResult.data === null) {
+    redirect(getContentPath(bookId, { error: blockResult.error }));
+  }
+
+  const ownershipError = await touchBookAfterContentChange(
+    supabase,
+    bookId,
+    actor,
+  );
+
+  if (ownershipError) {
+    redirect(getContentPath(bookId, { error: ownershipError }));
+  }
+
+  revalidateBookContent(bookId);
+  redirect(getContentPath(bookId, { status: "internal_note_created" }));
 }
 
 export async function createTextBlockAction(formData: FormData) {
