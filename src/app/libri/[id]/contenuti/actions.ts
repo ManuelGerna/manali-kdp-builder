@@ -237,9 +237,16 @@ function getFields(formData: FormData) {
 
 function getContentPath(
   bookId: string,
-  params: { anchor?: string | null; error?: string; status?: string } = {},
+  params: {
+    anchor?: string | null;
+    error?: string;
+    focus?: string | null;
+    status?: string;
+  } = {},
 ) {
   const searchParams = new URLSearchParams();
+  const anchor = getSafeContentAnchor(params.anchor);
+  const focus = getSafeContentAnchor(params.focus) ?? anchor;
 
   if (params.error) {
     searchParams.set("error", params.error);
@@ -249,8 +256,11 @@ function getContentPath(
     searchParams.set("status", params.status);
   }
 
+  if (focus) {
+    searchParams.set("focus", focus);
+  }
+
   const query = searchParams.toString();
-  const anchor = getSafeContentAnchor(params.anchor);
 
   return `/libri/${bookId}/contenuti${query ? `?${query}` : ""}${
     anchor ? `#${encodeURIComponent(anchor)}` : ""
