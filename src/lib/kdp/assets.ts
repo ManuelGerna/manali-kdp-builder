@@ -3,6 +3,7 @@ import type { RepositoryResult } from "@/lib/kdp/books";
 import type { AssetStatus, AssetType } from "@/lib/kdp/constants";
 import {
   getCreateOwnershipFields,
+  getUpdateOwnershipFields,
   type OwnershipActor,
 } from "@/lib/kdp/ownership";
 import type { createClient } from "@/lib/supabase/server";
@@ -21,6 +22,15 @@ export type AssetInput = {
   altText: string | null;
   prompt: string | null;
   status: AssetStatus;
+};
+
+export type UpdateAssetUploadInput = {
+  actor: OwnershipActor;
+  assetId: string;
+  bookId: string;
+  filePath: string;
+  title: string | null;
+  altText: string | null;
 };
 
 type LogContext = Record<string, boolean | number | string | null | undefined>;
@@ -178,6 +188,55 @@ export async function deleteAsset(
       error: getAssetPersistenceMessage(
         error,
         "Non riesco a eliminare l'asset. Riprova tra poco.",
+      ),
+    };
+  }
+
+  if (!data) {
+    return {
+      data: null,
+      error: "Asset non trovato o non accessibile.",
+    };
+  }
+
+  return {
+    data: {
+      assetId: data.id,
+    },
+    error: null,
+  };
+}
+
+export async function updateAssetUpload(
+  supabase: KdpSupabaseClient,
+  input: UpdateAssetUploadInput,
+): Promise<RepositoryResult<{ assetId: string }>> {
+  const { data, error } = await supabase
+    .from("kdp_assets")
+    .update({
+      file_path: input.filePath,
+      title: input.title,
+      alt_text: input.altText,
+      status: "uploaded",
+      ...getUpdateOwnershipFields(input.actor),
+    })
+    .eq("book_id", input.bookId)
+    .eq("id", input.assetId)
+    .select("id")
+    .maybeSingle();
+
+  if (error) {
+    logAssetError("update_asset_upload", error, {
+      assetIdTail: idTail(input.assetId),
+      bookIdTail: idTail(input.bookId),
+      status: "uploaded",
+    });
+
+    return {
+      data: null,
+      error: getAssetPersistenceMessage(
+        error,
+        "Non riesco ad aggiornare l'asset caricato. Riprova tra poco.",
       ),
     };
   }
