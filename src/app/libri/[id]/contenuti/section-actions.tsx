@@ -99,16 +99,6 @@ function ResetButton({ label = "Annulla modifiche" }: { label?: string }) {
   );
 }
 
-function ImageUploadButton() {
-  const { pending } = useFormStatus();
-
-  return (
-    <button className="button" disabled={pending} type="submit">
-      {pending ? "Caricamento..." : "Carica immagine"}
-    </button>
-  );
-}
-
 function AutosaveFeedback({
   pending,
   state,
@@ -135,6 +125,37 @@ function AutosaveFeedback({
     >
       {state.status === "success" ? "Salvato" : state.message}
     </span>
+  );
+}
+
+function AutoImageUploadField({ blockId }: { blockId: string }) {
+  const { pending } = useFormStatus();
+
+  return (
+    <div className="image-upload-picker">
+      <label
+        aria-disabled={pending}
+        className="button image-upload-trigger"
+        htmlFor={`image_file_${blockId}`}
+      >
+        {pending ? "Caricamento..." : "Carica immagine"}
+      </label>
+      <input
+        accept="image/png,image/jpeg,image/webp"
+        className="visually-hidden"
+        disabled={pending}
+        id={`image_file_${blockId}`}
+        name="image_file"
+        onChange={(event) => {
+          if (event.currentTarget.files?.length) {
+            event.currentTarget.form?.requestSubmit();
+          }
+        }}
+        required
+        type="file"
+      />
+      <p className="field-note">PNG, JPG o WEBP. Dimensione massima 10 MB.</p>
+    </div>
   );
 }
 
@@ -406,6 +427,9 @@ export function UploadImageForBlockForm({
     "body" | "book_id" | "id" | "section_id" | "title"
   >;
 }) {
+  const defaultTitle = asset?.title ?? block.title ?? "";
+  const defaultAltText = asset?.alt_text ?? block.title ?? block.body ?? "";
+
   return (
     <form
       action={uploadImageForBlockAction}
@@ -415,47 +439,9 @@ export function UploadImageForBlockForm({
       <input name="book_id" type="hidden" value={block.book_id} />
       <input name="section_id" type="hidden" value={block.section_id} />
       <input name="block_id" type="hidden" value={block.id} />
-
-      <div className="field">
-        <label htmlFor={`image_file_${block.id}`}>Carica immagine</label>
-        <input
-          accept="image/png,image/jpeg,image/webp"
-          id={`image_file_${block.id}`}
-          name="image_file"
-          required
-          type="file"
-        />
-        <p className="field-note">PNG, JPG o WEBP. Dimensione massima 10 MB.</p>
-      </div>
-
-      <div className="image-upload-meta-grid">
-        <div className="field">
-          <label htmlFor={`asset_title_${block.id}`}>Titolo asset</label>
-          <input
-            defaultValue={asset?.title ?? block.title ?? ""}
-            id={`asset_title_${block.id}`}
-            name="asset_title"
-            placeholder="Titolo immagine"
-          />
-        </div>
-
-        <div className="field">
-          <label htmlFor={`asset_alt_text_${block.id}`}>Alt text</label>
-          <input
-            defaultValue={asset?.alt_text ?? block.title ?? block.body ?? ""}
-            id={`asset_alt_text_${block.id}`}
-            name="asset_alt_text"
-            placeholder="Descrizione breve dell'immagine"
-          />
-        </div>
-      </div>
-
-      <div className="form-actions">
-        <ImageUploadButton />
-        <button className="ghost-button" disabled type="button">
-          Genera con AI - presto
-        </button>
-      </div>
+      <input name="asset_title" type="hidden" value={defaultTitle} />
+      <input name="asset_alt_text" type="hidden" value={defaultAltText} />
+      <AutoImageUploadField blockId={block.id} />
     </form>
   );
 }

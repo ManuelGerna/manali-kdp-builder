@@ -225,6 +225,32 @@ function getStorageFileName(filePath: string) {
   return filePath.split("/").at(-1) ?? filePath;
 }
 
+function getAssetFilePath(asset: Pick<KdpAsset, "file_path"> | null) {
+  if (typeof asset?.file_path !== "string") {
+    return null;
+  }
+
+  return asset.file_path.trim() || null;
+}
+
+function getErrorName(error: unknown) {
+  return error instanceof Error ? error.name : typeof error;
+}
+
+function idTail(value: string) {
+  return value.slice(-8);
+}
+
+function logAssetPreviewError(
+  event: string,
+  context: Record<string, boolean | number | string | null | undefined> = {},
+) {
+  console.error("[kdp-assets-preview:page]", {
+    event,
+    context,
+  });
+}
+
 function groupBlocksBySection(blocks: KdpSectionBlock[]) {
   const grouped = new Map<string, KdpSectionBlock[]>();
 
@@ -265,16 +291,40 @@ async function getAssetPreviewUrlMap(
 ) {
   const previewableAssets = assets.filter(
     (asset) =>
-      asset.file_path &&
+      getAssetFilePath(asset) &&
       (asset.status === "uploaded" || asset.status === "approved"),
   );
   const entries = await Promise.all(
     previewableAssets.map(async (asset) => {
-      const { data, error } = await supabase.storage
-        .from("kdp-assets")
-        .createSignedUrl(asset.file_path as string, 60 * 60);
+      const filePath = getAssetFilePath(asset);
 
-      return [asset.id, error ? null : data.signedUrl] as const;
+      if (!filePath) {
+        return [asset.id, null] as const;
+      }
+
+      try {
+        const { data, error } = await supabase.storage
+          .from("kdp-assets")
+          .createSignedUrl(filePath, 60 * 60);
+
+        if (error || !data?.signedUrl) {
+          logAssetPreviewError("signed_url_failed", {
+            assetIdTail: idTail(asset.id),
+            errorName: error?.name,
+          });
+
+          return [asset.id, null] as const;
+        }
+
+        return [asset.id, data.signedUrl] as const;
+      } catch (error: unknown) {
+        logAssetPreviewError("signed_url_threw", {
+          assetIdTail: idTail(asset.id),
+          errorName: getErrorName(error),
+        });
+
+        return [asset.id, null] as const;
+      }
     }),
   );
 
@@ -369,6 +419,7 @@ function ImageAssetPanel({
 }) {
   const title = asset?.title || block.title || "Placeholder immagine";
   const altText = asset?.alt_text || title;
+  const assetFilePath = getAssetFilePath(asset);
 
   return (
     <div className="image-asset-panel">
@@ -388,9 +439,9 @@ function ImageAssetPanel({
         </span>
       </div>
 
-      {asset?.file_path ? (
+      {assetFilePath ? (
         <p className="field-note">
-          File caricato: {getStorageFileName(asset.file_path)}
+          File caricato: {getStorageFileName(assetFilePath)}
         </p>
       ) : (
         <p className="field-note">
@@ -401,9 +452,9 @@ function ImageAssetPanel({
       {previewUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img className="image-asset-preview" src={previewUrl} alt={altText} />
-      ) : asset?.file_path ? (
+      ) : assetFilePath ? (
         <p className="field-note">
-          Preview non disponibile. Verifica bucket e policy Storage.
+          Anteprima non disponibile.
         </p>
       ) : null}
 

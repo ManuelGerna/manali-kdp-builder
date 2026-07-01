@@ -1515,6 +1515,22 @@ export async function uploadImageForBlockAction(formData: FormData) {
     .upload(storagePath, file, {
       contentType: uploadMeta.mimeType,
       upsert: false,
+    })
+    .catch((error: unknown) => {
+      logImageUploadAction("storage_upload_threw", {
+        assetIdTail: idTail(assetId),
+        blockIdTail: idTail(blockId),
+        bookIdTail: idTail(bookId),
+        errorName: getErrorName(error),
+      });
+
+      return {
+        data: null,
+        error: {
+          message: "storage_upload_threw",
+          name: getErrorName(error),
+        },
+      };
     });
 
   if (uploadResult.error) {
