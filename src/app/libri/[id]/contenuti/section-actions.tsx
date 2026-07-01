@@ -8,12 +8,11 @@ import {
   deleteSectionAction,
   moveSectionBlockAction,
   moveSectionAction,
+  togglePageBreakAfterBlockAction,
   updateSectionBlockVisibilityAction,
   updateTextBlockAction,
 } from "@/app/libri/[id]/contenuti/actions";
-import {
-  PRINT_VISIBILITY_OPTIONS,
-} from "@/lib/kdp/constants";
+import { PRINT_VISIBILITY_OPTIONS } from "@/lib/kdp/constants";
 import type {
   KdpSectionBlock,
   MoveSectionBlockDirection,
@@ -85,7 +84,17 @@ function VisibilityButton() {
 
   return (
     <button className="secondary-button" disabled={pending} type="submit">
-      {pending ? "Salvataggio..." : "Salva visibilita"}
+      {pending ? "Salvataggio..." : "Salva"}
+    </button>
+  );
+}
+
+function PageBreakButton() {
+  const { pending } = useFormStatus();
+
+  return (
+    <button className="secondary-button" disabled={pending} type="submit">
+      {pending ? "Salvataggio..." : "Salva"}
     </button>
   );
 }
@@ -126,7 +135,7 @@ export function MoveSectionBlockForm({
   sectionId: string;
 }) {
   return (
-    <form action={moveSectionBlockAction} className="inline-form">
+    <form action={moveSectionBlockAction} className="inline-form block-action-form">
       <input name="book_id" type="hidden" value={bookId} />
       <input name="section_id" type="hidden" value={sectionId} />
       <input name="block_id" type="hidden" value={blockId} />
@@ -179,7 +188,7 @@ export function DeleteSectionBlockForm({
   return (
     <form
       action={deleteSectionBlockAction}
-      className="inline-form"
+      className="inline-form block-action-form"
       onSubmit={(event) => {
         if (!window.confirm(`Eliminare il blocco "${label}"?`)) {
           event.preventDefault();
@@ -190,6 +199,37 @@ export function DeleteSectionBlockForm({
       <input name="section_id" type="hidden" value={sectionId} />
       <input name="block_id" type="hidden" value={blockId} />
       <DeleteButton />
+    </form>
+  );
+}
+
+export function PageBreakAfterBlockForm({
+  block,
+  hasPageBreakAfter,
+}: {
+  block: Pick<KdpSectionBlock, "book_id" | "id" | "section_id">;
+  hasPageBreakAfter: boolean;
+}) {
+  return (
+    <form
+      action={togglePageBreakAfterBlockAction}
+      className="block-page-break-form"
+    >
+      <input name="book_id" type="hidden" value={block.book_id} />
+      <input name="section_id" type="hidden" value={block.section_id} />
+      <input name="block_id" type="hidden" value={block.id} />
+
+      <label className="block-toggle-label" htmlFor={`page_break_${block.id}`}>
+        <input
+          defaultChecked={hasPageBreakAfter}
+          id={`page_break_${block.id}`}
+          name="page_break_after"
+          type="checkbox"
+        />
+        <span>Interruzione pagina dopo</span>
+      </label>
+
+      <PageBreakButton />
     </form>
   );
 }

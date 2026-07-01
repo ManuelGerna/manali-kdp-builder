@@ -17,7 +17,9 @@ import {
 import {
   createSectionBlock,
   deleteSectionBlock,
+  insertPageBreakAfterBlock,
   moveSectionBlock,
+  removePageBreakAfterBlock,
   updateSectionBlockVisibility,
   updateTextSectionBlock,
   type MoveSectionBlockDirection,
@@ -89,6 +91,12 @@ function getOptionalText(formData: FormData, name: string) {
 
 function getCheckbox(formData: FormData, name: string) {
   return formData.get(name) === "on";
+}
+
+function getToggleValue(formData: FormData, name: string) {
+  return formData
+    .getAll(name)
+    .some((value) => String(value).trim() === "on");
 }
 
 function isSectionType(value: string): value is SectionType {
@@ -824,6 +832,74 @@ export async function updateSectionBlockVisibilityAction(formData: FormData) {
 
   revalidateBookContent(bookId);
   redirect(getContentPath(bookId, { status: "block_visibility_updated" }));
+}
+
+export async function togglePageBreakAfterBlockAction(formData: FormData) {
+  const bookId = getString(formData, "book_id");
+  const sectionId = getString(formData, "section_id");
+  const blockId = getString(formData, "block_id");
+  const enabled = getToggleValue(formData, "page_break_after");
+
+  if (!bookId) {
+    redirect("/libri");
+  }
+
+  if (!sectionId || !blockId) {
+    redirect(getContentPath(bookId, { error: "Blocco non valido." }));
+  }
+
+  const { supabase, actor, error } = await getAuthenticatedSupabase(
+    "toggle-page-break-after-block",
+  );
+
+  if (!supabase || !actor) {
+    redirect(getContentPath(bookId, { error }));
+  }
+
+  const bookAccessError = await getBookAccessError(supabase, bookId);
+
+  if (bookAccessError) {
+    redirect(getContentPath(bookId, { error: bookAccessError }));
+  }
+
+  const blockResult = enabled
+    ? await insertPageBreakAfterBlock(supabase, {
+        actor,
+        blockId,
+        bookId,
+        sectionId,
+      })
+    : await removePageBreakAfterBlock(supabase, {
+        actor,
+        blockId,
+        bookId,
+        sectionId,
+      });
+
+  if (blockResult.data === null) {
+    redirect(getContentPath(bookId, { error: blockResult.error }));
+  }
+
+  if (blockResult.data.changed) {
+    const ownershipError = await touchBookAfterContentChange(
+      supabase,
+      bookId,
+      actor,
+    );
+
+    if (ownershipError) {
+      redirect(getContentPath(bookId, { error: ownershipError }));
+    }
+  }
+
+  const status = blockResult.data.changed
+    ? enabled
+      ? "page_break_inserted"
+      : "page_break_removed"
+    : "page_break_unchanged";
+
+  revalidateBookContent(bookId);
+  redirect(getContentPath(bookId, { status }));
 }
 
 export async function createImagePlaceholderBlockAction(formData: FormData) {

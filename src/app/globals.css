@@ -701,11 +701,44 @@ button {
   gap: 8px;
 }
 
-.section-block-actions {
+.section-block-controls {
+  display: grid;
+  gap: 8px;
+  border-top: 1px solid var(--line);
+  padding-top: 10px;
+}
+
+.section-block-primary-actions,
+.section-block-secondary-actions {
   display: flex;
   flex-wrap: wrap;
-  align-items: flex-end;
+  align-items: center;
   gap: 8px;
+}
+
+.section-block-secondary-actions {
+  align-items: flex-end;
+}
+
+.block-action-form .secondary-button,
+.block-inline-edit-panel > summary {
+  min-height: 38px;
+  padding: 0 11px;
+  font-size: 0.84rem;
+}
+
+.block-inline-edit-panel {
+  gap: 8px;
+  border: 0;
+  background: transparent;
+  padding: 0;
+}
+
+.block-inline-edit-panel[open] {
+  width: 100%;
+  border: 1px solid var(--line);
+  background: rgba(255, 250, 254, 0.72);
+  padding: 10px;
 }
 
 .block-visibility-form {
@@ -718,21 +751,70 @@ button {
 
 .block-visibility-form label {
   display: grid;
-  min-height: 40px;
+  min-height: 38px;
   align-items: center;
   color: var(--muted);
   font-size: 0.8rem;
   font-weight: 900;
 }
 
+.block-visibility-form select,
+.block-page-break-form {
+  min-height: 38px;
+}
+
 .block-visibility-form select {
-  min-height: 44px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: #fff;
   color: var(--text);
   font-weight: 800;
   padding: 0 10px;
+}
+
+.block-visibility-form .secondary-button,
+.block-page-break-form .secondary-button {
+  min-height: 38px;
+  padding: 0 11px;
+  font-size: 0.84rem;
+}
+
+.block-page-break-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+}
+
+.block-toggle-label {
+  display: inline-flex;
+  min-height: 38px;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--text);
+  font-size: 0.84rem;
+  font-weight: 800;
+  padding: 0 10px;
+}
+
+.block-toggle-label input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--brand);
+}
+
+.final-actions-card {
+  display: grid;
+  gap: 12px;
+}
+
+.final-action-grid {
+  display: grid;
+  gap: 8px;
 }
 
 .inline-form {
@@ -1627,6 +1709,10 @@ button {
 
   .settings-margin-grid {
     grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .final-action-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 
