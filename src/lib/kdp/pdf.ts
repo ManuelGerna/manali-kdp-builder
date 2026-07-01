@@ -3,6 +3,7 @@ import {
   StandardFonts,
   rgb,
   type PDFFont,
+  type PDFImage,
   type PDFPage,
 } from "pdf-lib";
 import type { KdpAsset } from "@/lib/kdp/assets";
@@ -14,6 +15,9 @@ import {
 } from "@/lib/kdp/preview";
 import type { KdpSectionBlock } from "@/lib/kdp/section-blocks";
 import type { KdpSection } from "@/lib/kdp/sections";
+import type { createClient } from "@/lib/supabase/server";
+
+type KdpSupabaseClient = Awaited<ReturnType<typeof createClient>>;
 
 type GenerateTechnicalPdfInput = {
   assets: KdpAsset[];
@@ -21,6 +25,7 @@ type GenerateTechnicalPdfInput = {
   book: KdpBook;
   sections: KdpSection[];
   settings: KdpBookSettings;
+  supabase?: KdpSupabaseClient;
   technicalNotice?: TechnicalPdfNotice;
 };
 
@@ -47,6 +52,7 @@ type LayoutState = {
   bodyFontSize: number;
   contentWidth: number;
   doc: PDFDocument;
+  embeddedImages: Map<string, EmbeddedPdfImage>;
   fonts: PdfFonts;
   lineHeight: number;
   marginBottom: number;
@@ -66,6 +72,7 @@ type SectionPageMap = Map<string, number>;
 
 type RenderTechnicalPdfDocumentInput = {
   book: KdpBook;
+  imageReferences: PdfImageReferenceMap;
   preview: BookPreview;
   settings: KdpBookSettings;
   tocPageMap?: SectionPageMap;
@@ -82,6 +89,29 @@ const MIN_CONTENT_WIDTH = 144;
 const MIN_CONTENT_TOP = 42;
 const MIN_CONTENT_BOTTOM = 36;
 const TOC_PAGE_NUMBER_RESERVED_WIDTH = 34;
+const KDP_ASSETS_BUCKET = "kdp-assets";
+const PDF_IMAGE_READY_STATUSES = new Set(["approved", "uploaded"]);
+
+type SupportedPdfImageKind = "jpg" | "png";
+
+type PdfImageReference =
+  | {
+      assetId: string;
+      bytes: Uint8Array;
+      kind: SupportedPdfImageKind;
+      status: "ready";
+    }
+  | {
+      assetId?: string;
+      note?: string;
+      status: "fallback";
+    };
+
+type PdfImageReferenceMap = Map<string, PdfImageReference>;
+
+type EmbeddedPdfImage = {
+  image: PDFImage;
+};
 
 const PAGE_SIZES: Record<string, PageSize> = {
   "5x8": {
@@ -152,6 +182,210 @@ function slugify(value: string) {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .slice(0, 80);
+}
+
+function idTail(value: string | null | undefined) {
+  return value ? value.slice(-8) : undefined;
+}
+
+function getErrorName(error: unknown) {
+  return error instanceof Error ? error.name : "unknown";
+}
+
+function logPdfImageIssue(
+  event: string,
+  context: Record<string, string | undefined> = {},
+) {
+  console.error("[kdp-pdf-images]", {
+    context,
+    event,
+  });
+}
+
+function getAssetFilePath(asset: Pick<KdpAsset, "file_path">) {
+  if (typeof asset.file_path !== "string") {
+    return null;
+  }
+
+  return asset.file_path.trim() || null;
+}
+
+function getStoragePathExtension(filePath: string) {
+  return filePath
+    .split("?")[0]
+    .split("/")
+    .at(-1)
+    ?.split(".")
+    .at(-1)
+    ?.toLowerCase();
+}
+
+function getPdfImageKind(
+  filePath: string,
+  mimeType?: string | null,
+): SupportedPdfImageKind | "webp" | null {
+  const normalizedMimeType = mimeType?.toLowerCase();
+
+  if (normalizedMimeType === "image/png") {
+    return "png";
+  }
+
+  if (
+    normalizedMimeType === "image/jpeg" ||
+    normalizedMimeType === "image/jpg"
+  ) {
+    return "jpg";
+  }
+
+  if (normalizedMimeType === "image/webp") {
+    return "webp";
+  }
+
+  const extension = getStoragePathExtension(filePath);
+
+  if (extension === "png") {
+    return "png";
+  }
+
+  if (extension === "jpg" || extension === "jpeg") {
+    return "jpg";
+  }
+
+  if (extension === "webp") {
+    return "webp";
+  }
+
+  return null;
+}
+
+function getImageFallbackNote(kind: SupportedPdfImageKind | "webp" | null) {
+  if (kind === "webp") {
+    return "Immagine WebP caricata, non ancora supportata nel PDF tecnico.";
+  }
+
+  return "Immagine caricata non disponibile nel PDF tecnico.";
+}
+
+async function getImageBytes(blob: Blob) {
+  return new Uint8Array(await blob.arrayBuffer());
+}
+
+async function preparePdfImageReferences({
+  assets,
+  blocks,
+  supabase,
+}: {
+  assets: KdpAsset[];
+  blocks: KdpSectionBlock[];
+  supabase?: KdpSupabaseClient;
+}): Promise<PdfImageReferenceMap> {
+  const references: PdfImageReferenceMap = new Map();
+
+  if (!supabase) {
+    return references;
+  }
+
+  const assetById = new Map(assets.map((asset) => [asset.id, asset]));
+  const imageBlocks = blocks.filter(
+    (block) =>
+      block.block_type === "image_prompt" &&
+      block.print_visibility === "print" &&
+      block.asset_id,
+  );
+
+  await Promise.all(
+    imageBlocks.map(async (block) => {
+      const asset = block.asset_id ? assetById.get(block.asset_id) : null;
+
+      if (!asset || !PDF_IMAGE_READY_STATUSES.has(asset.status)) {
+        return;
+      }
+
+      const filePath = getAssetFilePath(asset);
+
+      if (!filePath) {
+        references.set(block.id, {
+          assetId: asset.id,
+          note: "Immagine caricata senza file disponibile.",
+          status: "fallback",
+        });
+        return;
+      }
+
+      const filePathKind = getPdfImageKind(filePath);
+
+      if (filePathKind === "webp") {
+        references.set(block.id, {
+          assetId: asset.id,
+          note: getImageFallbackNote("webp"),
+          status: "fallback",
+        });
+        return;
+      }
+
+      try {
+        const { data, error } = await supabase.storage
+          .from(KDP_ASSETS_BUCKET)
+          .download(filePath);
+
+        if (error || !data) {
+          logPdfImageIssue("download_failed", {
+            assetIdTail: idTail(asset.id),
+            blockIdTail: idTail(block.id),
+            errorName: error?.name,
+          });
+          references.set(block.id, {
+            assetId: asset.id,
+            note: getImageFallbackNote(filePathKind),
+            status: "fallback",
+          });
+          return;
+        }
+
+        const kind = getPdfImageKind(filePath, data.type);
+
+        if (!kind || kind === "webp") {
+          references.set(block.id, {
+            assetId: asset.id,
+            note: getImageFallbackNote(kind),
+            status: "fallback",
+          });
+          return;
+        }
+
+        const bytes = await getImageBytes(data);
+
+        if (bytes.byteLength === 0) {
+          references.set(block.id, {
+            assetId: asset.id,
+            note: "Immagine caricata vuota o non leggibile.",
+            status: "fallback",
+          });
+          return;
+        }
+
+        references.set(block.id, {
+          assetId: asset.id,
+          bytes,
+          kind,
+          status: "ready",
+        });
+      } catch (error: unknown) {
+        logPdfImageIssue("download_threw", {
+          assetIdTail: idTail(asset.id),
+          blockIdTail: idTail(block.id),
+          errorName: getErrorName(error),
+        });
+        references.set(block.id, {
+          assetId: asset.id,
+          note: getImageFallbackNote(filePathKind),
+          status: "fallback",
+        });
+      }
+    }),
+  );
+
+  return references;
 }
 
 function splitLongWord(word: string, font: PDFFont, size: number, maxWidth: number) {
@@ -478,6 +712,7 @@ function drawImagePlaceholder(
   state: LayoutState,
   block: PreviewBlock,
   sectionTitle: string,
+  fallbackNote?: string,
 ) {
   const prompt = getImagePrompt(block);
   const padding = 12;
@@ -493,6 +728,7 @@ function drawImagePlaceholder(
   const lineHeight = detailSize * 1.25;
   const detailLines = [
     title ? `Titolo: ${title}` : null,
+    fallbackNote ?? null,
     prompt ? `Prompt: ${prompt}` : "Prompt non specificato.",
   ].flatMap((line) =>
     line ? wrapText(line, state.fonts.bodyItalic, detailSize, innerWidth) : [],
@@ -545,10 +781,86 @@ function drawImagePlaceholder(
   state.y -= boxHeight + 16;
 }
 
-function drawBlock(
+async function embedPdfImage(
+  state: LayoutState,
+  blockId: string,
+  reference: Extract<PdfImageReference, { status: "ready" }>,
+) {
+  const existing = state.embeddedImages.get(blockId);
+
+  if (existing) {
+    return existing;
+  }
+
+  const image =
+    reference.kind === "png"
+      ? await state.doc.embedPng(reference.bytes)
+      : await state.doc.embedJpg(reference.bytes);
+  const embeddedImage = {
+    image,
+  };
+
+  state.embeddedImages.set(blockId, embeddedImage);
+
+  return embeddedImage;
+}
+
+async function drawUploadedImage(
+  state: LayoutState,
+  block: PreviewBlock,
+  reference: Extract<PdfImageReference, { status: "ready" }>,
+) {
+  try {
+    const { image } = await embedPdfImage(state, block.id, reference);
+
+    if (image.width <= 0 || image.height <= 0) {
+      return false;
+    }
+
+    const contentHeight = getContentTopY(state) - getContentBottomY(state);
+    const maxImageWidth = state.contentWidth;
+    const maxImageHeight = Math.max(
+      72,
+      Math.min(state.pageHeight * 0.4, contentHeight - 24),
+    );
+    const scale = Math.min(
+      maxImageWidth / image.width,
+      maxImageHeight / image.height,
+      1,
+    );
+    const drawWidth = image.width * scale;
+    const drawHeight = image.height * scale;
+
+    ensureSpace(state, drawHeight + 18);
+
+    const x = state.x + (state.contentWidth - drawWidth) / 2;
+    const y = state.y - drawHeight;
+
+    state.page.drawImage(image, {
+      height: drawHeight,
+      width: drawWidth,
+      x,
+      y,
+    });
+    state.y -= drawHeight + 18;
+
+    return true;
+  } catch (error: unknown) {
+    logPdfImageIssue("embed_failed", {
+      assetIdTail: idTail(reference.assetId),
+      blockIdTail: idTail(block.id),
+      errorName: getErrorName(error),
+    });
+
+    return false;
+  }
+}
+
+async function drawBlock(
   state: LayoutState,
   block: PreviewBlock,
   sectionTitle: string,
+  imageReferences: PdfImageReferenceMap,
 ) {
   if (block.isPageBreak) {
     if (!isAtPageTop(state)) {
@@ -558,7 +870,25 @@ function drawBlock(
   }
 
   if (block.isImagePlaceholder) {
-    drawImagePlaceholder(state, block, sectionTitle);
+    const imageReference = imageReferences.get(block.id);
+
+    if (imageReference?.status === "ready") {
+      const imageDrawn = await drawUploadedImage(state, block, imageReference);
+
+      if (imageDrawn) {
+        return;
+      }
+
+      drawImagePlaceholder(
+        state,
+        block,
+        sectionTitle,
+        "Immagine caricata non leggibile nel PDF tecnico.",
+      );
+      return;
+    }
+
+    drawImagePlaceholder(state, block, sectionTitle, imageReference?.note);
     return;
   }
 
@@ -767,9 +1097,10 @@ function prepareSectionStart(state: LayoutState, section: PreviewSection) {
   ensureSpace(state, state.lineHeight * 4.5);
 }
 
-function drawSection(
+async function drawSection(
   state: LayoutState,
   section: PreviewSection,
+  imageReferences: PdfImageReferenceMap,
   pageMap?: SectionPageMap,
 ) {
   prepareSectionStart(state, section);
@@ -791,7 +1122,7 @@ function drawSection(
   }
 
   for (const block of section.blocks) {
-    drawBlock(state, block, section.title);
+    await drawBlock(state, block, section.title, imageReferences);
   }
 
   state.y -= state.lineHeight * 0.25;
@@ -895,6 +1226,7 @@ async function createLayoutState(settings: KdpBookSettings) {
     bodyFontSize,
     contentWidth: 0,
     doc,
+    embeddedImages: new Map(),
     fonts,
     lineHeight: bodyFontSize * settings.line_height,
     marginBottom: toPoints(settings.margin_bottom, 0.75),
@@ -934,6 +1266,7 @@ function applyPdfMetadata(
 
 async function renderTechnicalPdfDocument({
   book,
+  imageReferences,
   preview,
   settings,
   tocPageMap,
@@ -949,7 +1282,7 @@ async function renderTechnicalPdfDocument({
     drawParagraph(state, "Nessuna sezione disponibile per il contenuto.");
   } else {
     for (const section of preview.sections) {
-      drawSection(state, section, pageMap);
+      await drawSection(state, section, imageReferences, pageMap);
     }
   }
 
@@ -979,13 +1312,20 @@ export async function generateTechnicalKdpPdf(input: GenerateTechnicalPdfInput) 
     sections,
     settings,
   });
+  const imageReferences = await preparePdfImageReferences({
+    assets,
+    blocks,
+    supabase: input.supabase,
+  });
   const firstPass = await renderTechnicalPdfDocument({
     book,
+    imageReferences,
     preview,
     settings,
   });
   const finalPass = await renderTechnicalPdfDocument({
     book,
+    imageReferences,
     preview,
     settings,
     tocPageMap: firstPass.pageMap,
