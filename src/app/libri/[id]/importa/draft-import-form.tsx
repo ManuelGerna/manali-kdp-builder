@@ -79,6 +79,13 @@ function DraftSectionPreview({
       <div>
         <p className="section-meta">Sezione {index + 1}</p>
         <h3>{section.title}</h3>
+        <span
+          className={`section-chip ${
+            section.includeInToc ? "section-chip-success" : "section-chip-warning"
+          }`}
+        >
+          {section.includeInToc ? "In indice" : "Fuori indice"}
+        </span>
       </div>
 
       {section.editorNotes.length > 0 ? (
@@ -138,6 +145,10 @@ function DraftPreview({
         <div>
           <dt>Sezioni</dt>
           <dd>{preview.stats.sectionCount}</dd>
+        </div>
+        <div>
+          <dt>In indice</dt>
+          <dd>{preview.stats.tocSectionCount}</dd>
         </div>
         <div>
           <dt>Blocchi</dt>
