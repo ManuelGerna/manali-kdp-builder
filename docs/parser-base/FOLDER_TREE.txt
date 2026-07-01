@@ -1,0 +1,26 @@
+kdp_builder_parser_base_complete/
+├── README.md
+├── FOLDER_TREE.txt
+├── MANIFEST.txt
+└── docs/
+    ├── 00-index.md
+    ├── 01-product-scope.md
+    ├── 02-import-draft-contract.md
+    ├── 03-parser-pipeline.md
+    ├── 04-normalized-data-model.md
+    ├── 05-page-generation.md
+    ├── 06-template-registry.md
+    ├── 07-validation-reporting.md
+    ├── 08-preview-and-editor-boundary.md
+    ├── 09-renderer-boundary.md
+    ├── 10-testing-strategy.md
+    ├── 11-implementation-roadmap.md
+    ├── checklists/
+    │   └── importer-quality-checklist.md
+    ├── codex/
+    │   └── task-01-parser-v0.md
+    ├── examples/
+    │   └── generic-draft-skeleton.md
+    └── schemas/
+        ├── import-report.md
+        └── normalized-project.md

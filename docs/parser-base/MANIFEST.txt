@@ -1,0 +1,59 @@
+README.md
+  Punto di ingresso della cartella. Spiega scopo, principi e posizione consigliata nel repository.
+
+FOLDER_TREE.txt
+  Albero completo dei file inclusi.
+
+MANIFEST.txt
+  Elenco dei file e descrizione sintetica del loro contenuto.
+
+docs/00-index.md
+  Indice ragionato della documentazione.
+
+docs/01-product-scope.md
+  Confini di prodotto: cosa deve fare il parser e cosa non deve fare.
+
+docs/02-import-draft-contract.md
+  Contratto della bozza importabile: blocchi, campi, versioning e regole di tolleranza.
+
+docs/03-parser-pipeline.md
+  Pipeline tecnica: input grezzo, parsing, normalizzazione, generazione pagine, validazione, output.
+
+docs/04-normalized-data-model.md
+  Modello dati normalizzato che l’importer deve restituire.
+
+docs/05-page-generation.md
+  Regole per generare pagine fisse, pagine ripetute, intervalli e contenuti variabili.
+
+docs/06-template-registry.md
+  Ruolo del registro template e confine tra contenuto importato e layout grafico.
+
+docs/07-validation-reporting.md
+  Regole di validazione, warning, errori bloccanti e report importazione.
+
+docs/08-preview-and-editor-boundary.md
+  Cosa deve vedere l’utente dopo l’import e cosa può modificare prima del render.
+
+docs/09-renderer-boundary.md
+  Confine con il renderer PDF: cosa riceve, cosa non deve fare il parser.
+
+docs/10-testing-strategy.md
+  Strategia test per parser generico, normalizzazione, generazione e validazioni.
+
+docs/11-implementation-roadmap.md
+  Roadmap consigliata per implementare il sistema a milestone.
+
+docs/checklists/importer-quality-checklist.md
+  Checklist di qualità da usare prima di considerare stabile l’importer.
+
+docs/codex/task-01-parser-v0.md
+  Primo task operativo pronto da dare a Codex.
+
+docs/examples/generic-draft-skeleton.md
+  Scheletro generico di bozza importabile, senza riferimenti a un caso specifico.
+
+docs/schemas/import-report.md
+  Schema descrittivo del report importazione.
+
+docs/schemas/normalized-project.md
+  Schema descrittivo dell’oggetto progetto normalizzato.
