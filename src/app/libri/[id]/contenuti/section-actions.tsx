@@ -1,13 +1,13 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useFormStatus } from "react-dom";
 import {
   autosavePageBreakAfterBlockAction,
   autosaveSectionBlockVisibilityAction,
   createImagePlaceholderBlockAction,
   createInternalNoteBlockAction,
-  createPageBreakBlockAction,
   createTextBlockAction,
   deleteSectionBlockAction,
   deleteSectionAction,
@@ -71,22 +71,6 @@ function PlaceholderButton() {
   return (
     <button className="secondary-button" disabled={pending} type="submit">
       {pending ? "Creazione..." : "Crea placeholder"}
-    </button>
-  );
-}
-
-function QuickAddButton({
-  pendingLabel,
-  submitLabel,
-}: {
-  pendingLabel: string;
-  submitLabel: string;
-}) {
-  const { pending } = useFormStatus();
-
-  return (
-    <button className="secondary-button" disabled={pending} type="submit">
-      {pending ? pendingLabel : submitLabel}
     </button>
   );
 }
@@ -265,10 +249,40 @@ export function PageBreakAfterBlockForm({
   block: Pick<KdpSectionBlock, "book_id" | "id" | "section_id">;
   hasPageBreakAfter: boolean;
 }) {
+  const router = useRouter();
   const [state, formAction, pending] = useActionState(
     autosavePageBreakAfterBlockAction,
     AUTOSAVE_INITIAL_STATE,
   );
+  const [checked, setChecked] = useState(hasPageBreakAfter);
+  const [lastSavedChecked, setLastSavedChecked] = useState(hasPageBreakAfter);
+  const handledSaveAt = useRef<number | null>(null);
+
+  useEffect(() => {
+    setChecked(hasPageBreakAfter);
+    setLastSavedChecked(hasPageBreakAfter);
+  }, [hasPageBreakAfter]);
+
+  useEffect(() => {
+    if (state.status === "success" && !state.savedAt) {
+      return;
+    }
+
+    if (state.status === "success") {
+      if (handledSaveAt.current === state.savedAt) {
+        return;
+      }
+
+      handledSaveAt.current = state.savedAt;
+      setLastSavedChecked(checked);
+      router.refresh();
+      return;
+    }
+
+    if (state.status === "error") {
+      setChecked(lastSavedChecked);
+    }
+  }, [checked, lastSavedChecked, router, state.savedAt, state.status]);
 
   return (
     <form
@@ -281,10 +295,13 @@ export function PageBreakAfterBlockForm({
 
       <label className="block-toggle-label" htmlFor={`page_break_${block.id}`}>
         <input
-          defaultChecked={hasPageBreakAfter}
+          checked={checked}
           id={`page_break_${block.id}`}
           name="page_break_after"
-          onChange={(event) => event.currentTarget.form?.requestSubmit()}
+          onChange={(event) => {
+            setChecked(event.currentTarget.checked);
+            event.currentTarget.form?.requestSubmit();
+          }}
           type="checkbox"
         />
         <span>Interruzione pagina dopo</span>
@@ -303,10 +320,50 @@ export function UpdateSectionBlockVisibilityForm({
     "book_id" | "id" | "print_visibility" | "section_id"
   >;
 }) {
+  const router = useRouter();
   const [state, formAction, pending] = useActionState(
     autosaveSectionBlockVisibilityAction,
     AUTOSAVE_INITIAL_STATE,
   );
+  const [selectedVisibility, setSelectedVisibility] = useState(
+    block.print_visibility,
+  );
+  const [lastSavedVisibility, setLastSavedVisibility] = useState(
+    block.print_visibility,
+  );
+  const handledSaveAt = useRef<number | null>(null);
+
+  useEffect(() => {
+    setSelectedVisibility(block.print_visibility);
+    setLastSavedVisibility(block.print_visibility);
+  }, [block.print_visibility]);
+
+  useEffect(() => {
+    if (state.status === "success" && !state.savedAt) {
+      return;
+    }
+
+    if (state.status === "success") {
+      if (handledSaveAt.current === state.savedAt) {
+        return;
+      }
+
+      handledSaveAt.current = state.savedAt;
+      setLastSavedVisibility(selectedVisibility);
+      router.refresh();
+      return;
+    }
+
+    if (state.status === "error") {
+      setSelectedVisibility(lastSavedVisibility);
+    }
+  }, [
+    lastSavedVisibility,
+    router,
+    selectedVisibility,
+    state.savedAt,
+    state.status,
+  ]);
 
   return (
     <form
@@ -319,10 +376,13 @@ export function UpdateSectionBlockVisibilityForm({
 
       <label htmlFor={`block_visibility_${block.id}`}>Visibilita PDF</label>
       <select
-        defaultValue={block.print_visibility}
         id={`block_visibility_${block.id}`}
         name="print_visibility"
-        onChange={(event) => event.currentTarget.form?.requestSubmit()}
+        onChange={(event) => {
+          setSelectedVisibility(event.currentTarget.value);
+          event.currentTarget.form?.requestSubmit();
+        }}
+        value={selectedVisibility}
       >
         {PRINT_VISIBILITY_OPTIONS.map((option) => (
           <option key={option.value} value={option.value}>
@@ -444,28 +504,6 @@ export function CreateImagePlaceholderBlockForm({
       </div>
 
       <PlaceholderButton />
-    </form>
-  );
-}
-
-export function CreatePageBreakBlockForm({
-  bookId,
-  sectionId,
-}: {
-  bookId: string;
-  sectionId: string;
-}) {
-  return (
-    <form
-      action={createPageBreakBlockAction}
-      className="inline-form block-action-form"
-    >
-      <input name="book_id" type="hidden" value={bookId} />
-      <input name="section_id" type="hidden" value={sectionId} />
-      <QuickAddButton
-        pendingLabel="Creazione..."
-        submitLabel="+ Interruzione pagina"
-      />
     </form>
   );
 }

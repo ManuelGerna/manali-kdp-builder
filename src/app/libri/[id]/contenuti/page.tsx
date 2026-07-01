@@ -37,7 +37,6 @@ import type { Tables } from "@/types/database";
 import {
   CreateImagePlaceholderBlockForm,
   CreateInternalNoteBlockForm,
-  CreatePageBreakBlockForm,
   CreateTextBlockForm,
   DeleteSectionBlockForm,
   DeleteSectionForm,
@@ -235,12 +234,28 @@ function groupBlocksBySection(blocks: KdpSectionBlock[]) {
     grouped.set(block.section_id, sectionBlocks);
   }
 
+  for (const sectionBlocks of grouped.values()) {
+    sectionBlocks.sort((first, second) => {
+      if (first.sort_order !== second.sort_order) {
+        return first.sort_order - second.sort_order;
+      }
+
+      return first.created_at.localeCompare(second.created_at);
+    });
+  }
+
   return grouped;
+}
+
+function isVisibleContentBlock(block: KdpSectionBlock) {
+  return block.block_type !== "page_break";
 }
 
 function isPrintableContentBlock(block: KdpSectionBlock) {
   return (
-    block.print_visibility === "print" && block.block_type !== "internal_note"
+    block.print_visibility === "print" &&
+    block.block_type !== "internal_note" &&
+    block.block_type !== "page_break"
   );
 }
 
@@ -271,6 +286,14 @@ function canTogglePageBreakAfterBlock(block: KdpSectionBlock) {
     block.print_visibility === "print" &&
     block.block_type !== "internal_note" &&
     block.block_type !== "page_break"
+  );
+}
+
+function hasImmediatePageBreakAfter(blocks: KdpSectionBlock[], blockId: string) {
+  const blockIndex = blocks.findIndex((block) => block.id === blockId);
+
+  return (
+    blockIndex >= 0 && blocks[blockIndex + 1]?.block_type === "page_break"
   );
 }
 
@@ -408,8 +431,11 @@ function SectionCard({
 }) {
   const title = section.title || "Senza titolo";
   const includeInToc = section.include_in_toc !== false;
-  const hasPrintableContentBlocks = blocks.some(isPrintableContentBlock);
-  const printableBlockCount = blocks.filter(isPrintableContentBlock).length;
+  const visibleBlocks = blocks.filter(isVisibleContentBlock);
+  const hasPrintableContentBlocks = visibleBlocks.some(isPrintableContentBlock);
+  const printableBlockCount = visibleBlocks.filter(
+    isPrintableContentBlock,
+  ).length;
 
   return (
     <article className="section-card">
@@ -456,7 +482,7 @@ function SectionCard({
         <span className="section-chip">
           Indice: {includeInToc ? "si" : "no"}
         </span>
-        <span className="section-chip">Blocchi: {blocks.length}</span>
+        <span className="section-chip">Blocchi: {visibleBlocks.length}</span>
         <span className="section-chip">Stampabili: {printableBlockCount}</span>
         <span className="section-chip">
           Layout: {formatLayoutPreset(section.layout_preset)}
@@ -507,23 +533,24 @@ function SectionCard({
       <section className="section-blocks-panel">
         <div className="section-blocks-header">
           <h3>Blocchi contenuto</h3>
-          <span className="section-chip">{blocks.length} totali</span>
+          <span className="section-chip">{visibleBlocks.length} totali</span>
         </div>
         <p className="section-panel-note">
           Aggiungi e riordina i blocchi della sezione. Solo i blocchi
           stampabili finiscono in anteprima e PDF.
         </p>
 
-        {blocks.length > 0 ? (
+        {visibleBlocks.length > 0 ? (
           <ul className="section-block-list">
-            {blocks.map((block, blockIndex) => {
+            {visibleBlocks.map((block, blockIndex) => {
               const blockTypeLabel = formatBlockType(block.block_type);
               const blockLabel = block.title || blockTypeLabel;
-              const hasPageBreakAfter =
-                blocks[blockIndex + 1]?.block_type === "page_break";
+              const hasPageBreakAfter = hasImmediatePageBreakAfter(
+                blocks,
+                block.id,
+              );
               const showPageBreakToggle = canTogglePageBreakAfterBlock(block);
               const isInternalNote = block.block_type === "internal_note";
-              const isPageBreak = block.block_type === "page_break";
               const blockAsset = block.asset_id
                 ? assetById.get(block.asset_id) ?? null
                 : null;
@@ -538,7 +565,7 @@ function SectionCard({
                 >
                   <div className="section-block-item-header">
                     <p className="section-meta">
-                      {block.sort_order}. {blockTypeLabel}
+                      {blockIndex + 1}. {blockTypeLabel}
                     </p>
                     <div
                       className="section-chip-row"
@@ -570,11 +597,6 @@ function SectionCard({
                       }
                     >
                       {block.body}
-                    </p>
-                  ) : null}
-                  {isPageBreak ? (
-                    <p className="section-empty-body">
-                      Interruzione pagina nel flusso stampabile.
                     </p>
                   ) : null}
                   {block.editor_notes ? (
@@ -610,7 +632,7 @@ function SectionCard({
                           sectionId={block.section_id}
                         />
                       ) : null}
-                      {blockIndex < blocks.length - 1 ? (
+                      {blockIndex < visibleBlocks.length - 1 ? (
                         <MoveSectionBlockForm
                           blockId={block.id}
                           bookId={block.book_id}
@@ -668,12 +690,6 @@ function SectionCard({
               sectionId={section.id}
             />
           </details>
-
-          <CreatePageBreakBlockForm
-            bookId={section.book_id}
-            sectionId={section.id}
-          />
-
           <details className="section-edit-panel block-add-panel">
             <summary className="secondary-button section-edit-toggle">
               + Nota interna
@@ -803,6 +819,7 @@ export default async function BookContentsPage({
   const blocksResult = await listSectionBlocks(supabase, id);
   const assetsResult = await listAssets(supabase, id);
   const blocks = blocksResult.data ?? [];
+  const visibleBlocks = blocks.filter(isVisibleContentBlock);
   const assets = assetsResult.data ?? [];
   const assetById = new Map(assets.map((asset) => [asset.id, asset]));
   const assetPreviewUrls = await getAssetPreviewUrlMap(supabase, assets);
@@ -902,7 +919,7 @@ export default async function BookContentsPage({
               <FieldRow label="Titolo" value={book.title} />
               <FieldRow label="Sezioni" value={sections.length} />
               <FieldRow label="In indice" value={sectionsInToc} />
-              <FieldRow label="Blocchi" value={blocks.length} />
+              <FieldRow label="Blocchi" value={visibleBlocks.length} />
               <FieldRow
                 label={`Asset ${formatAssetStatus("placeholder")}`}
                 value={placeholderAssets}

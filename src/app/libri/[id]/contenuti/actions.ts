@@ -993,6 +993,17 @@ export async function deleteSectionBlockAction(formData: FormData) {
     redirect(getContentPath(bookId, { error: bookAccessError }));
   }
 
+  const pageBreakResult = await removePageBreakAfterBlock(supabase, {
+    actor,
+    blockId,
+    bookId,
+    sectionId,
+  });
+
+  if (pageBreakResult.data === null) {
+    redirect(getContentPath(bookId, { error: pageBreakResult.error }));
+  }
+
   const blockResult = await deleteSectionBlock(supabase, {
     blockId,
     bookId,

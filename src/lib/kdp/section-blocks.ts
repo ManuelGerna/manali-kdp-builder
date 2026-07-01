@@ -81,6 +81,11 @@ export type PageBreakAfterBlockResult = {
   changed: boolean;
 };
 
+type SectionBlockMoveGroup = {
+  anchorBlockId: string | null;
+  blocks: KdpSectionBlock[];
+};
+
 type LogContext = Record<string, boolean | number | string | null | undefined>;
 
 function redactLogText(value: string | null | undefined) {
@@ -464,6 +469,42 @@ async function normalizeSectionBlockSortOrder(
   };
 }
 
+function groupBlocksWithPageBreakMarkers(
+  blocks: KdpSectionBlock[],
+): SectionBlockMoveGroup[] {
+  const groups: SectionBlockMoveGroup[] = [];
+
+  for (const block of blocks) {
+    if (block.block_type === "page_break") {
+      const previousGroup = groups.at(-1);
+
+      if (previousGroup?.anchorBlockId) {
+        previousGroup.blocks.push(block);
+      } else {
+        groups.push({
+          anchorBlockId: null,
+          blocks: [block],
+        });
+      }
+
+      continue;
+    }
+
+    groups.push({
+      anchorBlockId: block.id,
+      blocks: [block],
+    });
+  }
+
+  return groups;
+}
+
+function getVisibleGroupIndexes(groups: SectionBlockMoveGroup[]) {
+  return groups.flatMap((group, index) =>
+    group.anchorBlockId ? [index] : [],
+  );
+}
+
 export async function moveSectionBlock(
   supabase: KdpSupabaseClient,
   input: MoveSectionBlockInput,
@@ -488,10 +529,9 @@ export async function moveSectionBlock(
     };
   }
 
-  const targetIndex =
-    input.direction === "up" ? currentIndex - 1 : currentIndex + 1;
+  const currentBlock = blocks[currentIndex];
 
-  if (targetIndex < 0 || targetIndex >= blocks.length) {
+  if (currentBlock.block_type === "page_break") {
     return {
       data: {
         moved: false,
@@ -500,47 +540,58 @@ export async function moveSectionBlock(
     };
   }
 
-  const currentBlock = blocks[currentIndex];
-  const targetBlock = blocks[targetIndex];
+  const groups = groupBlocksWithPageBreakMarkers(blocks);
+  const visibleGroupIndexes = getVisibleGroupIndexes(groups);
+  const currentGroupIndex = groups.findIndex(
+    (group) => group.anchorBlockId === input.blockId,
+  );
+  const currentVisibleIndex = visibleGroupIndexes.indexOf(currentGroupIndex);
 
-  if (currentBlock.sort_order === targetBlock.sort_order) {
-    const reordered = [...blocks];
-    const [movedBlock] = reordered.splice(currentIndex, 1);
-    reordered.splice(targetIndex, 0, movedBlock);
-
-    return normalizeSectionBlockSortOrder(supabase, reordered, input.actor);
+  if (currentGroupIndex === -1 || currentVisibleIndex === -1) {
+    return {
+      data: null,
+      error: "Blocco contenuto non trovato o non accessibile.",
+    };
   }
 
-  const currentUpdateResult = await updateSectionBlockSortOrder(supabase, {
-    actor: input.actor,
-    blockId: currentBlock.id,
-    bookId: input.bookId,
-    sectionId: input.sectionId,
-    sortOrder: targetBlock.sort_order,
-  });
+  const targetVisibleIndex =
+    input.direction === "up"
+      ? currentVisibleIndex - 1
+      : currentVisibleIndex + 1;
 
-  if (currentUpdateResult.data === null) {
-    return currentUpdateResult;
+  if (
+    targetVisibleIndex < 0 ||
+    targetVisibleIndex >= visibleGroupIndexes.length
+  ) {
+    return {
+      data: {
+        moved: false,
+      },
+      error: null,
+    };
   }
 
-  const targetUpdateResult = await updateSectionBlockSortOrder(supabase, {
-    actor: input.actor,
-    blockId: targetBlock.id,
-    bookId: input.bookId,
-    sectionId: input.sectionId,
-    sortOrder: currentBlock.sort_order,
-  });
+  const targetGroupIndex = visibleGroupIndexes[targetVisibleIndex];
+  const reorderedGroups = [...groups];
+  const currentGroup = reorderedGroups[currentGroupIndex];
 
-  if (targetUpdateResult.data === null) {
-    return targetUpdateResult;
-  }
+  reorderedGroups.splice(currentGroupIndex, 1);
+  const targetGroupIndexAfterRemoval =
+    targetGroupIndex > currentGroupIndex
+      ? targetGroupIndex - 1
+      : targetGroupIndex;
+  const insertIndex =
+    input.direction === "up"
+      ? targetGroupIndexAfterRemoval
+      : targetGroupIndexAfterRemoval + 1;
 
-  return {
-    data: {
-      moved: true,
-    },
-    error: null,
-  };
+  reorderedGroups.splice(insertIndex, 0, currentGroup);
+
+  return normalizeSectionBlockSortOrder(
+    supabase,
+    reorderedGroups.flatMap((group) => group.blocks),
+    input.actor,
+  );
 }
 
 export async function deleteSectionBlock(
