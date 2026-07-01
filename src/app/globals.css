@@ -556,6 +556,10 @@ button {
   align-items: start;
 }
 
+.scroll-target {
+  scroll-margin-top: 96px;
+}
+
 .section-create-card {
   gap: 12px;
 }

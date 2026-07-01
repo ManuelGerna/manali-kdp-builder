@@ -87,6 +87,7 @@ export function SectionEditForm({
     <form action={formAction} className="form-grid section-edit-form">
       <input name="book_id" type="hidden" value={section.book_id} />
       <input name="section_id" type="hidden" value={section.id} />
+      <input name="return_to" type="hidden" value={`#section-${section.id}`} />
 
       {state.message ? (
         <p className="form-note form-note-error" role="alert">

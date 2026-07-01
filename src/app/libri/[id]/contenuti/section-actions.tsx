@@ -175,6 +175,7 @@ export function MoveSectionForm({
       <input name="book_id" type="hidden" value={bookId} />
       <input name="section_id" type="hidden" value={sectionId} />
       <input name="direction" type="hidden" value={direction} />
+      <input name="return_to" type="hidden" value={`#section-${sectionId}`} />
       <MoveButton
         disabled={disabled}
         label={direction === "up" ? "Sposta su" : "Sposta giu"}
@@ -200,6 +201,7 @@ export function MoveSectionBlockForm({
       <input name="section_id" type="hidden" value={sectionId} />
       <input name="block_id" type="hidden" value={blockId} />
       <input name="direction" type="hidden" value={direction} />
+      <input name="return_to" type="hidden" value={`#block-${blockId}`} />
       <MoveButton
         disabled={false}
         label={direction === "up" ? "Sposta su" : "Sposta giu"}
@@ -229,6 +231,7 @@ export function DeleteSectionForm({
     >
       <input name="book_id" type="hidden" value={bookId} />
       <input name="section_id" type="hidden" value={sectionId} />
+      <input name="return_to" type="hidden" value="#nuova-sezione" />
       <DeleteButton />
     </form>
   );
@@ -258,6 +261,7 @@ export function DeleteSectionBlockForm({
       <input name="book_id" type="hidden" value={bookId} />
       <input name="section_id" type="hidden" value={sectionId} />
       <input name="block_id" type="hidden" value={blockId} />
+      <input name="return_to" type="hidden" value={`#section-${sectionId}`} />
       <DeleteButton />
     </form>
   );
@@ -441,6 +445,7 @@ export function UploadImageForBlockForm({
       <input name="block_id" type="hidden" value={block.id} />
       <input name="asset_title" type="hidden" value={defaultTitle} />
       <input name="asset_alt_text" type="hidden" value={defaultAltText} />
+      <input name="return_to" type="hidden" value={`#block-${block.id}`} />
       <AutoImageUploadField blockId={block.id} />
     </form>
   );
@@ -457,6 +462,7 @@ export function CreateImagePlaceholderBlockForm({
     <form action={createImagePlaceholderBlockAction} className="form-grid">
       <input name="book_id" type="hidden" value={bookId} />
       <input name="section_id" type="hidden" value={sectionId} />
+      <input name="return_to" type="hidden" value={`#section-${sectionId}`} />
 
       <div className="field">
         <label htmlFor={`placeholder_title_${sectionId}`}>
@@ -507,6 +513,7 @@ export function UpdateTextBlockForm({
       <input name="book_id" type="hidden" value={block.book_id} />
       <input name="section_id" type="hidden" value={block.section_id} />
       <input name="block_id" type="hidden" value={block.id} />
+      <input name="return_to" type="hidden" value={`#block-${block.id}`} />
 
       <div className="field">
         <label htmlFor={`block_title_${block.id}`}>Titolo blocco</label>
@@ -550,6 +557,7 @@ export function CreateTextBlockForm({
     <form action={createTextBlockAction} className="form-grid block-edit-form">
       <input name="book_id" type="hidden" value={bookId} />
       <input name="section_id" type="hidden" value={sectionId} />
+      <input name="return_to" type="hidden" value={`#section-${sectionId}`} />
 
       <div className="field">
         <label htmlFor={`new_block_title_${sectionId}`}>Titolo blocco</label>
@@ -592,6 +600,7 @@ export function CreateInternalNoteBlockForm({
     >
       <input name="book_id" type="hidden" value={bookId} />
       <input name="section_id" type="hidden" value={sectionId} />
+      <input name="return_to" type="hidden" value={`#section-${sectionId}`} />
 
       <div className="field">
         <label htmlFor={`new_note_title_${sectionId}`}>Titolo nota</label>

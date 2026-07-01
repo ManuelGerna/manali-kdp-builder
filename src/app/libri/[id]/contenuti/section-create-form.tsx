@@ -37,6 +37,7 @@ export function SectionCreateForm({ bookId }: { bookId: string }) {
   return (
     <form action={formAction} className="form-grid section-create-form">
       <input name="book_id" type="hidden" value={bookId} />
+      <input name="return_to" type="hidden" value="#nuova-sezione" />
 
       {state.message ? (
         <p className="form-note form-note-error" role="alert">
