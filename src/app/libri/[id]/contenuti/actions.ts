@@ -237,7 +237,7 @@ function getFields(formData: FormData) {
 
 function getContentPath(
   bookId: string,
-  params: { error?: string; status?: string } = {},
+  params: { anchor?: string | null; error?: string; status?: string } = {},
 ) {
   const searchParams = new URLSearchParams();
 
@@ -250,8 +250,33 @@ function getContentPath(
   }
 
   const query = searchParams.toString();
+  const anchor = getSafeContentAnchor(params.anchor);
 
-  return `/libri/${bookId}/contenuti${query ? `?${query}` : ""}`;
+  return `/libri/${bookId}/contenuti${query ? `?${query}` : ""}${
+    anchor ? `#${encodeURIComponent(anchor)}` : ""
+  }`;
+}
+
+function getSafeContentAnchor(value: string | null | undefined) {
+  const anchor = value?.trim().replace(/^#/, "");
+
+  if (!anchor || !/^[A-Za-z0-9_-]+$/.test(anchor)) {
+    return null;
+  }
+
+  return anchor;
+}
+
+function getFormReturnAnchor(formData: FormData, fallback?: string) {
+  return getSafeContentAnchor(getString(formData, "return_to")) ?? fallback;
+}
+
+function getSectionAnchor(sectionId: string) {
+  return `section-${sectionId}`;
+}
+
+function getBlockAnchor(blockId: string) {
+  return `block-${blockId}`;
 }
 
 function revalidateBookContent(bookId: string) {
@@ -449,7 +474,12 @@ export async function createSectionAction(
   }
 
   revalidateBookContent(bookId);
-  redirect(getContentPath(bookId, { status: "created" }));
+  redirect(
+    getContentPath(bookId, {
+      anchor: getSectionAnchor(result.data.sectionId),
+      status: "created",
+    }),
+  );
 }
 
 export async function updateSectionAction(
@@ -545,37 +575,52 @@ export async function updateSectionAction(
   }
 
   revalidateBookContent(bookId);
-  redirect(getContentPath(bookId, { status: "updated" }));
+  redirect(
+    getContentPath(bookId, {
+      anchor: getSectionAnchor(sectionId),
+      status: "updated",
+    }),
+  );
 }
 
 export async function deleteSectionAction(formData: FormData) {
   const bookId = getString(formData, "book_id");
   const sectionId = getString(formData, "section_id");
+  const returnAnchor = getFormReturnAnchor(formData, "nuova-sezione");
 
   if (!bookId) {
     redirect("/libri");
   }
 
   if (!sectionId) {
-    redirect(getContentPath(bookId, { error: "Sezione non valida." }));
+    redirect(
+      getContentPath(bookId, {
+        anchor: returnAnchor,
+        error: "Sezione non valida.",
+      }),
+    );
   }
 
   const { supabase, actor, error } = await getAuthenticatedSupabase("delete");
 
   if (!supabase || !actor) {
-    redirect(getContentPath(bookId, { error }));
+    redirect(getContentPath(bookId, { anchor: returnAnchor, error }));
   }
 
   const bookAccessError = await getBookAccessError(supabase, bookId);
 
   if (bookAccessError) {
-    redirect(getContentPath(bookId, { error: bookAccessError }));
+    redirect(
+      getContentPath(bookId, { anchor: returnAnchor, error: bookAccessError }),
+    );
   }
 
   const result = await deleteSection(supabase, bookId, sectionId);
 
   if (result.data === null) {
-    redirect(getContentPath(bookId, { error: result.error }));
+    redirect(
+      getContentPath(bookId, { anchor: returnAnchor, error: result.error }),
+    );
   }
 
   const ownershipError = await touchBookAfterContentChange(
@@ -585,36 +630,49 @@ export async function deleteSectionAction(formData: FormData) {
   );
 
   if (ownershipError) {
-    redirect(getContentPath(bookId, { error: ownershipError }));
+    redirect(
+      getContentPath(bookId, { anchor: returnAnchor, error: ownershipError }),
+    );
   }
 
   revalidateBookContent(bookId);
-  redirect(getContentPath(bookId, { status: "deleted" }));
+  redirect(getContentPath(bookId, { anchor: returnAnchor, status: "deleted" }));
 }
 
 export async function moveSectionAction(formData: FormData) {
   const bookId = getString(formData, "book_id");
   const sectionId = getString(formData, "section_id");
   const direction = getString(formData, "direction");
+  const returnAnchor = getFormReturnAnchor(
+    formData,
+    sectionId ? getSectionAnchor(sectionId) : undefined,
+  );
 
   if (!bookId) {
     redirect("/libri");
   }
 
   if (!sectionId || !isMoveDirection(direction)) {
-    redirect(getContentPath(bookId, { error: "Riordino non valido." }));
+    redirect(
+      getContentPath(bookId, {
+        anchor: returnAnchor,
+        error: "Riordino non valido.",
+      }),
+    );
   }
 
   const { supabase, actor, error } = await getAuthenticatedSupabase("move");
 
   if (!supabase || !actor) {
-    redirect(getContentPath(bookId, { error }));
+    redirect(getContentPath(bookId, { anchor: returnAnchor, error }));
   }
 
   const bookAccessError = await getBookAccessError(supabase, bookId);
 
   if (bookAccessError) {
-    redirect(getContentPath(bookId, { error: bookAccessError }));
+    redirect(
+      getContentPath(bookId, { anchor: returnAnchor, error: bookAccessError }),
+    );
   }
 
   const result = await moveSection(
@@ -626,7 +684,9 @@ export async function moveSectionAction(formData: FormData) {
   );
 
   if (result.data === null) {
-    redirect(getContentPath(bookId, { error: result.error }));
+    redirect(
+      getContentPath(bookId, { anchor: returnAnchor, error: result.error }),
+    );
   }
 
   const ownershipError = await touchBookAfterContentChange(
@@ -636,23 +696,36 @@ export async function moveSectionAction(formData: FormData) {
   );
 
   if (ownershipError) {
-    redirect(getContentPath(bookId, { error: ownershipError }));
+    redirect(
+      getContentPath(bookId, { anchor: returnAnchor, error: ownershipError }),
+    );
   }
 
   revalidateBookContent(bookId);
-  redirect(getContentPath(bookId, { status: "reordered" }));
+  redirect(
+    getContentPath(bookId, { anchor: returnAnchor, status: "reordered" }),
+  );
 }
 
 export async function createPageBreakBlockAction(formData: FormData) {
   const bookId = getString(formData, "book_id");
   const sectionId = getString(formData, "section_id");
+  const returnAnchor = getFormReturnAnchor(
+    formData,
+    sectionId ? getSectionAnchor(sectionId) : undefined,
+  );
 
   if (!bookId) {
     redirect("/libri");
   }
 
   if (!sectionId) {
-    redirect(getContentPath(bookId, { error: "Sezione non valida." }));
+    redirect(
+      getContentPath(bookId, {
+        anchor: returnAnchor,
+        error: "Sezione non valida.",
+      }),
+    );
   }
 
   const { supabase, actor, error } = await getAuthenticatedSupabase(
@@ -660,19 +733,23 @@ export async function createPageBreakBlockAction(formData: FormData) {
   );
 
   if (!supabase || !actor) {
-    redirect(getContentPath(bookId, { error }));
+    redirect(getContentPath(bookId, { anchor: returnAnchor, error }));
   }
 
   const bookAccessError = await getBookAccessError(supabase, bookId);
 
   if (bookAccessError) {
-    redirect(getContentPath(bookId, { error: bookAccessError }));
+    redirect(
+      getContentPath(bookId, { anchor: returnAnchor, error: bookAccessError }),
+    );
   }
 
   const blocksResult = await listSectionBlocks(supabase, bookId);
 
   if (blocksResult.data === null) {
-    redirect(getContentPath(bookId, { error: blocksResult.error }));
+    redirect(
+      getContentPath(bookId, { anchor: returnAnchor, error: blocksResult.error }),
+    );
   }
 
   const sectionBlocks = blocksResult.data
@@ -687,7 +764,12 @@ export async function createPageBreakBlockAction(formData: FormData) {
   const lastBlock = sectionBlocks.at(-1);
 
   if (lastBlock?.block_type === "page_break") {
-    redirect(getContentPath(bookId, { status: "page_break_unchanged" }));
+    redirect(
+      getContentPath(bookId, {
+        anchor: returnAnchor,
+        status: "page_break_unchanged",
+      }),
+    );
   }
 
   const blockResult = await createSectionBlock(supabase, {
@@ -703,7 +785,9 @@ export async function createPageBreakBlockAction(formData: FormData) {
   });
 
   if (blockResult.data === null) {
-    redirect(getContentPath(bookId, { error: blockResult.error }));
+    redirect(
+      getContentPath(bookId, { anchor: returnAnchor, error: blockResult.error }),
+    );
   }
 
   const ownershipError = await touchBookAfterContentChange(
@@ -713,11 +797,18 @@ export async function createPageBreakBlockAction(formData: FormData) {
   );
 
   if (ownershipError) {
-    redirect(getContentPath(bookId, { error: ownershipError }));
+    redirect(
+      getContentPath(bookId, { anchor: returnAnchor, error: ownershipError }),
+    );
   }
 
   revalidateBookContent(bookId);
-  redirect(getContentPath(bookId, { status: "page_break_inserted" }));
+  redirect(
+    getContentPath(bookId, {
+      anchor: returnAnchor,
+      status: "page_break_inserted",
+    }),
+  );
 }
 
 export async function createInternalNoteBlockAction(formData: FormData) {
@@ -725,18 +816,28 @@ export async function createInternalNoteBlockAction(formData: FormData) {
   const sectionId = getString(formData, "section_id");
   const title = getOptionalText(formData, "note_title");
   const body = getOptionalText(formData, "note_body");
+  const returnAnchor = getFormReturnAnchor(
+    formData,
+    sectionId ? getSectionAnchor(sectionId) : undefined,
+  );
 
   if (!bookId) {
     redirect("/libri");
   }
 
   if (!sectionId) {
-    redirect(getContentPath(bookId, { error: "Sezione non valida." }));
+    redirect(
+      getContentPath(bookId, {
+        anchor: returnAnchor,
+        error: "Sezione non valida.",
+      }),
+    );
   }
 
   if (!title && !body) {
     redirect(
       getContentPath(bookId, {
+        anchor: returnAnchor,
         error: "Inserisci almeno titolo o testo della nota interna.",
       }),
     );
@@ -747,13 +848,15 @@ export async function createInternalNoteBlockAction(formData: FormData) {
   );
 
   if (!supabase || !actor) {
-    redirect(getContentPath(bookId, { error }));
+    redirect(getContentPath(bookId, { anchor: returnAnchor, error }));
   }
 
   const bookAccessError = await getBookAccessError(supabase, bookId);
 
   if (bookAccessError) {
-    redirect(getContentPath(bookId, { error: bookAccessError }));
+    redirect(
+      getContentPath(bookId, { anchor: returnAnchor, error: bookAccessError }),
+    );
   }
 
   const blockResult = await createSectionBlock(supabase, {
@@ -769,7 +872,9 @@ export async function createInternalNoteBlockAction(formData: FormData) {
   });
 
   if (blockResult.data === null) {
-    redirect(getContentPath(bookId, { error: blockResult.error }));
+    redirect(
+      getContentPath(bookId, { anchor: returnAnchor, error: blockResult.error }),
+    );
   }
 
   const ownershipError = await touchBookAfterContentChange(
@@ -779,11 +884,18 @@ export async function createInternalNoteBlockAction(formData: FormData) {
   );
 
   if (ownershipError) {
-    redirect(getContentPath(bookId, { error: ownershipError }));
+    redirect(
+      getContentPath(bookId, { anchor: returnAnchor, error: ownershipError }),
+    );
   }
 
   revalidateBookContent(bookId);
-  redirect(getContentPath(bookId, { status: "internal_note_created" }));
+  redirect(
+    getContentPath(bookId, {
+      anchor: getBlockAnchor(blockResult.data.blockId),
+      status: "internal_note_created",
+    }),
+  );
 }
 
 export async function createTextBlockAction(formData: FormData) {
@@ -791,18 +903,28 @@ export async function createTextBlockAction(formData: FormData) {
   const sectionId = getString(formData, "section_id");
   const title = getOptionalText(formData, "block_title");
   const body = getOptionalText(formData, "block_body");
+  const returnAnchor = getFormReturnAnchor(
+    formData,
+    sectionId ? getSectionAnchor(sectionId) : undefined,
+  );
 
   if (!bookId) {
     redirect("/libri");
   }
 
   if (!sectionId) {
-    redirect(getContentPath(bookId, { error: "Sezione non valida." }));
+    redirect(
+      getContentPath(bookId, {
+        anchor: returnAnchor,
+        error: "Sezione non valida.",
+      }),
+    );
   }
 
   if (!body) {
     redirect(
       getContentPath(bookId, {
+        anchor: returnAnchor,
         error: "Inserisci il testo del nuovo blocco.",
       }),
     );
@@ -812,13 +934,15 @@ export async function createTextBlockAction(formData: FormData) {
     await getAuthenticatedSupabase("create-text-block");
 
   if (!supabase || !actor) {
-    redirect(getContentPath(bookId, { error }));
+    redirect(getContentPath(bookId, { anchor: returnAnchor, error }));
   }
 
   const bookAccessError = await getBookAccessError(supabase, bookId);
 
   if (bookAccessError) {
-    redirect(getContentPath(bookId, { error: bookAccessError }));
+    redirect(
+      getContentPath(bookId, { anchor: returnAnchor, error: bookAccessError }),
+    );
   }
 
   const blockResult = await createSectionBlock(supabase, {
@@ -834,7 +958,9 @@ export async function createTextBlockAction(formData: FormData) {
   });
 
   if (blockResult.data === null) {
-    redirect(getContentPath(bookId, { error: blockResult.error }));
+    redirect(
+      getContentPath(bookId, { anchor: returnAnchor, error: blockResult.error }),
+    );
   }
 
   const ownershipError = await touchBookAfterContentChange(
@@ -844,11 +970,18 @@ export async function createTextBlockAction(formData: FormData) {
   );
 
   if (ownershipError) {
-    redirect(getContentPath(bookId, { error: ownershipError }));
+    redirect(
+      getContentPath(bookId, { anchor: returnAnchor, error: ownershipError }),
+    );
   }
 
   revalidateBookContent(bookId);
-  redirect(getContentPath(bookId, { status: "text_block_created" }));
+  redirect(
+    getContentPath(bookId, {
+      anchor: getBlockAnchor(blockResult.data.blockId),
+      status: "text_block_created",
+    }),
+  );
 }
 
 export async function updateTextBlockAction(formData: FormData) {
@@ -857,18 +990,28 @@ export async function updateTextBlockAction(formData: FormData) {
   const blockId = getString(formData, "block_id");
   const title = getOptionalText(formData, "block_title");
   const body = getOptionalText(formData, "block_body");
+  const returnAnchor = getFormReturnAnchor(
+    formData,
+    blockId ? getBlockAnchor(blockId) : undefined,
+  );
 
   if (!bookId) {
     redirect("/libri");
   }
 
   if (!sectionId || !blockId) {
-    redirect(getContentPath(bookId, { error: "Blocco testo non valido." }));
+    redirect(
+      getContentPath(bookId, {
+        anchor: returnAnchor,
+        error: "Blocco testo non valido.",
+      }),
+    );
   }
 
   if (!title && !body) {
     redirect(
       getContentPath(bookId, {
+        anchor: returnAnchor,
         error: "Inserisci almeno titolo o testo del blocco.",
       }),
     );
@@ -878,13 +1021,15 @@ export async function updateTextBlockAction(formData: FormData) {
     await getAuthenticatedSupabase("update-text-block");
 
   if (!supabase || !actor) {
-    redirect(getContentPath(bookId, { error }));
+    redirect(getContentPath(bookId, { anchor: returnAnchor, error }));
   }
 
   const bookAccessError = await getBookAccessError(supabase, bookId);
 
   if (bookAccessError) {
-    redirect(getContentPath(bookId, { error: bookAccessError }));
+    redirect(
+      getContentPath(bookId, { anchor: returnAnchor, error: bookAccessError }),
+    );
   }
 
   const blockResult = await updateTextSectionBlock(supabase, {
@@ -897,7 +1042,9 @@ export async function updateTextBlockAction(formData: FormData) {
   });
 
   if (blockResult.data === null) {
-    redirect(getContentPath(bookId, { error: blockResult.error }));
+    redirect(
+      getContentPath(bookId, { anchor: returnAnchor, error: blockResult.error }),
+    );
   }
 
   const ownershipError = await touchBookAfterContentChange(
@@ -907,11 +1054,15 @@ export async function updateTextBlockAction(formData: FormData) {
   );
 
   if (ownershipError) {
-    redirect(getContentPath(bookId, { error: ownershipError }));
+    redirect(
+      getContentPath(bookId, { anchor: returnAnchor, error: ownershipError }),
+    );
   }
 
   revalidateBookContent(bookId);
-  redirect(getContentPath(bookId, { status: "block_updated" }));
+  redirect(
+    getContentPath(bookId, { anchor: returnAnchor, status: "block_updated" }),
+  );
 }
 
 export async function moveSectionBlockAction(formData: FormData) {
@@ -919,26 +1070,37 @@ export async function moveSectionBlockAction(formData: FormData) {
   const sectionId = getString(formData, "section_id");
   const blockId = getString(formData, "block_id");
   const direction = getString(formData, "direction");
+  const returnAnchor = getFormReturnAnchor(
+    formData,
+    blockId ? getBlockAnchor(blockId) : undefined,
+  );
 
   if (!bookId) {
     redirect("/libri");
   }
 
   if (!sectionId || !blockId || !isBlockMoveDirection(direction)) {
-    redirect(getContentPath(bookId, { error: "Riordino blocco non valido." }));
+    redirect(
+      getContentPath(bookId, {
+        anchor: returnAnchor,
+        error: "Riordino blocco non valido.",
+      }),
+    );
   }
 
   const { supabase, actor, error } =
     await getAuthenticatedSupabase("move-section-block");
 
   if (!supabase || !actor) {
-    redirect(getContentPath(bookId, { error }));
+    redirect(getContentPath(bookId, { anchor: returnAnchor, error }));
   }
 
   const bookAccessError = await getBookAccessError(supabase, bookId);
 
   if (bookAccessError) {
-    redirect(getContentPath(bookId, { error: bookAccessError }));
+    redirect(
+      getContentPath(bookId, { anchor: returnAnchor, error: bookAccessError }),
+    );
   }
 
   const blockResult = await moveSectionBlock(supabase, {
@@ -950,7 +1112,9 @@ export async function moveSectionBlockAction(formData: FormData) {
   });
 
   if (blockResult.data === null) {
-    redirect(getContentPath(bookId, { error: blockResult.error }));
+    redirect(
+      getContentPath(bookId, { anchor: returnAnchor, error: blockResult.error }),
+    );
   }
 
   const ownershipError = await touchBookAfterContentChange(
@@ -960,37 +1124,52 @@ export async function moveSectionBlockAction(formData: FormData) {
   );
 
   if (ownershipError) {
-    redirect(getContentPath(bookId, { error: ownershipError }));
+    redirect(
+      getContentPath(bookId, { anchor: returnAnchor, error: ownershipError }),
+    );
   }
 
   revalidateBookContent(bookId);
-  redirect(getContentPath(bookId, { status: "block_reordered" }));
+  redirect(
+    getContentPath(bookId, { anchor: returnAnchor, status: "block_reordered" }),
+  );
 }
 
 export async function deleteSectionBlockAction(formData: FormData) {
   const bookId = getString(formData, "book_id");
   const sectionId = getString(formData, "section_id");
   const blockId = getString(formData, "block_id");
+  const returnAnchor = getFormReturnAnchor(
+    formData,
+    sectionId ? getSectionAnchor(sectionId) : undefined,
+  );
 
   if (!bookId) {
     redirect("/libri");
   }
 
   if (!sectionId || !blockId) {
-    redirect(getContentPath(bookId, { error: "Blocco non valido." }));
+    redirect(
+      getContentPath(bookId, {
+        anchor: returnAnchor,
+        error: "Blocco non valido.",
+      }),
+    );
   }
 
   const { supabase, actor, error } =
     await getAuthenticatedSupabase("delete-section-block");
 
   if (!supabase || !actor) {
-    redirect(getContentPath(bookId, { error }));
+    redirect(getContentPath(bookId, { anchor: returnAnchor, error }));
   }
 
   const bookAccessError = await getBookAccessError(supabase, bookId);
 
   if (bookAccessError) {
-    redirect(getContentPath(bookId, { error: bookAccessError }));
+    redirect(
+      getContentPath(bookId, { anchor: returnAnchor, error: bookAccessError }),
+    );
   }
 
   const pageBreakResult = await removePageBreakAfterBlock(supabase, {
@@ -1001,7 +1180,12 @@ export async function deleteSectionBlockAction(formData: FormData) {
   });
 
   if (pageBreakResult.data === null) {
-    redirect(getContentPath(bookId, { error: pageBreakResult.error }));
+    redirect(
+      getContentPath(bookId, {
+        anchor: returnAnchor,
+        error: pageBreakResult.error,
+      }),
+    );
   }
 
   const blockResult = await deleteSectionBlock(supabase, {
@@ -1011,7 +1195,9 @@ export async function deleteSectionBlockAction(formData: FormData) {
   });
 
   if (blockResult.data === null) {
-    redirect(getContentPath(bookId, { error: blockResult.error }));
+    redirect(
+      getContentPath(bookId, { anchor: returnAnchor, error: blockResult.error }),
+    );
   }
 
   const ownershipError = await touchBookAfterContentChange(
@@ -1021,11 +1207,15 @@ export async function deleteSectionBlockAction(formData: FormData) {
   );
 
   if (ownershipError) {
-    redirect(getContentPath(bookId, { error: ownershipError }));
+    redirect(
+      getContentPath(bookId, { anchor: returnAnchor, error: ownershipError }),
+    );
   }
 
   revalidateBookContent(bookId);
-  redirect(getContentPath(bookId, { status: "block_deleted" }));
+  redirect(
+    getContentPath(bookId, { anchor: returnAnchor, status: "block_deleted" }),
+  );
 }
 
 export async function updateSectionBlockVisibilityAction(formData: FormData) {
@@ -1033,13 +1223,22 @@ export async function updateSectionBlockVisibilityAction(formData: FormData) {
   const sectionId = getString(formData, "section_id");
   const blockId = getString(formData, "block_id");
   const printVisibility = getString(formData, "print_visibility");
+  const returnAnchor = getFormReturnAnchor(
+    formData,
+    blockId ? getBlockAnchor(blockId) : undefined,
+  );
 
   if (!bookId) {
     redirect("/libri");
   }
 
   if (!sectionId || !blockId || !isPrintVisibility(printVisibility)) {
-    redirect(getContentPath(bookId, { error: "Visibilita blocco non valida." }));
+    redirect(
+      getContentPath(bookId, {
+        anchor: returnAnchor,
+        error: "Visibilita blocco non valida.",
+      }),
+    );
   }
 
   const { supabase, actor, error } = await getAuthenticatedSupabase(
@@ -1047,13 +1246,15 @@ export async function updateSectionBlockVisibilityAction(formData: FormData) {
   );
 
   if (!supabase || !actor) {
-    redirect(getContentPath(bookId, { error }));
+    redirect(getContentPath(bookId, { anchor: returnAnchor, error }));
   }
 
   const bookAccessError = await getBookAccessError(supabase, bookId);
 
   if (bookAccessError) {
-    redirect(getContentPath(bookId, { error: bookAccessError }));
+    redirect(
+      getContentPath(bookId, { anchor: returnAnchor, error: bookAccessError }),
+    );
   }
 
   const blockResult = await updateSectionBlockVisibility(supabase, {
@@ -1065,7 +1266,9 @@ export async function updateSectionBlockVisibilityAction(formData: FormData) {
   });
 
   if (blockResult.data === null) {
-    redirect(getContentPath(bookId, { error: blockResult.error }));
+    redirect(
+      getContentPath(bookId, { anchor: returnAnchor, error: blockResult.error }),
+    );
   }
 
   const ownershipError = await touchBookAfterContentChange(
@@ -1075,11 +1278,18 @@ export async function updateSectionBlockVisibilityAction(formData: FormData) {
   );
 
   if (ownershipError) {
-    redirect(getContentPath(bookId, { error: ownershipError }));
+    redirect(
+      getContentPath(bookId, { anchor: returnAnchor, error: ownershipError }),
+    );
   }
 
   revalidateBookContent(bookId);
-  redirect(getContentPath(bookId, { status: "block_visibility_updated" }));
+  redirect(
+    getContentPath(bookId, {
+      anchor: returnAnchor,
+      status: "block_visibility_updated",
+    }),
+  );
 }
 
 export async function autosaveSectionBlockVisibilityAction(
@@ -1141,13 +1351,22 @@ export async function togglePageBreakAfterBlockAction(formData: FormData) {
   const sectionId = getString(formData, "section_id");
   const blockId = getString(formData, "block_id");
   const enabled = getToggleValue(formData, "page_break_after");
+  const returnAnchor = getFormReturnAnchor(
+    formData,
+    blockId ? getBlockAnchor(blockId) : undefined,
+  );
 
   if (!bookId) {
     redirect("/libri");
   }
 
   if (!sectionId || !blockId) {
-    redirect(getContentPath(bookId, { error: "Blocco non valido." }));
+    redirect(
+      getContentPath(bookId, {
+        anchor: returnAnchor,
+        error: "Blocco non valido.",
+      }),
+    );
   }
 
   const { supabase, actor, error } = await getAuthenticatedSupabase(
@@ -1155,13 +1374,15 @@ export async function togglePageBreakAfterBlockAction(formData: FormData) {
   );
 
   if (!supabase || !actor) {
-    redirect(getContentPath(bookId, { error }));
+    redirect(getContentPath(bookId, { anchor: returnAnchor, error }));
   }
 
   const bookAccessError = await getBookAccessError(supabase, bookId);
 
   if (bookAccessError) {
-    redirect(getContentPath(bookId, { error: bookAccessError }));
+    redirect(
+      getContentPath(bookId, { anchor: returnAnchor, error: bookAccessError }),
+    );
   }
 
   const blockResult = enabled
@@ -1179,7 +1400,9 @@ export async function togglePageBreakAfterBlockAction(formData: FormData) {
       });
 
   if (blockResult.data === null) {
-    redirect(getContentPath(bookId, { error: blockResult.error }));
+    redirect(
+      getContentPath(bookId, { anchor: returnAnchor, error: blockResult.error }),
+    );
   }
 
   if (blockResult.data.changed) {
@@ -1190,7 +1413,9 @@ export async function togglePageBreakAfterBlockAction(formData: FormData) {
     );
 
     if (ownershipError) {
-      redirect(getContentPath(bookId, { error: ownershipError }));
+      redirect(
+        getContentPath(bookId, { anchor: returnAnchor, error: ownershipError }),
+      );
     }
   }
 
@@ -1201,7 +1426,7 @@ export async function togglePageBreakAfterBlockAction(formData: FormData) {
     : "page_break_unchanged";
 
   revalidateBookContent(bookId);
-  redirect(getContentPath(bookId, { status }));
+  redirect(getContentPath(bookId, { anchor: returnAnchor, status }));
 }
 
 export async function autosavePageBreakAfterBlockAction(
@@ -1272,13 +1497,22 @@ export async function createImagePlaceholderBlockAction(formData: FormData) {
   const title = getOptionalText(formData, "placeholder_title");
   const prompt = getOptionalText(formData, "placeholder_prompt");
   const editorNotes = getOptionalText(formData, "placeholder_notes");
+  const returnAnchor = getFormReturnAnchor(
+    formData,
+    sectionId ? getSectionAnchor(sectionId) : undefined,
+  );
 
   if (!bookId) {
     redirect("/libri");
   }
 
   if (!sectionId) {
-    redirect(getContentPath(bookId, { error: "Sezione non valida." }));
+    redirect(
+      getContentPath(bookId, {
+        anchor: returnAnchor,
+        error: "Sezione non valida.",
+      }),
+    );
   }
 
   const { supabase, actor, error } = await getAuthenticatedSupabase(
@@ -1286,13 +1520,15 @@ export async function createImagePlaceholderBlockAction(formData: FormData) {
   );
 
   if (!supabase || !actor) {
-    redirect(getContentPath(bookId, { error }));
+    redirect(getContentPath(bookId, { anchor: returnAnchor, error }));
   }
 
   const bookAccessError = await getBookAccessError(supabase, bookId);
 
   if (bookAccessError) {
-    redirect(getContentPath(bookId, { error: bookAccessError }));
+    redirect(
+      getContentPath(bookId, { anchor: returnAnchor, error: bookAccessError }),
+    );
   }
 
   const assetResult = await createAsset(supabase, {
@@ -1306,7 +1542,9 @@ export async function createImagePlaceholderBlockAction(formData: FormData) {
   });
 
   if (assetResult.data === null) {
-    redirect(getContentPath(bookId, { error: assetResult.error }));
+    redirect(
+      getContentPath(bookId, { anchor: returnAnchor, error: assetResult.error }),
+    );
   }
 
   const blockResult = await createSectionBlock(supabase, {
@@ -1324,7 +1562,9 @@ export async function createImagePlaceholderBlockAction(formData: FormData) {
 
   if (blockResult.data === null) {
     await deleteAsset(supabase, bookId, assetResult.data.assetId);
-    redirect(getContentPath(bookId, { error: blockResult.error }));
+    redirect(
+      getContentPath(bookId, { anchor: returnAnchor, error: blockResult.error }),
+    );
   }
 
   const ownershipError = await touchBookAfterContentChange(
@@ -1334,11 +1574,18 @@ export async function createImagePlaceholderBlockAction(formData: FormData) {
   );
 
   if (ownershipError) {
-    redirect(getContentPath(bookId, { error: ownershipError }));
+    redirect(
+      getContentPath(bookId, { anchor: returnAnchor, error: ownershipError }),
+    );
   }
 
   revalidateBookContent(bookId);
-  redirect(getContentPath(bookId, { status: "block_created" }));
+  redirect(
+    getContentPath(bookId, {
+      anchor: getBlockAnchor(blockResult.data.blockId),
+      status: "block_created",
+    }),
+  );
 }
 
 export async function uploadImageForBlockAction(formData: FormData) {
@@ -1348,18 +1595,28 @@ export async function uploadImageForBlockAction(formData: FormData) {
   const requestedTitle = getOptionalText(formData, "asset_title");
   const requestedAltText = getOptionalText(formData, "asset_alt_text");
   const file = formData.get("image_file");
+  const returnAnchor = getFormReturnAnchor(
+    formData,
+    blockId ? getBlockAnchor(blockId) : undefined,
+  );
 
   if (!bookId) {
     redirect("/libri");
   }
 
   if (!sectionId || !blockId) {
-    redirect(getContentPath(bookId, { error: "Blocco immagine non valido." }));
+    redirect(
+      getContentPath(bookId, {
+        anchor: returnAnchor,
+        error: "Blocco immagine non valido.",
+      }),
+    );
   }
 
   if (!isImageUploadFile(file)) {
     redirect(
       getContentPath(bookId, {
+        anchor: returnAnchor,
         error: "Seleziona un file immagine valido da caricare.",
       }),
     );
@@ -1368,6 +1625,7 @@ export async function uploadImageForBlockAction(formData: FormData) {
   if (file.size > MAX_IMAGE_UPLOAD_BYTES) {
     redirect(
       getContentPath(bookId, {
+        anchor: returnAnchor,
         error: "Immagine troppo grande. Usa un file entro 10 MB.",
       }),
     );
@@ -1378,6 +1636,7 @@ export async function uploadImageForBlockAction(formData: FormData) {
   if (!uploadMeta) {
     redirect(
       getContentPath(bookId, {
+        anchor: returnAnchor,
         error: "Formato immagine non supportato. Usa PNG, JPG o WEBP.",
       }),
     );
@@ -1388,13 +1647,15 @@ export async function uploadImageForBlockAction(formData: FormData) {
   );
 
   if (!supabase || !actor) {
-    redirect(getContentPath(bookId, { error }));
+    redirect(getContentPath(bookId, { anchor: returnAnchor, error }));
   }
 
   const bookAccessError = await getBookAccessError(supabase, bookId);
 
   if (bookAccessError) {
-    redirect(getContentPath(bookId, { error: bookAccessError }));
+    redirect(
+      getContentPath(bookId, { anchor: returnAnchor, error: bookAccessError }),
+    );
   }
 
   const { data: block, error: blockError } = await supabase
@@ -1415,6 +1676,7 @@ export async function uploadImageForBlockAction(formData: FormData) {
 
     redirect(
       getContentPath(bookId, {
+        anchor: returnAnchor,
         error: "Non riesco a leggere il blocco immagine.",
       }),
     );
@@ -1423,6 +1685,7 @@ export async function uploadImageForBlockAction(formData: FormData) {
   if (!block || block.block_type !== "image_prompt") {
     redirect(
       getContentPath(bookId, {
+        anchor: returnAnchor,
         error: "Caricamento disponibile solo sui placeholder immagine.",
       }),
     );
@@ -1446,7 +1709,12 @@ export async function uploadImageForBlockAction(formData: FormData) {
     });
 
     if (assetResult.data === null) {
-      redirect(getContentPath(bookId, { error: assetResult.error }));
+      redirect(
+        getContentPath(bookId, {
+          anchor: returnAnchor,
+          error: assetResult.error,
+        }),
+      );
     }
 
     assetId = assetResult.data.assetId;
@@ -1472,6 +1740,7 @@ export async function uploadImageForBlockAction(formData: FormData) {
 
       redirect(
         getContentPath(bookId, {
+          anchor: returnAnchor,
           error: "Asset creato ma non collegato al blocco immagine.",
         }),
       );
@@ -1495,6 +1764,7 @@ export async function uploadImageForBlockAction(formData: FormData) {
 
     redirect(
       getContentPath(bookId, {
+        anchor: returnAnchor,
         error: "Non riesco a leggere l'asset immagine.",
       }),
     );
@@ -1503,6 +1773,7 @@ export async function uploadImageForBlockAction(formData: FormData) {
   if (!asset) {
     redirect(
       getContentPath(bookId, {
+        anchor: returnAnchor,
         error: "Asset immagine non trovato o non accessibile.",
       }),
     );
@@ -1543,6 +1814,7 @@ export async function uploadImageForBlockAction(formData: FormData) {
 
     redirect(
       getContentPath(bookId, {
+        anchor: returnAnchor,
         error:
           "Upload immagine non riuscito. Verifica bucket e policy Supabase Storage.",
       }),
@@ -1566,7 +1838,9 @@ export async function uploadImageForBlockAction(formData: FormData) {
   });
 
   if (updateResult.data === null) {
-    redirect(getContentPath(bookId, { error: updateResult.error }));
+    redirect(
+      getContentPath(bookId, { anchor: returnAnchor, error: updateResult.error }),
+    );
   }
 
   const ownershipError = await touchBookAfterContentChange(
@@ -1576,9 +1850,13 @@ export async function uploadImageForBlockAction(formData: FormData) {
   );
 
   if (ownershipError) {
-    redirect(getContentPath(bookId, { error: ownershipError }));
+    redirect(
+      getContentPath(bookId, { anchor: returnAnchor, error: ownershipError }),
+    );
   }
 
   revalidateBookContent(bookId);
-  redirect(getContentPath(bookId, { status: "image_uploaded" }));
+  redirect(
+    getContentPath(bookId, { anchor: returnAnchor, status: "image_uploaded" }),
+  );
 }

@@ -489,7 +489,7 @@ function SectionCard({
   ).length;
 
   return (
-    <article className="section-card">
+    <article className="section-card scroll-target" id={`section-${section.id}`}>
       <div className="section-card-header">
         <div className="section-card-title-area">
           <p className="section-meta">
@@ -611,7 +611,8 @@ function SectionCard({
 
               return (
                 <li
-                  className={`section-block-item section-block-item-${block.block_type}`}
+                  className={`section-block-item section-block-item-${block.block_type} scroll-target`}
+                  id={`block-${block.id}`}
                   key={block.id}
                 >
                   <div className="section-block-item-header">
@@ -952,7 +953,10 @@ export default async function BookContentsPage({
           </p>
         </section>
 
-        <div className="grid two editor-top-grid" id="nuova-sezione">
+        <div
+          className="grid two editor-top-grid scroll-target"
+          id="nuova-sezione"
+        >
           <Card className="section-create-card">
             <details
               className="section-create-details"
