@@ -1,7 +1,10 @@
 "use client";
 
+import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
 import {
+  autosavePageBreakAfterBlockAction,
+  autosaveSectionBlockVisibilityAction,
   createImagePlaceholderBlockAction,
   createInternalNoteBlockAction,
   createPageBreakBlockAction,
@@ -10,16 +13,23 @@ import {
   deleteSectionAction,
   moveSectionBlockAction,
   moveSectionAction,
-  togglePageBreakAfterBlockAction,
-  updateSectionBlockVisibilityAction,
   updateTextBlockAction,
+  uploadImageForBlockAction,
+  type AutosaveActionState,
 } from "@/app/libri/[id]/contenuti/actions";
 import { PRINT_VISIBILITY_OPTIONS } from "@/lib/kdp/constants";
+import type { KdpAsset } from "@/lib/kdp/assets";
 import type {
   KdpSectionBlock,
   MoveSectionBlockDirection,
 } from "@/lib/kdp/section-blocks";
 import type { MoveSectionDirection } from "@/lib/kdp/sections";
+
+const AUTOSAVE_INITIAL_STATE: AutosaveActionState = {
+  message: null,
+  savedAt: null,
+  status: "idle",
+};
 
 function MoveButton({
   disabled,
@@ -46,7 +56,7 @@ function DeleteButton() {
 
   return (
     <button
-      className="secondary-button danger-button"
+      className="danger-button"
       disabled={pending}
       type="submit"
     >
@@ -99,29 +109,48 @@ function TextBlockButton({
 
 function ResetButton({ label = "Annulla modifiche" }: { label?: string }) {
   return (
-    <button className="secondary-button" type="reset">
+    <button className="ghost-button" type="reset">
       {label}
     </button>
   );
 }
 
-function VisibilityButton() {
+function ImageUploadButton() {
   const { pending } = useFormStatus();
 
   return (
-    <button className="secondary-button" disabled={pending} type="submit">
-      {pending ? "Salvataggio..." : "Salva"}
+    <button className="button" disabled={pending} type="submit">
+      {pending ? "Caricamento..." : "Carica immagine"}
     </button>
   );
 }
 
-function PageBreakButton() {
-  const { pending } = useFormStatus();
+function AutosaveFeedback({
+  pending,
+  state,
+}: {
+  pending: boolean;
+  state: AutosaveActionState;
+}) {
+  if (pending) {
+    return (
+      <span className="autosave-status autosave-status-loading" role="status">
+        Salvataggio...
+      </span>
+    );
+  }
+
+  if (state.status === "idle") {
+    return null;
+  }
 
   return (
-    <button className="secondary-button" disabled={pending} type="submit">
-      {pending ? "Salvataggio..." : "Salva"}
-    </button>
+    <span
+      className={`autosave-status autosave-status-${state.status}`}
+      role={state.status === "error" ? "alert" : "status"}
+    >
+      {state.status === "success" ? "Salvato" : state.message}
+    </span>
   );
 }
 
@@ -236,9 +265,14 @@ export function PageBreakAfterBlockForm({
   block: Pick<KdpSectionBlock, "book_id" | "id" | "section_id">;
   hasPageBreakAfter: boolean;
 }) {
+  const [state, formAction, pending] = useActionState(
+    autosavePageBreakAfterBlockAction,
+    AUTOSAVE_INITIAL_STATE,
+  );
+
   return (
     <form
-      action={togglePageBreakAfterBlockAction}
+      action={formAction}
       className="block-page-break-form"
     >
       <input name="book_id" type="hidden" value={block.book_id} />
@@ -250,12 +284,13 @@ export function PageBreakAfterBlockForm({
           defaultChecked={hasPageBreakAfter}
           id={`page_break_${block.id}`}
           name="page_break_after"
+          onChange={(event) => event.currentTarget.form?.requestSubmit()}
           type="checkbox"
         />
         <span>Interruzione pagina dopo</span>
       </label>
 
-      <PageBreakButton />
+      <AutosaveFeedback pending={pending} state={state} />
     </form>
   );
 }
@@ -268,9 +303,14 @@ export function UpdateSectionBlockVisibilityForm({
     "book_id" | "id" | "print_visibility" | "section_id"
   >;
 }) {
+  const [state, formAction, pending] = useActionState(
+    autosaveSectionBlockVisibilityAction,
+    AUTOSAVE_INITIAL_STATE,
+  );
+
   return (
     <form
-      action={updateSectionBlockVisibilityAction}
+      action={formAction}
       className="block-visibility-form"
     >
       <input name="book_id" type="hidden" value={block.book_id} />
@@ -282,6 +322,7 @@ export function UpdateSectionBlockVisibilityForm({
         defaultValue={block.print_visibility}
         id={`block_visibility_${block.id}`}
         name="print_visibility"
+        onChange={(event) => event.currentTarget.form?.requestSubmit()}
       >
         {PRINT_VISIBILITY_OPTIONS.map((option) => (
           <option key={option.value} value={option.value}>
@@ -290,7 +331,71 @@ export function UpdateSectionBlockVisibilityForm({
         ))}
       </select>
 
-      <VisibilityButton />
+      <AutosaveFeedback pending={pending} state={state} />
+    </form>
+  );
+}
+
+export function UploadImageForBlockForm({
+  asset,
+  block,
+}: {
+  asset: Pick<KdpAsset, "alt_text" | "title"> | null;
+  block: Pick<
+    KdpSectionBlock,
+    "body" | "book_id" | "id" | "section_id" | "title"
+  >;
+}) {
+  return (
+    <form
+      action={uploadImageForBlockAction}
+      className="image-upload-form"
+      encType="multipart/form-data"
+    >
+      <input name="book_id" type="hidden" value={block.book_id} />
+      <input name="section_id" type="hidden" value={block.section_id} />
+      <input name="block_id" type="hidden" value={block.id} />
+
+      <div className="field">
+        <label htmlFor={`image_file_${block.id}`}>Carica immagine</label>
+        <input
+          accept="image/png,image/jpeg,image/webp"
+          id={`image_file_${block.id}`}
+          name="image_file"
+          required
+          type="file"
+        />
+        <p className="field-note">PNG, JPG o WEBP. Dimensione massima 10 MB.</p>
+      </div>
+
+      <div className="image-upload-meta-grid">
+        <div className="field">
+          <label htmlFor={`asset_title_${block.id}`}>Titolo asset</label>
+          <input
+            defaultValue={asset?.title ?? block.title ?? ""}
+            id={`asset_title_${block.id}`}
+            name="asset_title"
+            placeholder="Titolo immagine"
+          />
+        </div>
+
+        <div className="field">
+          <label htmlFor={`asset_alt_text_${block.id}`}>Alt text</label>
+          <input
+            defaultValue={asset?.alt_text ?? block.title ?? block.body ?? ""}
+            id={`asset_alt_text_${block.id}`}
+            name="asset_alt_text"
+            placeholder="Descrizione breve dell'immagine"
+          />
+        </div>
+      </div>
+
+      <div className="form-actions">
+        <ImageUploadButton />
+        <button className="ghost-button" disabled type="button">
+          Genera con AI - presto
+        </button>
+      </div>
     </form>
   );
 }

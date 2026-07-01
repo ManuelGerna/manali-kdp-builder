@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { createAsset, deleteAsset } from "@/lib/kdp/assets";
+import { createAsset, deleteAsset, updateAssetUpload } from "@/lib/kdp/assets";
 import { touchBookOwnership } from "@/lib/kdp/books";
 import {
   PRINT_VISIBILITIES,
@@ -34,6 +34,7 @@ import {
 } from "@/lib/kdp/sections";
 import {
   createOwnershipActor,
+  getUpdateOwnershipFields,
   type OwnershipActor,
 } from "@/lib/kdp/ownership";
 import {
@@ -42,6 +43,12 @@ import {
 } from "@/lib/supabase/server";
 
 type KdpSupabaseClient = Awaited<ReturnType<typeof createClient>>;
+
+export type AutosaveActionState = {
+  message: string | null;
+  savedAt: number | null;
+  status: "idle" | "error" | "success";
+};
 
 export type SectionFormState = {
   message: string | null;
@@ -62,12 +69,29 @@ const SECTION_TYPE_VALUES: readonly string[] = SECTION_TYPES;
 const SECTION_STATUS_VALUES: readonly string[] = SECTION_STATUSES;
 const SECTION_LAYOUT_PRESET_VALUES: readonly string[] = SECTION_LAYOUT_PRESETS;
 const PRINT_VISIBILITY_VALUES: readonly string[] = PRINT_VISIBILITIES;
+const KDP_ASSETS_BUCKET = "kdp-assets";
+const MAX_IMAGE_UPLOAD_BYTES = 10 * 1024 * 1024;
+const IMAGE_UPLOAD_TYPES = {
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
+} as const;
 
 function logSectionAction(
   event: string,
   context: Record<string, boolean | number | string | null | undefined> = {},
 ) {
   console.error("[kdp-sections:action]", {
+    event,
+    context,
+  });
+}
+
+function logImageUploadAction(
+  event: string,
+  context: Record<string, boolean | number | string | null | undefined> = {},
+) {
+  console.error("[kdp-image-upload:action]", {
     event,
     context,
   });
@@ -98,6 +122,75 @@ function getToggleValue(formData: FormData, name: string) {
   return formData
     .getAll(name)
     .some((value) => String(value).trim() === "on");
+}
+
+function autosaveSuccess(message = "Salvato"): AutosaveActionState {
+  return {
+    message,
+    savedAt: Date.now(),
+    status: "success",
+  };
+}
+
+function autosaveError(message: string | null): AutosaveActionState {
+  return {
+    message: message || "Salvataggio non riuscito.",
+    savedAt: null,
+    status: "error",
+  };
+}
+
+function isImageUploadFile(value: FormDataEntryValue | null): value is File {
+  return typeof File !== "undefined" && value instanceof File && value.size > 0;
+}
+
+function getImageUploadMeta(file: File) {
+  const mimeType = file.type.toLowerCase();
+
+  if (mimeType in IMAGE_UPLOAD_TYPES) {
+    return {
+      extension: IMAGE_UPLOAD_TYPES[mimeType as keyof typeof IMAGE_UPLOAD_TYPES],
+      mimeType,
+    };
+  }
+
+  const extension = file.name.split(".").pop()?.toLowerCase();
+
+  if (extension === "jpg" || extension === "jpeg") {
+    return {
+      extension: "jpg",
+      mimeType: "image/jpeg",
+    };
+  }
+
+  if (extension === "png" || extension === "webp") {
+    return {
+      extension,
+      mimeType: `image/${extension}`,
+    };
+  }
+
+  return null;
+}
+
+function getSafeImageFileName(fileName: string, extension: string) {
+  const baseName = fileName.replace(/\.[^.]+$/, "");
+  const safeBaseName = baseName
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 64);
+
+  return `${safeBaseName || "image"}.${extension}`;
+}
+
+function getTitleFromFileName(fileName: string) {
+  return (
+    fileName
+      .replace(/\.[^.]+$/, "")
+      .replace(/[_-]+/g, " ")
+      .trim() || null
+  );
 }
 
 function isSectionType(value: string): value is SectionType {
@@ -978,6 +1071,60 @@ export async function updateSectionBlockVisibilityAction(formData: FormData) {
   redirect(getContentPath(bookId, { status: "block_visibility_updated" }));
 }
 
+export async function autosaveSectionBlockVisibilityAction(
+  _previousState: AutosaveActionState,
+  formData: FormData,
+): Promise<AutosaveActionState> {
+  const bookId = getString(formData, "book_id");
+  const sectionId = getString(formData, "section_id");
+  const blockId = getString(formData, "block_id");
+  const printVisibility = getString(formData, "print_visibility");
+
+  if (!bookId || !sectionId || !blockId || !isPrintVisibility(printVisibility)) {
+    return autosaveError("Visibilita blocco non valida.");
+  }
+
+  const { supabase, actor, error } = await getAuthenticatedSupabase(
+    "autosave-section-block-visibility",
+  );
+
+  if (!supabase || !actor) {
+    return autosaveError(error);
+  }
+
+  const bookAccessError = await getBookAccessError(supabase, bookId);
+
+  if (bookAccessError) {
+    return autosaveError(bookAccessError);
+  }
+
+  const blockResult = await updateSectionBlockVisibility(supabase, {
+    actor,
+    blockId,
+    bookId,
+    printVisibility,
+    sectionId,
+  });
+
+  if (blockResult.data === null) {
+    return autosaveError(blockResult.error);
+  }
+
+  const ownershipError = await touchBookAfterContentChange(
+    supabase,
+    bookId,
+    actor,
+  );
+
+  if (ownershipError) {
+    return autosaveError(ownershipError);
+  }
+
+  revalidateBookContent(bookId);
+
+  return autosaveSuccess();
+}
+
 export async function togglePageBreakAfterBlockAction(formData: FormData) {
   const bookId = getString(formData, "book_id");
   const sectionId = getString(formData, "section_id");
@@ -1044,6 +1191,68 @@ export async function togglePageBreakAfterBlockAction(formData: FormData) {
 
   revalidateBookContent(bookId);
   redirect(getContentPath(bookId, { status }));
+}
+
+export async function autosavePageBreakAfterBlockAction(
+  _previousState: AutosaveActionState,
+  formData: FormData,
+): Promise<AutosaveActionState> {
+  const bookId = getString(formData, "book_id");
+  const sectionId = getString(formData, "section_id");
+  const blockId = getString(formData, "block_id");
+  const enabled = getToggleValue(formData, "page_break_after");
+
+  if (!bookId || !sectionId || !blockId) {
+    return autosaveError("Blocco non valido.");
+  }
+
+  const { supabase, actor, error } = await getAuthenticatedSupabase(
+    "autosave-page-break-after-block",
+  );
+
+  if (!supabase || !actor) {
+    return autosaveError(error);
+  }
+
+  const bookAccessError = await getBookAccessError(supabase, bookId);
+
+  if (bookAccessError) {
+    return autosaveError(bookAccessError);
+  }
+
+  const blockResult = enabled
+    ? await insertPageBreakAfterBlock(supabase, {
+        actor,
+        blockId,
+        bookId,
+        sectionId,
+      })
+    : await removePageBreakAfterBlock(supabase, {
+        actor,
+        blockId,
+        bookId,
+        sectionId,
+      });
+
+  if (blockResult.data === null) {
+    return autosaveError(blockResult.error);
+  }
+
+  if (blockResult.data.changed) {
+    const ownershipError = await touchBookAfterContentChange(
+      supabase,
+      bookId,
+      actor,
+    );
+
+    if (ownershipError) {
+      return autosaveError(ownershipError);
+    }
+  }
+
+  revalidateBookContent(bookId);
+
+  return autosaveSuccess();
 }
 
 export async function createImagePlaceholderBlockAction(formData: FormData) {
@@ -1119,4 +1328,230 @@ export async function createImagePlaceholderBlockAction(formData: FormData) {
 
   revalidateBookContent(bookId);
   redirect(getContentPath(bookId, { status: "block_created" }));
+}
+
+export async function uploadImageForBlockAction(formData: FormData) {
+  const bookId = getString(formData, "book_id");
+  const sectionId = getString(formData, "section_id");
+  const blockId = getString(formData, "block_id");
+  const requestedTitle = getOptionalText(formData, "asset_title");
+  const requestedAltText = getOptionalText(formData, "asset_alt_text");
+  const file = formData.get("image_file");
+
+  if (!bookId) {
+    redirect("/libri");
+  }
+
+  if (!sectionId || !blockId) {
+    redirect(getContentPath(bookId, { error: "Blocco immagine non valido." }));
+  }
+
+  if (!isImageUploadFile(file)) {
+    redirect(
+      getContentPath(bookId, {
+        error: "Seleziona un file immagine valido da caricare.",
+      }),
+    );
+  }
+
+  if (file.size > MAX_IMAGE_UPLOAD_BYTES) {
+    redirect(
+      getContentPath(bookId, {
+        error: "Immagine troppo grande. Usa un file entro 10 MB.",
+      }),
+    );
+  }
+
+  const uploadMeta = getImageUploadMeta(file);
+
+  if (!uploadMeta) {
+    redirect(
+      getContentPath(bookId, {
+        error: "Formato immagine non supportato. Usa PNG, JPG o WEBP.",
+      }),
+    );
+  }
+
+  const { supabase, actor, error } = await getAuthenticatedSupabase(
+    "upload-image-for-block",
+  );
+
+  if (!supabase || !actor) {
+    redirect(getContentPath(bookId, { error }));
+  }
+
+  const bookAccessError = await getBookAccessError(supabase, bookId);
+
+  if (bookAccessError) {
+    redirect(getContentPath(bookId, { error: bookAccessError }));
+  }
+
+  const { data: block, error: blockError } = await supabase
+    .from("kdp_section_blocks")
+    .select("id,asset_id,block_type,title,body")
+    .eq("book_id", bookId)
+    .eq("section_id", sectionId)
+    .eq("id", blockId)
+    .maybeSingle();
+
+  if (blockError) {
+    logSectionAction("upload_image_block_query_failed", {
+      blockIdTail: idTail(blockId),
+      bookIdTail: idTail(bookId),
+      errorCode: blockError.code,
+      errorName: blockError.name,
+    });
+
+    redirect(
+      getContentPath(bookId, {
+        error: "Non riesco a leggere il blocco immagine.",
+      }),
+    );
+  }
+
+  if (!block || block.block_type !== "image_prompt") {
+    redirect(
+      getContentPath(bookId, {
+        error: "Caricamento disponibile solo sui placeholder immagine.",
+      }),
+    );
+  }
+
+  let assetId = block.asset_id;
+
+  if (!assetId) {
+    const assetResult = await createAsset(supabase, {
+      actor,
+      altText: requestedAltText,
+      assetType: "image",
+      bookId,
+      prompt: block.body,
+      status: "placeholder",
+      title:
+        requestedTitle ||
+        block.title ||
+        getTitleFromFileName(file.name) ||
+        "Immagine caricata",
+    });
+
+    if (assetResult.data === null) {
+      redirect(getContentPath(bookId, { error: assetResult.error }));
+    }
+
+    assetId = assetResult.data.assetId;
+
+    const { error: attachError } = await supabase
+      .from("kdp_section_blocks")
+      .update({
+        asset_id: assetId,
+        ...getUpdateOwnershipFields(actor),
+      })
+      .eq("book_id", bookId)
+      .eq("section_id", sectionId)
+      .eq("id", blockId);
+
+    if (attachError) {
+      logSectionAction("upload_image_attach_asset_failed", {
+        assetIdTail: idTail(assetId),
+        blockIdTail: idTail(blockId),
+        bookIdTail: idTail(bookId),
+        errorCode: attachError.code,
+        errorName: attachError.name,
+      });
+
+      redirect(
+        getContentPath(bookId, {
+          error: "Asset creato ma non collegato al blocco immagine.",
+        }),
+      );
+    }
+  }
+
+  const { data: asset, error: assetError } = await supabase
+    .from("kdp_assets")
+    .select("id,title,alt_text")
+    .eq("book_id", bookId)
+    .eq("id", assetId)
+    .maybeSingle();
+
+  if (assetError) {
+    logImageUploadAction("asset_query_failed", {
+      assetIdTail: idTail(assetId),
+      bookIdTail: idTail(bookId),
+      errorCode: assetError.code,
+      errorName: assetError.name,
+    });
+
+    redirect(
+      getContentPath(bookId, {
+        error: "Non riesco a leggere l'asset immagine.",
+      }),
+    );
+  }
+
+  if (!asset) {
+    redirect(
+      getContentPath(bookId, {
+        error: "Asset immagine non trovato o non accessibile.",
+      }),
+    );
+  }
+
+  const safeFileName = getSafeImageFileName(file.name, uploadMeta.extension);
+  const storagePath = `${actor.userId}/${bookId}/${assetId}/${Date.now()}-${safeFileName}`;
+  const uploadResult = await supabase.storage
+    .from(KDP_ASSETS_BUCKET)
+    .upload(storagePath, file, {
+      contentType: uploadMeta.mimeType,
+      upsert: false,
+    });
+
+  if (uploadResult.error) {
+    logImageUploadAction("storage_upload_failed", {
+      assetIdTail: idTail(assetId),
+      blockIdTail: idTail(blockId),
+      bookIdTail: idTail(bookId),
+      errorName: uploadResult.error.name,
+    });
+
+    redirect(
+      getContentPath(bookId, {
+        error:
+          "Upload immagine non riuscito. Verifica bucket e policy Supabase Storage.",
+      }),
+    );
+  }
+
+  const title =
+    requestedTitle ||
+    asset.title ||
+    block.title ||
+    getTitleFromFileName(file.name) ||
+    "Immagine caricata";
+  const altText = requestedAltText || asset.alt_text || title;
+  const updateResult = await updateAssetUpload(supabase, {
+    actor,
+    altText,
+    assetId,
+    bookId,
+    filePath: storagePath,
+    title,
+  });
+
+  if (updateResult.data === null) {
+    redirect(getContentPath(bookId, { error: updateResult.error }));
+  }
+
+  const ownershipError = await touchBookAfterContentChange(
+    supabase,
+    bookId,
+    actor,
+  );
+
+  if (ownershipError) {
+    redirect(getContentPath(bookId, { error: ownershipError }));
+  }
+
+  revalidateBookContent(bookId);
+  redirect(getContentPath(bookId, { status: "image_uploaded" }));
 }

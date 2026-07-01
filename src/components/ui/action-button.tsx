@@ -1,6 +1,11 @@
 import type { ButtonHTMLAttributes } from "react";
 
-type ActionButtonVariant = "primary" | "secondary" | "ghost";
+type ActionButtonVariant =
+  | "danger"
+  | "ghost"
+  | "primary"
+  | "secondary"
+  | "warning";
 
 type ActionButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: ActionButtonVariant;
@@ -15,7 +20,11 @@ export function actionButtonClassName(
       ? "button"
       : variant === "secondary"
         ? "secondary-button"
-        : "ghost-button";
+        : variant === "danger"
+          ? "danger-button"
+          : variant === "warning"
+            ? "warning-button"
+            : "ghost-button";
 
   return [baseClass, className].filter(Boolean).join(" ");
 }

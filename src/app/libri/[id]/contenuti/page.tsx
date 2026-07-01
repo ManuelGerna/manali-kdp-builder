@@ -4,7 +4,7 @@ import { AppShell } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { FieldRow } from "@/components/ui/field-row";
-import { listAssets } from "@/lib/kdp/assets";
+import { listAssets, type KdpAsset } from "@/lib/kdp/assets";
 import {
   getImportRunReport,
   type DraftImportReport,
@@ -46,6 +46,7 @@ import {
   PageBreakAfterBlockForm,
   UpdateSectionBlockVisibilityForm,
   UpdateTextBlockForm,
+  UploadImageForBlockForm,
 } from "./section-actions";
 import { SectionCreateForm } from "./section-create-form";
 import { SectionEditForm } from "./section-edit-form";
@@ -84,6 +85,7 @@ const STATUS_MESSAGES: Record<string, string> = {
   block_reordered: "Ordine blocchi aggiornato.",
   block_updated: "Blocco testo aggiornato.",
   block_visibility_updated: "Visibilita blocco aggiornata.",
+  image_uploaded: "Immagine caricata.",
   created: "Sezione creata.",
   deleted: "Sezione eliminata.",
   imported: "Import completato.",
@@ -208,6 +210,22 @@ function getPrintVisibilityOutputLabel(printVisibility: string) {
   return printVisibility === "print" ? "Nel PDF" : "Fuori PDF";
 }
 
+function getAssetStatusChipClass(assetStatus: string) {
+  if (assetStatus === "uploaded" || assetStatus === "approved") {
+    return "section-chip-success";
+  }
+
+  if (assetStatus === "rejected") {
+    return "section-chip-error";
+  }
+
+  return "section-chip-warning";
+}
+
+function getStorageFileName(filePath: string) {
+  return filePath.split("/").at(-1) ?? filePath;
+}
+
 function groupBlocksBySection(blocks: KdpSectionBlock[]) {
   const grouped = new Map<string, KdpSectionBlock[]>();
 
@@ -224,6 +242,28 @@ function isPrintableContentBlock(block: KdpSectionBlock) {
   return (
     block.print_visibility === "print" && block.block_type !== "internal_note"
   );
+}
+
+async function getAssetPreviewUrlMap(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  assets: KdpAsset[],
+) {
+  const previewableAssets = assets.filter(
+    (asset) =>
+      asset.file_path &&
+      (asset.status === "uploaded" || asset.status === "approved"),
+  );
+  const entries = await Promise.all(
+    previewableAssets.map(async (asset) => {
+      const { data, error } = await supabase.storage
+        .from("kdp-assets")
+        .createSignedUrl(asset.file_path as string, 60 * 60);
+
+      return [asset.id, error ? null : data.signedUrl] as const;
+    }),
+  );
+
+  return new Map(entries);
 }
 
 function canTogglePageBreakAfterBlock(block: KdpSectionBlock) {
@@ -295,13 +335,71 @@ function ImportReportSummary({ report }: { report: DraftImportReport }) {
   );
 }
 
+function ImageAssetPanel({
+  asset,
+  block,
+  previewUrl,
+}: {
+  asset: KdpAsset | null;
+  block: KdpSectionBlock;
+  previewUrl: string | null;
+}) {
+  const title = asset?.title || block.title || "Placeholder immagine";
+  const altText = asset?.alt_text || title;
+
+  return (
+    <div className="image-asset-panel">
+      <div className="image-asset-header">
+        <div>
+          <p className="section-meta">Asset immagine</p>
+          <p className="image-asset-title">{title}</p>
+        </div>
+        <span
+          className={`section-chip ${
+            asset
+              ? getAssetStatusChipClass(asset.status)
+              : "section-chip-warning"
+          }`}
+        >
+          {asset ? formatAssetStatus(asset.status) : "Asset mancante"}
+        </span>
+      </div>
+
+      {asset?.file_path ? (
+        <p className="field-note">
+          File caricato: {getStorageFileName(asset.file_path)}
+        </p>
+      ) : (
+        <p className="field-note">
+          Nessun file caricato. Il PDF tecnico continua a usare il placeholder.
+        </p>
+      )}
+
+      {previewUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img className="image-asset-preview" src={previewUrl} alt={altText} />
+      ) : asset?.file_path ? (
+        <p className="field-note">
+          Preview non disponibile. Verifica bucket e policy Storage.
+        </p>
+      ) : null}
+
+      <UploadImageForBlockForm asset={asset} block={block} />
+    </div>
+  );
+}
+
 function SectionCard({
+  assetById,
+  assetPreviewUrls,
   blocks,
   index,
   isFirst,
   isLast,
   section,
 }: {
+  assetById: Map<string, KdpAsset>;
+  assetPreviewUrls: Map<string, string | null>;
   blocks: KdpSectionBlock[];
   index: number;
   isFirst: boolean;
@@ -369,7 +467,7 @@ function SectionCard({
       </div>
 
       <details className="section-details-panel">
-        <summary className="secondary-button section-edit-toggle">
+        <summary className="ghost-button section-edit-toggle">
           Dettagli sezione
         </summary>
         <p className="section-owner-meta">
@@ -426,6 +524,12 @@ function SectionCard({
               const showPageBreakToggle = canTogglePageBreakAfterBlock(block);
               const isInternalNote = block.block_type === "internal_note";
               const isPageBreak = block.block_type === "page_break";
+              const blockAsset = block.asset_id
+                ? assetById.get(block.asset_id) ?? null
+                : null;
+              const previewUrl = blockAsset
+                ? assetPreviewUrls.get(blockAsset.id) ?? null
+                : null;
 
               return (
                 <li
@@ -478,14 +582,21 @@ function SectionCard({
                       {block.editor_notes}
                     </p>
                   ) : null}
+                  {block.block_type === "image_prompt" ? (
+                    <ImageAssetPanel
+                      asset={blockAsset}
+                      block={block}
+                      previewUrl={previewUrl}
+                    />
+                  ) : null}
                   <div className="section-block-controls">
                     <div
-                      className="section-block-action-group"
+                      className="section-block-action-group section-block-primary-actions"
                       aria-label="Azioni principali blocco"
                     >
                       {block.block_type === "text" ? (
                         <details className="block-edit-panel block-inline-edit-panel">
-                          <summary className="secondary-button section-edit-toggle">
+                          <summary className="secondary-button section-edit-toggle block-edit-toggle">
                             Modifica blocco
                           </summary>
                           <UpdateTextBlockForm block={block} />
@@ -514,7 +625,10 @@ function SectionCard({
                         sectionId={block.section_id}
                       />
                     </div>
-                    <div className="section-block-action-group section-block-output-actions">
+                    <div
+                      className="section-block-action-group section-block-output-actions"
+                      aria-label="Output PDF blocco"
+                    >
                       <UpdateSectionBlockVisibilityForm block={block} />
                       {showPageBreakToggle ? (
                         <PageBreakAfterBlockForm
@@ -573,7 +687,7 @@ function SectionCard({
       </section>
 
       <details className="section-edit-panel">
-        <summary className="secondary-button section-edit-toggle">
+        <summary className="ghost-button section-edit-toggle section-settings-toggle">
           Modifica sezione
         </summary>
         <SectionEditForm
@@ -690,6 +804,8 @@ export default async function BookContentsPage({
   const assetsResult = await listAssets(supabase, id);
   const blocks = blocksResult.data ?? [];
   const assets = assetsResult.data ?? [];
+  const assetById = new Map(assets.map((asset) => [asset.id, asset]));
+  const assetPreviewUrls = await getAssetPreviewUrlMap(supabase, assets);
   const blocksBySection = groupBlocksBySection(blocks);
   const sectionsInToc = sections.filter(
     (section) => section.include_in_toc !== false,
@@ -821,6 +937,8 @@ export default async function BookContentsPage({
           <section className="section-list" aria-label="Sezioni contenuto">
             {sections.map((section, index) => (
               <SectionCard
+                assetById={assetById}
+                assetPreviewUrls={assetPreviewUrls}
                 blocks={blocksBySection.get(section.id) ?? []}
                 index={index}
                 isFirst={index === 0}
