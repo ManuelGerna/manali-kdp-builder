@@ -152,6 +152,7 @@ export async function GET(_request: Request, { params }: PdfExportRouteProps) {
       book,
       sections,
       settings,
+      supabase,
       technicalNotice:
         isTechnicalMode && readiness.status !== "ready"
           ? {
