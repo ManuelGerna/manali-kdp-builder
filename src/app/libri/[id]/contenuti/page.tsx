@@ -41,6 +41,7 @@ import {
   DeleteSectionForm,
   MoveSectionBlockForm,
   MoveSectionForm,
+  PageBreakAfterBlockForm,
   UpdateSectionBlockVisibilityForm,
   UpdateTextBlockForm,
 } from "./section-actions";
@@ -84,6 +85,9 @@ const STATUS_MESSAGES: Record<string, string> = {
   created: "Sezione creata.",
   deleted: "Sezione eliminata.",
   imported: "Import completato.",
+  page_break_inserted: "Interruzione pagina inserita.",
+  page_break_removed: "Interruzione pagina rimossa.",
+  page_break_unchanged: "Interruzione pagina gia corretta.",
   reordered: "Ordine sezioni aggiornato.",
   text_block_created: "Blocco testo creato.",
   updated: "Sezione aggiornata.",
@@ -216,6 +220,14 @@ function groupBlocksBySection(blocks: KdpSectionBlock[]) {
 function isPrintableContentBlock(block: KdpSectionBlock) {
   return (
     block.print_visibility === "print" && block.block_type !== "internal_note"
+  );
+}
+
+function canTogglePageBreakAfterBlock(block: KdpSectionBlock) {
+  return (
+    block.print_visibility === "print" &&
+    block.block_type !== "internal_note" &&
+    block.block_type !== "page_break"
   );
 }
 
@@ -375,6 +387,9 @@ function SectionCard({
             {blocks.map((block, blockIndex) => {
               const blockTypeLabel = formatBlockType(block.block_type);
               const blockLabel = block.title || blockTypeLabel;
+              const hasPageBreakAfter =
+                blocks[blockIndex + 1]?.block_type === "page_break";
+              const showPageBreakToggle = canTogglePageBreakAfterBlock(block);
 
               return (
                 <li className="section-block-item" key={block.id}>
@@ -411,39 +426,52 @@ function SectionCard({
                       {block.editor_notes}
                     </p>
                   ) : null}
-                  <div className="section-block-actions">
-                    {blockIndex > 0 ? (
-                      <MoveSectionBlockForm
+                  <div className="section-block-controls">
+                    <div
+                      className="section-block-primary-actions"
+                      aria-label="Azioni blocco"
+                    >
+                      {block.block_type === "text" ? (
+                        <details className="block-edit-panel block-inline-edit-panel">
+                          <summary className="secondary-button section-edit-toggle">
+                            Modifica blocco
+                          </summary>
+                          <UpdateTextBlockForm block={block} />
+                        </details>
+                      ) : null}
+                      {blockIndex > 0 ? (
+                        <MoveSectionBlockForm
+                          blockId={block.id}
+                          bookId={block.book_id}
+                          direction="up"
+                          sectionId={block.section_id}
+                        />
+                      ) : null}
+                      {blockIndex < blocks.length - 1 ? (
+                        <MoveSectionBlockForm
+                          blockId={block.id}
+                          bookId={block.book_id}
+                          direction="down"
+                          sectionId={block.section_id}
+                        />
+                      ) : null}
+                      <DeleteSectionBlockForm
                         blockId={block.id}
                         bookId={block.book_id}
-                        direction="up"
+                        label={blockLabel}
                         sectionId={block.section_id}
                       />
-                    ) : null}
-                    {blockIndex < blocks.length - 1 ? (
-                      <MoveSectionBlockForm
-                        blockId={block.id}
-                        bookId={block.book_id}
-                        direction="down"
-                        sectionId={block.section_id}
-                      />
-                    ) : null}
-                    <UpdateSectionBlockVisibilityForm block={block} />
-                    <DeleteSectionBlockForm
-                      blockId={block.id}
-                      bookId={block.book_id}
-                      label={blockLabel}
-                      sectionId={block.section_id}
-                    />
+                    </div>
+                    <div className="section-block-secondary-actions">
+                      <UpdateSectionBlockVisibilityForm block={block} />
+                      {showPageBreakToggle ? (
+                        <PageBreakAfterBlockForm
+                          block={block}
+                          hasPageBreakAfter={hasPageBreakAfter}
+                        />
+                      ) : null}
+                    </div>
                   </div>
-                  {block.block_type === "text" ? (
-                    <details className="block-edit-panel">
-                      <summary className="secondary-button section-edit-toggle">
-                        Modifica blocco
-                      </summary>
-                      <UpdateTextBlockForm block={block} />
-                    </details>
-                  ) : null}
                 </li>
               );
             })}
@@ -720,6 +748,37 @@ export default async function BookContentsPage({
             ))}
           </section>
         )}
+
+        <Card className="final-actions-card" title="Controllo libretto">
+          <p className="section-panel-note">
+            Controlla anteprima, validazione e PDF tecnico mentre sistemi i
+            contenuti.
+          </p>
+          <div className="final-action-grid">
+            <Link
+              className="secondary-button"
+              href={`/libri/${book.id}/anteprima`}
+            >
+              Anteprima libretto
+            </Link>
+            <Link
+              className="secondary-button"
+              href={`/libri/${book.id}/validazione`}
+            >
+              Validazione pre-export
+            </Link>
+            <Link
+              className="button"
+              href={`/libri/${book.id}/export/pdf?mode=technical`}
+            >
+              Scarica PDF tecnico di prova
+            </Link>
+          </div>
+          <p className="form-note form-note-warning">
+            Da usare solo per controllare contenuti e layout. Non caricare su
+            Amazon KDP se la validazione segnala problemi.
+          </p>
+        </Card>
       </div>
     </AppShell>
   );

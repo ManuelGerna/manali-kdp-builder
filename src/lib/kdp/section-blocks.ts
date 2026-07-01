@@ -73,6 +73,14 @@ export type UpdateSectionBlockVisibilityInput = SectionBlockIdentityInput & {
   printVisibility: PrintVisibility;
 };
 
+export type PageBreakAfterBlockInput = SectionBlockIdentityInput & {
+  actor: OwnershipActor;
+};
+
+export type PageBreakAfterBlockResult = {
+  changed: boolean;
+};
+
 type LogContext = Record<string, boolean | number | string | null | undefined>;
 
 function redactLogText(value: string | null | undefined) {
@@ -590,4 +598,192 @@ export async function updateSectionBlockVisibility(
     printVisibility: input.printVisibility,
     sectionId: input.sectionId,
   });
+}
+
+export async function insertPageBreakAfterBlock(
+  supabase: KdpSupabaseClient,
+  input: PageBreakAfterBlockInput,
+): Promise<RepositoryResult<PageBreakAfterBlockResult>> {
+  const blocksResult = await listSectionBlocksInSection(
+    supabase,
+    input.bookId,
+    input.sectionId,
+  );
+
+  if (blocksResult.data === null) {
+    return blocksResult;
+  }
+
+  const blocks = blocksResult.data;
+  const currentIndex = blocks.findIndex((block) => block.id === input.blockId);
+
+  if (currentIndex === -1) {
+    return {
+      data: null,
+      error: "Blocco contenuto non trovato o non accessibile.",
+    };
+  }
+
+  if (blocks[currentIndex].block_type === "page_break") {
+    return {
+      data: {
+        changed: false,
+      },
+      error: null,
+    };
+  }
+
+  const nextBlock = blocks[currentIndex + 1];
+
+  if (nextBlock?.block_type === "page_break") {
+    return {
+      data: {
+        changed: false,
+      },
+      error: null,
+    };
+  }
+
+  const createResult = await createSectionBlock(supabase, {
+    actor: input.actor,
+    bookId: input.bookId,
+    sectionId: input.sectionId,
+    blockType: "page_break",
+    title: null,
+    body: null,
+    layoutPreset: "default",
+    printVisibility: "print",
+    editorNotes: null,
+  });
+
+  if (createResult.data === null) {
+    return createResult;
+  }
+
+  const updatedBlocksResult = await listSectionBlocksInSection(
+    supabase,
+    input.bookId,
+    input.sectionId,
+  );
+
+  if (updatedBlocksResult.data === null) {
+    return updatedBlocksResult;
+  }
+
+  const insertedBlock = updatedBlocksResult.data.find(
+    (block) => block.id === createResult.data.blockId,
+  );
+
+  if (!insertedBlock) {
+    return {
+      data: null,
+      error: "Interruzione pagina creata ma non ricaricata.",
+    };
+  }
+
+  const reordered = updatedBlocksResult.data.filter(
+    (block) => block.id !== insertedBlock.id,
+  );
+  const currentUpdatedIndex = reordered.findIndex(
+    (block) => block.id === input.blockId,
+  );
+
+  if (currentUpdatedIndex === -1) {
+    return {
+      data: null,
+      error: "Blocco contenuto non trovato dopo la creazione del page break.",
+    };
+  }
+
+  reordered.splice(currentUpdatedIndex + 1, 0, insertedBlock);
+
+  const normalizeResult = await normalizeSectionBlockSortOrder(
+    supabase,
+    reordered,
+    input.actor,
+  );
+
+  if (normalizeResult.data === null) {
+    return normalizeResult;
+  }
+
+  return {
+    data: {
+      changed: true,
+    },
+    error: null,
+  };
+}
+
+export async function removePageBreakAfterBlock(
+  supabase: KdpSupabaseClient,
+  input: PageBreakAfterBlockInput,
+): Promise<RepositoryResult<PageBreakAfterBlockResult>> {
+  const blocksResult = await listSectionBlocksInSection(
+    supabase,
+    input.bookId,
+    input.sectionId,
+  );
+
+  if (blocksResult.data === null) {
+    return blocksResult;
+  }
+
+  const blocks = blocksResult.data;
+  const currentIndex = blocks.findIndex((block) => block.id === input.blockId);
+
+  if (currentIndex === -1) {
+    return {
+      data: null,
+      error: "Blocco contenuto non trovato o non accessibile.",
+    };
+  }
+
+  const nextBlock = blocks[currentIndex + 1];
+
+  if (nextBlock?.block_type !== "page_break") {
+    return {
+      data: {
+        changed: false,
+      },
+      error: null,
+    };
+  }
+
+  const deleteResult = await deleteSectionBlock(supabase, {
+    blockId: nextBlock.id,
+    bookId: input.bookId,
+    sectionId: input.sectionId,
+  });
+
+  if (deleteResult.data === null) {
+    return deleteResult;
+  }
+
+  const remainingBlocksResult = await listSectionBlocksInSection(
+    supabase,
+    input.bookId,
+    input.sectionId,
+  );
+
+  if (remainingBlocksResult.data === null) {
+    return remainingBlocksResult;
+  }
+
+  const normalizeResult = await normalizeSectionBlockSortOrder(
+    supabase,
+    remainingBlocksResult.data,
+    input.actor,
+  );
+
+  if (normalizeResult.data === null) {
+    return normalizeResult;
+  }
+
+  return {
+    data: {
+      changed: true,
+    },
+    error: null,
+  };
 }
