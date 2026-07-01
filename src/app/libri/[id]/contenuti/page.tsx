@@ -37,8 +37,11 @@ import type { Tables } from "@/types/database";
 import {
   CreateImagePlaceholderBlockForm,
   CreateTextBlockForm,
+  DeleteSectionBlockForm,
   DeleteSectionForm,
+  MoveSectionBlockForm,
   MoveSectionForm,
+  UpdateSectionBlockVisibilityForm,
   UpdateTextBlockForm,
 } from "./section-actions";
 import { SectionCreateForm } from "./section-create-form";
@@ -74,7 +77,10 @@ type BookResult =
 
 const STATUS_MESSAGES: Record<string, string> = {
   block_created: "Placeholder immagine creato.",
+  block_deleted: "Blocco contenuto eliminato.",
+  block_reordered: "Ordine blocchi aggiornato.",
   block_updated: "Blocco testo aggiornato.",
+  block_visibility_updated: "Visibilita blocco aggiornata.",
   created: "Sezione creata.",
   deleted: "Sezione eliminata.",
   imported: "Import completato.",
@@ -184,7 +190,15 @@ function getPrintVisibilityChipClass(printVisibility: string) {
     return "section-chip-success";
   }
 
-  return "section-chip-warning";
+  if (printVisibility === "internal_only") {
+    return "section-chip-warning";
+  }
+
+  return "section-chip-error";
+}
+
+function getPrintVisibilityOutputLabel(printVisibility: string) {
+  return printVisibility === "print" ? "Nel PDF" : "Fuori PDF";
 }
 
 function groupBlocksBySection(blocks: KdpSectionBlock[]) {
@@ -352,48 +366,92 @@ function SectionCard({
           <span className="section-chip">{blocks.length}</span>
         </div>
         <p className="section-panel-note">
-          Blocchi contenuto: questa e&apos; la fonte principale usata per
-          anteprima e PDF.
+          Blocchi contenuto: solo quelli Stampabile finiscono in anteprima e
+          PDF.
         </p>
 
         {blocks.length > 0 ? (
           <ul className="section-block-list">
-            {blocks.map((block) => (
-              <li className="section-block-item" key={block.id}>
-                <div className="section-block-item-header">
-                  <p className="section-meta">
-                    {block.sort_order}. {formatBlockType(block.block_type)}
-                  </p>
-                  <span
-                    className={`section-chip ${getPrintVisibilityChipClass(
-                      block.print_visibility,
-                    )}`}
-                  >
-                    {formatPrintVisibility(block.print_visibility)}
-                  </span>
-                </div>
-                {block.title ? <h4>{block.title}</h4> : null}
-                {block.body ? (
-                  <p className="section-body-preview">{block.body}</p>
-                ) : null}
-                {block.editor_notes ? (
-                  <p className="section-internal-notes">
-                    {block.editor_notes}
-                  </p>
-                ) : null}
-                {block.block_type === "text" ? (
-                  <details className="block-edit-panel">
-                    <summary className="secondary-button section-edit-toggle">
-                      Modifica blocco
-                    </summary>
-                    <UpdateTextBlockForm block={block} />
-                  </details>
-                ) : null}
-              </li>
-            ))}
+            {blocks.map((block, blockIndex) => {
+              const blockTypeLabel = formatBlockType(block.block_type);
+              const blockLabel = block.title || blockTypeLabel;
+
+              return (
+                <li className="section-block-item" key={block.id}>
+                  <div className="section-block-item-header">
+                    <p className="section-meta">
+                      {block.sort_order}. {blockTypeLabel}
+                    </p>
+                    <div
+                      className="section-chip-row"
+                      aria-label="Visibilita blocco"
+                    >
+                      <span
+                        className={`section-chip ${getPrintVisibilityChipClass(
+                          block.print_visibility,
+                        )}`}
+                      >
+                        {formatPrintVisibility(block.print_visibility)}
+                      </span>
+                      <span
+                        className={`section-chip ${getPrintVisibilityChipClass(
+                          block.print_visibility,
+                        )}`}
+                      >
+                        {getPrintVisibilityOutputLabel(block.print_visibility)}
+                      </span>
+                    </div>
+                  </div>
+                  {block.title ? <h4>{block.title}</h4> : null}
+                  {block.body ? (
+                    <p className="section-body-preview">{block.body}</p>
+                  ) : null}
+                  {block.editor_notes ? (
+                    <p className="section-internal-notes">
+                      {block.editor_notes}
+                    </p>
+                  ) : null}
+                  <div className="section-block-actions">
+                    {blockIndex > 0 ? (
+                      <MoveSectionBlockForm
+                        blockId={block.id}
+                        bookId={block.book_id}
+                        direction="up"
+                        sectionId={block.section_id}
+                      />
+                    ) : null}
+                    {blockIndex < blocks.length - 1 ? (
+                      <MoveSectionBlockForm
+                        blockId={block.id}
+                        bookId={block.book_id}
+                        direction="down"
+                        sectionId={block.section_id}
+                      />
+                    ) : null}
+                    <UpdateSectionBlockVisibilityForm block={block} />
+                    <DeleteSectionBlockForm
+                      blockId={block.id}
+                      bookId={block.book_id}
+                      label={blockLabel}
+                      sectionId={block.section_id}
+                    />
+                  </div>
+                  {block.block_type === "text" ? (
+                    <details className="block-edit-panel">
+                      <summary className="secondary-button section-edit-toggle">
+                        Modifica blocco
+                      </summary>
+                      <UpdateTextBlockForm block={block} />
+                    </details>
+                  ) : null}
+                </li>
+              );
+            })}
           </ul>
         ) : (
-          <p className="section-empty-body">Nessun blocco dedicato.</p>
+          <p className="section-empty-body">
+            Nessun blocco contenuto in questa sezione.
+          </p>
         )}
 
         <details className="section-edit-panel">
