@@ -425,6 +425,10 @@ export function UpdateSectionBlockVisibilityForm({
           </option>
         ))}
       </select>
+      <p className="field-note">
+        Consigliato: Larga per immagini normali, Pagina immagine per aperture o
+        immagini principali.
+      </p>
 
       <AutosaveFeedback pending={pending} state={state} />
     </form>
