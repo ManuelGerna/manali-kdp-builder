@@ -216,6 +216,32 @@ export const BLOCK_LAYOUT_PRESET_OPTIONS = BLOCK_LAYOUT_PRESETS.map(
   }),
 );
 
+export const IMAGE_PDF_LAYOUT_PRESETS = [
+  "crystal_profile",
+  "journal",
+  "image_text",
+  "title_page",
+] as const;
+
+export type ImagePdfLayoutPreset = (typeof IMAGE_PDF_LAYOUT_PRESETS)[number];
+
+export const IMAGE_PDF_LAYOUT_PRESET_LABELS: Record<
+  ImagePdfLayoutPreset,
+  string
+> = {
+  crystal_profile: "Piccola",
+  image_text: "Larga",
+  journal: "Media",
+  title_page: "Pagina immagine",
+};
+
+export const IMAGE_PDF_LAYOUT_OPTIONS = IMAGE_PDF_LAYOUT_PRESETS.map(
+  (value) => ({
+    value,
+    label: IMAGE_PDF_LAYOUT_PRESET_LABELS[value],
+  }),
+);
+
 export const PRINT_VISIBILITIES = [
   "print",
   "internal_only",

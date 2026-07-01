@@ -113,6 +113,13 @@ type EmbeddedPdfImage = {
   image: PDFImage;
 };
 
+type PdfImageLayout = {
+  maxHeightRatio: number;
+  maxWidthRatio: number;
+  pageOnly: boolean;
+  spacingAfter: number;
+};
+
 const PAGE_SIZES: Record<string, PageSize> = {
   "5x8": {
     height: 8 * POINTS_PER_INCH,
@@ -708,6 +715,42 @@ function getImagePrompt(block: PreviewBlock) {
   return block.body || block.assetPrompt || block.assetAltText || "";
 }
 
+function getPdfImageLayout(layoutPreset: string): PdfImageLayout {
+  if (layoutPreset === "crystal_profile") {
+    return {
+      maxHeightRatio: 0.25,
+      maxWidthRatio: 0.45,
+      pageOnly: false,
+      spacingAfter: 16,
+    };
+  }
+
+  if (layoutPreset === "journal") {
+    return {
+      maxHeightRatio: 0.35,
+      maxWidthRatio: 0.7,
+      pageOnly: false,
+      spacingAfter: 18,
+    };
+  }
+
+  if (layoutPreset === "title_page") {
+    return {
+      maxHeightRatio: 0.75,
+      maxWidthRatio: 1,
+      pageOnly: true,
+      spacingAfter: 24,
+    };
+  }
+
+  return {
+    maxHeightRatio: 0.4,
+    maxWidthRatio: 1,
+    pageOnly: false,
+    spacingAfter: 18,
+  };
+}
+
 function drawImagePlaceholder(
   state: LayoutState,
   block: PreviewBlock,
@@ -817,11 +860,17 @@ async function drawUploadedImage(
       return false;
     }
 
+    const layout = getPdfImageLayout(block.layoutPreset);
+
+    if (layout.pageOnly && !isAtPageTop(state)) {
+      addPage(state);
+    }
+
     const contentHeight = getContentTopY(state) - getContentBottomY(state);
-    const maxImageWidth = state.contentWidth;
+    const maxImageWidth = state.contentWidth * layout.maxWidthRatio;
     const maxImageHeight = Math.max(
       72,
-      Math.min(state.pageHeight * 0.4, contentHeight - 24),
+      Math.min(state.pageHeight * layout.maxHeightRatio, contentHeight - 24),
     );
     const scale = Math.min(
       maxImageWidth / image.width,
@@ -831,10 +880,12 @@ async function drawUploadedImage(
     const drawWidth = image.width * scale;
     const drawHeight = image.height * scale;
 
-    ensureSpace(state, drawHeight + 18);
+    ensureSpace(state, drawHeight + layout.spacingAfter);
 
     const x = state.x + (state.contentWidth - drawWidth) / 2;
-    const y = state.y - drawHeight;
+    const y = layout.pageOnly
+      ? getContentBottomY(state) + (contentHeight - drawHeight) / 2
+      : state.y - drawHeight;
 
     state.page.drawImage(image, {
       height: drawHeight,
@@ -842,7 +893,9 @@ async function drawUploadedImage(
       x,
       y,
     });
-    state.y -= drawHeight + 18;
+    state.y = layout.pageOnly
+      ? getContentBottomY(state) - 1
+      : state.y - drawHeight - layout.spacingAfter;
 
     return true;
   } catch (error: unknown) {

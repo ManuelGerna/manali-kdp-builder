@@ -47,6 +47,7 @@ export type UpdateSectionBlockInput = {
   body?: string | null;
   bookId: string;
   editorNotes?: string | null;
+  layoutPreset?: BlockLayoutPreset;
   printVisibility?: PrintVisibility;
   sectionId: string;
   title?: string | null;
@@ -71,6 +72,11 @@ export type SectionBlockIdentityInput = {
 export type UpdateSectionBlockVisibilityInput = SectionBlockIdentityInput & {
   actor: OwnershipActor;
   printVisibility: PrintVisibility;
+};
+
+export type UpdateSectionBlockLayoutInput = SectionBlockIdentityInput & {
+  actor: OwnershipActor;
+  layoutPreset: BlockLayoutPreset;
 };
 
 export type PageBreakAfterBlockInput = SectionBlockIdentityInput & {
@@ -318,6 +324,10 @@ export async function updateSectionBlock(
     updatePayload.editor_notes = input.editorNotes;
   }
 
+  if (input.layoutPreset !== undefined) {
+    updatePayload.layout_preset = input.layoutPreset;
+  }
+
   if (input.printVisibility !== undefined) {
     updatePayload.print_visibility = input.printVisibility;
   }
@@ -343,6 +353,7 @@ export async function updateSectionBlock(
       bookIdTail: idTail(input.bookId),
       sectionIdTail: idTail(input.sectionId),
       blockType: input.blockType,
+      layoutPreset: input.layoutPreset,
       printVisibility: input.printVisibility,
     });
 
@@ -647,6 +658,20 @@ export async function updateSectionBlockVisibility(
     blockId: input.blockId,
     bookId: input.bookId,
     printVisibility: input.printVisibility,
+    sectionId: input.sectionId,
+  });
+}
+
+export async function updateSectionBlockLayout(
+  supabase: KdpSupabaseClient,
+  input: UpdateSectionBlockLayoutInput,
+): Promise<RepositoryResult<{ blockId: string }>> {
+  return updateSectionBlock(supabase, {
+    actor: input.actor,
+    blockId: input.blockId,
+    blockType: "image_prompt",
+    bookId: input.bookId,
+    layoutPreset: input.layoutPreset,
     sectionId: input.sectionId,
   });
 }

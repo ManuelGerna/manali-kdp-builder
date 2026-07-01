@@ -5,10 +5,12 @@ import { redirect } from "next/navigation";
 import { createAsset, deleteAsset, updateAssetUpload } from "@/lib/kdp/assets";
 import { touchBookOwnership } from "@/lib/kdp/books";
 import {
+  IMAGE_PDF_LAYOUT_PRESETS,
   PRINT_VISIBILITIES,
   SECTION_LAYOUT_PRESETS,
   SECTION_STATUSES,
   SECTION_TYPES,
+  type ImagePdfLayoutPreset,
   type PrintVisibility,
   type SectionLayoutPreset,
   type SectionStatus,
@@ -21,6 +23,7 @@ import {
   listSectionBlocks,
   moveSectionBlock,
   removePageBreakAfterBlock,
+  updateSectionBlockLayout,
   updateSectionBlockVisibility,
   updateTextSectionBlock,
   type MoveSectionBlockDirection,
@@ -69,6 +72,8 @@ const SECTION_TYPE_VALUES: readonly string[] = SECTION_TYPES;
 const SECTION_STATUS_VALUES: readonly string[] = SECTION_STATUSES;
 const SECTION_LAYOUT_PRESET_VALUES: readonly string[] = SECTION_LAYOUT_PRESETS;
 const PRINT_VISIBILITY_VALUES: readonly string[] = PRINT_VISIBILITIES;
+const IMAGE_PDF_LAYOUT_PRESET_VALUES: readonly string[] =
+  IMAGE_PDF_LAYOUT_PRESETS;
 const KDP_ASSETS_BUCKET = "kdp-assets";
 const MAX_IMAGE_UPLOAD_BYTES = 10 * 1024 * 1024;
 const IMAGE_UPLOAD_TYPES = {
@@ -217,6 +222,10 @@ function isBlockMoveDirection(
 
 function isPrintVisibility(value: string): value is PrintVisibility {
   return PRINT_VISIBILITY_VALUES.includes(value);
+}
+
+function isImagePdfLayoutPreset(value: string): value is ImagePdfLayoutPreset {
+  return IMAGE_PDF_LAYOUT_PRESET_VALUES.includes(value);
 }
 
 function getFields(formData: FormData) {
@@ -1334,6 +1343,65 @@ export async function autosaveSectionBlockVisibilityAction(
     blockId,
     bookId,
     printVisibility,
+    sectionId,
+  });
+
+  if (blockResult.data === null) {
+    return autosaveError(blockResult.error);
+  }
+
+  const ownershipError = await touchBookAfterContentChange(
+    supabase,
+    bookId,
+    actor,
+  );
+
+  if (ownershipError) {
+    return autosaveError(ownershipError);
+  }
+
+  revalidateBookContent(bookId);
+
+  return autosaveSuccess();
+}
+
+export async function autosaveImageBlockLayoutAction(
+  _previousState: AutosaveActionState,
+  formData: FormData,
+): Promise<AutosaveActionState> {
+  const bookId = getString(formData, "book_id");
+  const sectionId = getString(formData, "section_id");
+  const blockId = getString(formData, "block_id");
+  const layoutPreset = getString(formData, "layout_preset");
+
+  if (
+    !bookId ||
+    !sectionId ||
+    !blockId ||
+    !isImagePdfLayoutPreset(layoutPreset)
+  ) {
+    return autosaveError("Layout immagine non valido.");
+  }
+
+  const { supabase, actor, error } = await getAuthenticatedSupabase(
+    "autosave-image-block-layout",
+  );
+
+  if (!supabase || !actor) {
+    return autosaveError(error);
+  }
+
+  const bookAccessError = await getBookAccessError(supabase, bookId);
+
+  if (bookAccessError) {
+    return autosaveError(bookAccessError);
+  }
+
+  const blockResult = await updateSectionBlockLayout(supabase, {
+    actor,
+    blockId,
+    bookId,
+    layoutPreset,
     sectionId,
   });
 

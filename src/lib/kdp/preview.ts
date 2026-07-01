@@ -38,6 +38,7 @@ export type PreviewBlock = {
   id: string;
   isImagePlaceholder: boolean;
   isPageBreak: boolean;
+  layoutPreset: string;
   sortOrder: number;
   title: string | null;
 };
@@ -153,6 +154,7 @@ function toPreviewBlock(
       block.block_type === "image_prompt" ||
       Boolean(asset && asset.status === "placeholder"),
     isPageBreak: block.block_type === "page_break",
+    layoutPreset: block.layout_preset,
     sortOrder: block.sort_order,
     title: block.title,
   };

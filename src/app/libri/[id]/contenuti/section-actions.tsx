@@ -4,6 +4,7 @@ import { useActionState, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useFormStatus } from "react-dom";
 import {
+  autosaveImageBlockLayoutAction,
   autosavePageBreakAfterBlockAction,
   autosaveSectionBlockVisibilityAction,
   createImagePlaceholderBlockAction,
@@ -17,7 +18,10 @@ import {
   uploadImageForBlockAction,
   type AutosaveActionState,
 } from "@/app/libri/[id]/contenuti/actions";
-import { PRINT_VISIBILITY_OPTIONS } from "@/lib/kdp/constants";
+import {
+  IMAGE_PDF_LAYOUT_OPTIONS,
+  PRINT_VISIBILITY_OPTIONS,
+} from "@/lib/kdp/constants";
 import type { KdpAsset } from "@/lib/kdp/assets";
 import type {
   KdpSectionBlock,
@@ -30,6 +34,12 @@ const AUTOSAVE_INITIAL_STATE: AutosaveActionState = {
   savedAt: null,
   status: "idle",
 };
+
+function getEditableImageLayout(layoutPreset: string) {
+  return IMAGE_PDF_LAYOUT_OPTIONS.some((option) => option.value === layoutPreset)
+    ? layoutPreset
+    : "image_text";
+}
 
 function MoveButton({
   disabled,
@@ -410,6 +420,86 @@ export function UpdateSectionBlockVisibilityForm({
         value={selectedVisibility}
       >
         {PRINT_VISIBILITY_OPTIONS.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+
+      <AutosaveFeedback pending={pending} state={state} />
+    </form>
+  );
+}
+
+export function UpdateImageBlockLayoutForm({
+  block,
+}: {
+  block: Pick<KdpSectionBlock, "book_id" | "id" | "layout_preset" | "section_id">;
+}) {
+  const router = useRouter();
+  const [state, formAction, pending] = useActionState(
+    autosaveImageBlockLayoutAction,
+    AUTOSAVE_INITIAL_STATE,
+  );
+  const [selectedLayout, setSelectedLayout] = useState(
+    getEditableImageLayout(block.layout_preset),
+  );
+  const [lastSavedLayout, setLastSavedLayout] = useState(
+    getEditableImageLayout(block.layout_preset),
+  );
+  const handledSaveAt = useRef<number | null>(null);
+
+  useEffect(() => {
+    const editableLayout = getEditableImageLayout(block.layout_preset);
+
+    setSelectedLayout(editableLayout);
+    setLastSavedLayout(editableLayout);
+  }, [block.layout_preset]);
+
+  useEffect(() => {
+    if (state.status === "success" && !state.savedAt) {
+      return;
+    }
+
+    if (state.status === "success") {
+      if (handledSaveAt.current === state.savedAt) {
+        return;
+      }
+
+      handledSaveAt.current = state.savedAt;
+      setLastSavedLayout(selectedLayout);
+      router.refresh();
+      return;
+    }
+
+    if (state.status === "error") {
+      setSelectedLayout(lastSavedLayout);
+    }
+  }, [
+    lastSavedLayout,
+    router,
+    selectedLayout,
+    state.savedAt,
+    state.status,
+  ]);
+
+  return (
+    <form action={formAction} className="block-visibility-form">
+      <input name="book_id" type="hidden" value={block.book_id} />
+      <input name="section_id" type="hidden" value={block.section_id} />
+      <input name="block_id" type="hidden" value={block.id} />
+
+      <label htmlFor={`image_layout_${block.id}`}>Layout immagine nel PDF</label>
+      <select
+        id={`image_layout_${block.id}`}
+        name="layout_preset"
+        onChange={(event) => {
+          setSelectedLayout(event.currentTarget.value);
+          event.currentTarget.form?.requestSubmit();
+        }}
+        value={selectedLayout}
+      >
+        {IMAGE_PDF_LAYOUT_OPTIONS.map((option) => (
           <option key={option.value} value={option.value}>
             {option.label}
           </option>

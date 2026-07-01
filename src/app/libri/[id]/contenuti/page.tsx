@@ -44,6 +44,7 @@ import {
   MoveSectionBlockForm,
   MoveSectionForm,
   PageBreakAfterBlockForm,
+  UpdateImageBlockLayoutForm,
   UpdateSectionBlockVisibilityForm,
   UpdateTextBlockForm,
   UploadImageForBlockForm,
@@ -460,6 +461,7 @@ function ImageAssetPanel({
         </p>
       ) : null}
 
+      <UpdateImageBlockLayoutForm block={block} />
       <UploadImageForBlockForm asset={asset} block={block} />
     </div>
   );
