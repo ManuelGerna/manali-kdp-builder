@@ -787,11 +787,6 @@ button {
   background: var(--warning-bg);
 }
 
-.section-block-item-page_break {
-  border-left-color: var(--brand);
-  background: var(--surface-tinted);
-}
-
 .section-panel-note {
   margin: 0;
   color: var(--muted);
