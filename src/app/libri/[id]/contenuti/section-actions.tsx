@@ -4,11 +4,20 @@ import { useFormStatus } from "react-dom";
 import {
   createImagePlaceholderBlockAction,
   createTextBlockAction,
+  deleteSectionBlockAction,
   deleteSectionAction,
+  moveSectionBlockAction,
   moveSectionAction,
+  updateSectionBlockVisibilityAction,
   updateTextBlockAction,
 } from "@/app/libri/[id]/contenuti/actions";
-import type { KdpSectionBlock } from "@/lib/kdp/section-blocks";
+import {
+  PRINT_VISIBILITY_OPTIONS,
+} from "@/lib/kdp/constants";
+import type {
+  KdpSectionBlock,
+  MoveSectionBlockDirection,
+} from "@/lib/kdp/section-blocks";
 import type { MoveSectionDirection } from "@/lib/kdp/sections";
 
 function MoveButton({
@@ -71,6 +80,16 @@ function TextBlockButton({
   );
 }
 
+function VisibilityButton() {
+  const { pending } = useFormStatus();
+
+  return (
+    <button className="secondary-button" disabled={pending} type="submit">
+      {pending ? "Salvataggio..." : "Salva visibilita"}
+    </button>
+  );
+}
+
 export function MoveSectionForm({
   bookId,
   direction,
@@ -89,6 +108,31 @@ export function MoveSectionForm({
       <input name="direction" type="hidden" value={direction} />
       <MoveButton
         disabled={disabled}
+        label={direction === "up" ? "Sposta su" : "Sposta giu"}
+      />
+    </form>
+  );
+}
+
+export function MoveSectionBlockForm({
+  blockId,
+  bookId,
+  direction,
+  sectionId,
+}: {
+  blockId: string;
+  bookId: string;
+  direction: MoveSectionBlockDirection;
+  sectionId: string;
+}) {
+  return (
+    <form action={moveSectionBlockAction} className="inline-form">
+      <input name="book_id" type="hidden" value={bookId} />
+      <input name="section_id" type="hidden" value={sectionId} />
+      <input name="block_id" type="hidden" value={blockId} />
+      <input name="direction" type="hidden" value={direction} />
+      <MoveButton
+        disabled={false}
         label={direction === "up" ? "Sposta su" : "Sposta giu"}
       />
     </form>
@@ -117,6 +161,70 @@ export function DeleteSectionForm({
       <input name="book_id" type="hidden" value={bookId} />
       <input name="section_id" type="hidden" value={sectionId} />
       <DeleteButton />
+    </form>
+  );
+}
+
+export function DeleteSectionBlockForm({
+  blockId,
+  bookId,
+  label,
+  sectionId,
+}: {
+  blockId: string;
+  bookId: string;
+  label: string;
+  sectionId: string;
+}) {
+  return (
+    <form
+      action={deleteSectionBlockAction}
+      className="inline-form"
+      onSubmit={(event) => {
+        if (!window.confirm(`Eliminare il blocco "${label}"?`)) {
+          event.preventDefault();
+        }
+      }}
+    >
+      <input name="book_id" type="hidden" value={bookId} />
+      <input name="section_id" type="hidden" value={sectionId} />
+      <input name="block_id" type="hidden" value={blockId} />
+      <DeleteButton />
+    </form>
+  );
+}
+
+export function UpdateSectionBlockVisibilityForm({
+  block,
+}: {
+  block: Pick<
+    KdpSectionBlock,
+    "book_id" | "id" | "print_visibility" | "section_id"
+  >;
+}) {
+  return (
+    <form
+      action={updateSectionBlockVisibilityAction}
+      className="block-visibility-form"
+    >
+      <input name="book_id" type="hidden" value={block.book_id} />
+      <input name="section_id" type="hidden" value={block.section_id} />
+      <input name="block_id" type="hidden" value={block.id} />
+
+      <label htmlFor={`block_visibility_${block.id}`}>Visibilita PDF</label>
+      <select
+        defaultValue={block.print_visibility}
+        id={`block_visibility_${block.id}`}
+        name="print_visibility"
+      >
+        {PRINT_VISIBILITY_OPTIONS.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+
+      <VisibilityButton />
     </form>
   );
 }

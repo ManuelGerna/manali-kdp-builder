@@ -5,16 +5,22 @@ import { redirect } from "next/navigation";
 import { createAsset, deleteAsset } from "@/lib/kdp/assets";
 import { touchBookOwnership } from "@/lib/kdp/books";
 import {
+  PRINT_VISIBILITIES,
   SECTION_LAYOUT_PRESETS,
   SECTION_STATUSES,
   SECTION_TYPES,
+  type PrintVisibility,
   type SectionLayoutPreset,
   type SectionStatus,
   type SectionType,
 } from "@/lib/kdp/constants";
 import {
   createSectionBlock,
+  deleteSectionBlock,
+  moveSectionBlock,
+  updateSectionBlockVisibility,
   updateTextSectionBlock,
+  type MoveSectionBlockDirection,
 } from "@/lib/kdp/section-blocks";
 import {
   createSection,
@@ -52,6 +58,7 @@ export type SectionFormState = {
 const SECTION_TYPE_VALUES: readonly string[] = SECTION_TYPES;
 const SECTION_STATUS_VALUES: readonly string[] = SECTION_STATUSES;
 const SECTION_LAYOUT_PRESET_VALUES: readonly string[] = SECTION_LAYOUT_PRESETS;
+const PRINT_VISIBILITY_VALUES: readonly string[] = PRINT_VISIBILITIES;
 
 function logSectionAction(
   event: string,
@@ -100,6 +107,16 @@ function isMoveDirection(value: string): value is MoveSectionDirection {
   return value === "up" || value === "down";
 }
 
+function isBlockMoveDirection(
+  value: string,
+): value is MoveSectionBlockDirection {
+  return value === "up" || value === "down";
+}
+
+function isPrintVisibility(value: string): value is PrintVisibility {
+  return PRINT_VISIBILITY_VALUES.includes(value);
+}
+
 function getFields(formData: FormData) {
   return {
     section_type: getString(formData, "section_type"),
@@ -137,7 +154,9 @@ function getContentPath(
 
 function revalidateBookContent(bookId: string) {
   revalidatePath(`/libri/${bookId}`);
+  revalidatePath(`/libri/${bookId}/anteprima`);
   revalidatePath(`/libri/${bookId}/contenuti`);
+  revalidatePath(`/libri/${bookId}/export/pdf`);
 }
 
 async function getAuthenticatedSupabase(actionName: string) {
@@ -648,6 +667,163 @@ export async function updateTextBlockAction(formData: FormData) {
 
   revalidateBookContent(bookId);
   redirect(getContentPath(bookId, { status: "block_updated" }));
+}
+
+export async function moveSectionBlockAction(formData: FormData) {
+  const bookId = getString(formData, "book_id");
+  const sectionId = getString(formData, "section_id");
+  const blockId = getString(formData, "block_id");
+  const direction = getString(formData, "direction");
+
+  if (!bookId) {
+    redirect("/libri");
+  }
+
+  if (!sectionId || !blockId || !isBlockMoveDirection(direction)) {
+    redirect(getContentPath(bookId, { error: "Riordino blocco non valido." }));
+  }
+
+  const { supabase, actor, error } =
+    await getAuthenticatedSupabase("move-section-block");
+
+  if (!supabase || !actor) {
+    redirect(getContentPath(bookId, { error }));
+  }
+
+  const bookAccessError = await getBookAccessError(supabase, bookId);
+
+  if (bookAccessError) {
+    redirect(getContentPath(bookId, { error: bookAccessError }));
+  }
+
+  const blockResult = await moveSectionBlock(supabase, {
+    actor,
+    blockId,
+    bookId,
+    direction,
+    sectionId,
+  });
+
+  if (blockResult.data === null) {
+    redirect(getContentPath(bookId, { error: blockResult.error }));
+  }
+
+  const ownershipError = await touchBookAfterContentChange(
+    supabase,
+    bookId,
+    actor,
+  );
+
+  if (ownershipError) {
+    redirect(getContentPath(bookId, { error: ownershipError }));
+  }
+
+  revalidateBookContent(bookId);
+  redirect(getContentPath(bookId, { status: "block_reordered" }));
+}
+
+export async function deleteSectionBlockAction(formData: FormData) {
+  const bookId = getString(formData, "book_id");
+  const sectionId = getString(formData, "section_id");
+  const blockId = getString(formData, "block_id");
+
+  if (!bookId) {
+    redirect("/libri");
+  }
+
+  if (!sectionId || !blockId) {
+    redirect(getContentPath(bookId, { error: "Blocco non valido." }));
+  }
+
+  const { supabase, actor, error } =
+    await getAuthenticatedSupabase("delete-section-block");
+
+  if (!supabase || !actor) {
+    redirect(getContentPath(bookId, { error }));
+  }
+
+  const bookAccessError = await getBookAccessError(supabase, bookId);
+
+  if (bookAccessError) {
+    redirect(getContentPath(bookId, { error: bookAccessError }));
+  }
+
+  const blockResult = await deleteSectionBlock(supabase, {
+    blockId,
+    bookId,
+    sectionId,
+  });
+
+  if (blockResult.data === null) {
+    redirect(getContentPath(bookId, { error: blockResult.error }));
+  }
+
+  const ownershipError = await touchBookAfterContentChange(
+    supabase,
+    bookId,
+    actor,
+  );
+
+  if (ownershipError) {
+    redirect(getContentPath(bookId, { error: ownershipError }));
+  }
+
+  revalidateBookContent(bookId);
+  redirect(getContentPath(bookId, { status: "block_deleted" }));
+}
+
+export async function updateSectionBlockVisibilityAction(formData: FormData) {
+  const bookId = getString(formData, "book_id");
+  const sectionId = getString(formData, "section_id");
+  const blockId = getString(formData, "block_id");
+  const printVisibility = getString(formData, "print_visibility");
+
+  if (!bookId) {
+    redirect("/libri");
+  }
+
+  if (!sectionId || !blockId || !isPrintVisibility(printVisibility)) {
+    redirect(getContentPath(bookId, { error: "Visibilita blocco non valida." }));
+  }
+
+  const { supabase, actor, error } = await getAuthenticatedSupabase(
+    "update-section-block-visibility",
+  );
+
+  if (!supabase || !actor) {
+    redirect(getContentPath(bookId, { error }));
+  }
+
+  const bookAccessError = await getBookAccessError(supabase, bookId);
+
+  if (bookAccessError) {
+    redirect(getContentPath(bookId, { error: bookAccessError }));
+  }
+
+  const blockResult = await updateSectionBlockVisibility(supabase, {
+    actor,
+    blockId,
+    bookId,
+    printVisibility,
+    sectionId,
+  });
+
+  if (blockResult.data === null) {
+    redirect(getContentPath(bookId, { error: blockResult.error }));
+  }
+
+  const ownershipError = await touchBookAfterContentChange(
+    supabase,
+    bookId,
+    actor,
+  );
+
+  if (ownershipError) {
+    redirect(getContentPath(bookId, { error: ownershipError }));
+  }
+
+  revalidateBookContent(bookId);
+  redirect(getContentPath(bookId, { status: "block_visibility_updated" }));
 }
 
 export async function createImagePlaceholderBlockAction(formData: FormData) {

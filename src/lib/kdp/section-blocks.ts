@@ -11,7 +11,7 @@ import {
   type OwnershipActor,
 } from "@/lib/kdp/ownership";
 import type { createClient } from "@/lib/supabase/server";
-import type { Tables } from "@/types/database";
+import type { Tables, TablesUpdate } from "@/types/database";
 
 type KdpSupabaseClient = Awaited<ReturnType<typeof createClient>>;
 
@@ -38,6 +38,39 @@ export type UpdateTextSectionBlockInput = {
   bookId: string;
   sectionId: string;
   title: string | null;
+};
+
+export type UpdateSectionBlockInput = {
+  actor: OwnershipActor;
+  blockId: string;
+  blockType?: BlockType;
+  body?: string | null;
+  bookId: string;
+  editorNotes?: string | null;
+  printVisibility?: PrintVisibility;
+  sectionId: string;
+  title?: string | null;
+};
+
+export type MoveSectionBlockDirection = "up" | "down";
+
+export type MoveSectionBlockInput = {
+  actor: OwnershipActor;
+  blockId: string;
+  bookId: string;
+  direction: MoveSectionBlockDirection;
+  sectionId: string;
+};
+
+export type SectionBlockIdentityInput = {
+  blockId: string;
+  bookId: string;
+  sectionId: string;
+};
+
+export type UpdateSectionBlockVisibilityInput = SectionBlockIdentityInput & {
+  actor: OwnershipActor;
+  printVisibility: PrintVisibility;
 };
 
 type LogContext = Record<string, boolean | number | string | null | undefined>;
@@ -162,6 +195,37 @@ async function getNextBlockSortOrder(
   };
 }
 
+async function listSectionBlocksInSection(
+  supabase: KdpSupabaseClient,
+  bookId: string,
+  sectionId: string,
+): Promise<RepositoryResult<KdpSectionBlock[]>> {
+  const { data, error } = await supabase
+    .from("kdp_section_blocks")
+    .select("*")
+    .eq("book_id", bookId)
+    .eq("section_id", sectionId)
+    .order("sort_order", { ascending: true })
+    .order("created_at", { ascending: true });
+
+  if (error) {
+    logBlockError("list_section_blocks_in_section", error, {
+      bookIdTail: idTail(bookId),
+      sectionIdTail: idTail(sectionId),
+    });
+
+    return {
+      data: null,
+      error: "Non riesco a caricare i blocchi della sezione.",
+    };
+  }
+
+  return {
+    data: data ?? [],
+    error: null,
+  };
+}
+
 export async function createSectionBlock(
   supabase: KdpSupabaseClient,
   input: SectionBlockInput,
@@ -221,36 +285,59 @@ export async function createSectionBlock(
   };
 }
 
-export async function updateTextSectionBlock(
+export async function updateSectionBlock(
   supabase: KdpSupabaseClient,
-  input: UpdateTextSectionBlockInput,
+  input: UpdateSectionBlockInput,
 ): Promise<RepositoryResult<{ blockId: string }>> {
-  const { data, error } = await supabase
+  const updatePayload: TablesUpdate<"kdp_section_blocks"> = {
+    ...getUpdateOwnershipFields(input.actor),
+  };
+
+  if ("title" in input) {
+    updatePayload.title = input.title;
+  }
+
+  if ("body" in input) {
+    updatePayload.body = input.body;
+  }
+
+  if ("editorNotes" in input) {
+    updatePayload.editor_notes = input.editorNotes;
+  }
+
+  if (input.printVisibility !== undefined) {
+    updatePayload.print_visibility = input.printVisibility;
+  }
+
+  let updateQuery = supabase
     .from("kdp_section_blocks")
-    .update({
-      title: input.title,
-      body: input.body,
-      ...getUpdateOwnershipFields(input.actor),
-    })
+    .update(updatePayload)
     .eq("book_id", input.bookId)
     .eq("section_id", input.sectionId)
-    .eq("id", input.blockId)
-    .eq("block_type", "text")
+    .eq("id", input.blockId);
+
+  if (input.blockType) {
+    updateQuery = updateQuery.eq("block_type", input.blockType);
+  }
+
+  const { data, error } = await updateQuery
     .select("id")
     .maybeSingle();
 
   if (error) {
-    logBlockError("update_text_section_block", error, {
+    logBlockError("update_section_block", error, {
       blockIdTail: idTail(input.blockId),
       bookIdTail: idTail(input.bookId),
       sectionIdTail: idTail(input.sectionId),
+      blockType: input.blockType,
+      printVisibility: input.printVisibility,
     });
 
     return {
       data: null,
       error: getBlockPersistenceMessage(
         error,
-        "Non riesco ad aggiornare il blocco testo. Controlla i dati e riprova.",
+        "Non riesco ad aggiornare il blocco contenuto. Controlla i dati e riprova.",
       ),
     };
   }
@@ -258,7 +345,7 @@ export async function updateTextSectionBlock(
   if (!data) {
     return {
       data: null,
-      error: "Blocco testo non trovato o non accessibile.",
+      error: "Blocco contenuto non trovato o non accessibile.",
     };
   }
 
@@ -268,4 +355,239 @@ export async function updateTextSectionBlock(
     },
     error: null,
   };
+}
+
+export async function updateTextSectionBlock(
+  supabase: KdpSupabaseClient,
+  input: UpdateTextSectionBlockInput,
+): Promise<RepositoryResult<{ blockId: string }>> {
+  return updateSectionBlock(supabase, {
+    actor: input.actor,
+    blockId: input.blockId,
+    blockType: "text",
+    body: input.body,
+    bookId: input.bookId,
+    sectionId: input.sectionId,
+    title: input.title,
+  });
+}
+
+async function updateSectionBlockSortOrder(
+  supabase: KdpSupabaseClient,
+  input: SectionBlockIdentityInput & {
+    actor: OwnershipActor;
+    sortOrder: number;
+  },
+): Promise<RepositoryResult<{ blockId: string }>> {
+  const { data, error } = await supabase
+    .from("kdp_section_blocks")
+    .update({
+      sort_order: input.sortOrder,
+      ...getUpdateOwnershipFields(input.actor),
+    })
+    .eq("book_id", input.bookId)
+    .eq("section_id", input.sectionId)
+    .eq("id", input.blockId)
+    .select("id")
+    .maybeSingle();
+
+  if (error) {
+    logBlockError("update_section_block_sort_order", error, {
+      blockIdTail: idTail(input.blockId),
+      bookIdTail: idTail(input.bookId),
+      sectionIdTail: idTail(input.sectionId),
+      sortOrder: input.sortOrder,
+    });
+
+    return {
+      data: null,
+      error: getBlockPersistenceMessage(
+        error,
+        "Non riesco a riordinare i blocchi contenuto. Riprova tra poco.",
+      ),
+    };
+  }
+
+  if (!data) {
+    return {
+      data: null,
+      error: "Blocco contenuto non trovato o non accessibile.",
+    };
+  }
+
+  return {
+    data: {
+      blockId: data.id,
+    },
+    error: null,
+  };
+}
+
+async function normalizeSectionBlockSortOrder(
+  supabase: KdpSupabaseClient,
+  blocks: KdpSectionBlock[],
+  actor: OwnershipActor,
+): Promise<RepositoryResult<{ moved: boolean }>> {
+  for (const [index, block] of blocks.entries()) {
+    const nextSortOrder = index + 1;
+
+    if (block.sort_order === nextSortOrder) {
+      continue;
+    }
+
+    const updateResult = await updateSectionBlockSortOrder(supabase, {
+      actor,
+      blockId: block.id,
+      bookId: block.book_id,
+      sectionId: block.section_id,
+      sortOrder: nextSortOrder,
+    });
+
+    if (updateResult.data === null) {
+      return updateResult;
+    }
+  }
+
+  return {
+    data: {
+      moved: true,
+    },
+    error: null,
+  };
+}
+
+export async function moveSectionBlock(
+  supabase: KdpSupabaseClient,
+  input: MoveSectionBlockInput,
+): Promise<RepositoryResult<{ moved: boolean }>> {
+  const blocksResult = await listSectionBlocksInSection(
+    supabase,
+    input.bookId,
+    input.sectionId,
+  );
+
+  if (blocksResult.data === null) {
+    return blocksResult;
+  }
+
+  const blocks = blocksResult.data;
+  const currentIndex = blocks.findIndex((block) => block.id === input.blockId);
+
+  if (currentIndex === -1) {
+    return {
+      data: null,
+      error: "Blocco contenuto non trovato o non accessibile.",
+    };
+  }
+
+  const targetIndex =
+    input.direction === "up" ? currentIndex - 1 : currentIndex + 1;
+
+  if (targetIndex < 0 || targetIndex >= blocks.length) {
+    return {
+      data: {
+        moved: false,
+      },
+      error: null,
+    };
+  }
+
+  const currentBlock = blocks[currentIndex];
+  const targetBlock = blocks[targetIndex];
+
+  if (currentBlock.sort_order === targetBlock.sort_order) {
+    const reordered = [...blocks];
+    const [movedBlock] = reordered.splice(currentIndex, 1);
+    reordered.splice(targetIndex, 0, movedBlock);
+
+    return normalizeSectionBlockSortOrder(supabase, reordered, input.actor);
+  }
+
+  const currentUpdateResult = await updateSectionBlockSortOrder(supabase, {
+    actor: input.actor,
+    blockId: currentBlock.id,
+    bookId: input.bookId,
+    sectionId: input.sectionId,
+    sortOrder: targetBlock.sort_order,
+  });
+
+  if (currentUpdateResult.data === null) {
+    return currentUpdateResult;
+  }
+
+  const targetUpdateResult = await updateSectionBlockSortOrder(supabase, {
+    actor: input.actor,
+    blockId: targetBlock.id,
+    bookId: input.bookId,
+    sectionId: input.sectionId,
+    sortOrder: currentBlock.sort_order,
+  });
+
+  if (targetUpdateResult.data === null) {
+    return targetUpdateResult;
+  }
+
+  return {
+    data: {
+      moved: true,
+    },
+    error: null,
+  };
+}
+
+export async function deleteSectionBlock(
+  supabase: KdpSupabaseClient,
+  input: SectionBlockIdentityInput,
+): Promise<RepositoryResult<{ blockId: string }>> {
+  const { data, error } = await supabase
+    .from("kdp_section_blocks")
+    .delete()
+    .eq("book_id", input.bookId)
+    .eq("section_id", input.sectionId)
+    .eq("id", input.blockId)
+    .select("id")
+    .maybeSingle();
+
+  if (error) {
+    logBlockError("delete_section_block", error, {
+      blockIdTail: idTail(input.blockId),
+      bookIdTail: idTail(input.bookId),
+      sectionIdTail: idTail(input.sectionId),
+    });
+
+    return {
+      data: null,
+      error: getBlockPersistenceMessage(
+        error,
+        "Non riesco a eliminare il blocco contenuto. Riprova tra poco.",
+      ),
+    };
+  }
+
+  if (!data) {
+    return {
+      data: null,
+      error: "Blocco contenuto non trovato o non accessibile.",
+    };
+  }
+
+  return {
+    data: {
+      blockId: data.id,
+    },
+    error: null,
+  };
+}
+
+export async function updateSectionBlockVisibility(
+  supabase: KdpSupabaseClient,
+  input: UpdateSectionBlockVisibilityInput,
+): Promise<RepositoryResult<{ blockId: string }>> {
+  return updateSectionBlock(supabase, {
+    actor: input.actor,
+    blockId: input.blockId,
+    bookId: input.bookId,
+    printVisibility: input.printVisibility,
+    sectionId: input.sectionId,
+  });
 }
