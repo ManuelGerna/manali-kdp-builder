@@ -217,10 +217,10 @@ export const BLOCK_LAYOUT_PRESET_OPTIONS = BLOCK_LAYOUT_PRESETS.map(
 );
 
 export const IMAGE_PDF_LAYOUT_PRESETS = [
-  "crystal_profile",
-  "journal",
   "image_text",
   "title_page",
+  "journal",
+  "crystal_profile",
 ] as const;
 
 export type ImagePdfLayoutPreset = (typeof IMAGE_PDF_LAYOUT_PRESETS)[number];
@@ -230,7 +230,7 @@ export const IMAGE_PDF_LAYOUT_PRESET_LABELS: Record<
   string
 > = {
   crystal_profile: "Piccola",
-  image_text: "Larga",
+  image_text: "Larga - consigliata",
   journal: "Media",
   title_page: "Pagina immagine",
 };
