@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
@@ -47,6 +48,7 @@ import {
   UpdateTextBlockForm,
   UploadImageForBlockForm,
 } from "./section-actions";
+import { ContentAnchorScroll } from "./content-anchor-scroll";
 import { SectionCreateForm } from "./section-create-form";
 import { SectionEditForm } from "./section-edit-form";
 
@@ -918,6 +920,9 @@ export default async function BookContentsPage({
         </>
       }
     >
+      <Suspense fallback={null}>
+        <ContentAnchorScroll />
+      </Suspense>
       <div className="content-layout">
         {pageMessage ? (
           <p
