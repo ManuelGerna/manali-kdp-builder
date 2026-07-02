@@ -1730,7 +1730,7 @@ button {
   display: grid;
   gap: 8px;
   min-width: 0;
-  overflow-x: auto;
+  overflow-x: visible;
   padding-bottom: 2px;
 }
 
@@ -1743,21 +1743,36 @@ button {
 }
 
 .imported-page-preview-table {
-  width: max(100%, 620px);
-  table-layout: auto;
+  width: 100%;
+  table-layout: fixed;
   border-collapse: collapse;
   font-size: 0.82rem;
+}
+
+.imported-page-preview-table-compact {
+  font-size: 0.72rem;
+  line-height: 1.25;
 }
 
 .imported-page-preview-table th,
 .imported-page-preview-table td {
   min-height: 28px;
   border: 1px solid #dcd3e4;
-  min-width: 132px;
   padding: 7px;
   text-align: left;
   vertical-align: top;
   overflow-wrap: anywhere;
+}
+
+.imported-page-preview-table-compact th,
+.imported-page-preview-table-compact td {
+  min-height: 22px;
+  padding: 5px;
+}
+
+.imported-page-preview-table th:first-child,
+.imported-page-preview-table td:first-child {
+  min-width: 82px;
 }
 
 .imported-page-preview-table th {
@@ -1855,6 +1870,16 @@ button {
 .imported-page-preview-technical dd {
   color: #4e4355;
   font-size: 0.84rem;
+}
+
+@media (max-width: 560px) {
+  .imported-page-preview-table-shell-compact {
+    overflow-x: auto;
+  }
+
+  .imported-page-preview-table-compact {
+    min-width: 520px;
+  }
 }
 
 .validation-layout {

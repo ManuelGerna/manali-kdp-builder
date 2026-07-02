@@ -96,11 +96,26 @@ function PreviewTable({ table }: { table: ImportedPreviewTable }) {
   const visibleRowCount = Math.min(Math.max(plannedRows, table.rows.length), 14);
   const blankRowCount = Math.max(0, visibleRowCount - table.rows.length);
   const hiddenRowCount = Math.max(0, plannedRows - visibleRowCount);
+  const compact = table.layout === "compact";
+  const shellClassName = [
+    "imported-page-preview-table-shell",
+    compact ? "imported-page-preview-table-shell-compact" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+  const tableClassName = [
+    "imported-page-preview-table",
+    compact ? "imported-page-preview-table-compact" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   return (
-    <div className="imported-page-preview-table-shell">
+    // The future PDF renderer must not rely on scrollbars; this HTML preview
+    // keeps horizontal overflow only as a narrow mobile fallback.
+    <div className={shellClassName}>
       {table.title ? <h5>{table.title}</h5> : null}
-      <table className="imported-page-preview-table">
+      <table className={tableClassName}>
         <thead>
           <tr>
             {fallbackColumns.map((column) => (

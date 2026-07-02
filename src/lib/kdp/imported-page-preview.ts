@@ -2,6 +2,7 @@ import type { Json } from "../../types/database.ts";
 
 export type ImportedPreviewTable = {
   columns: string[];
+  layout: "compact" | "standard";
   rows: Array<Record<string, string> | string[] | string>;
   rowCount: number;
   title?: string;
@@ -199,7 +200,9 @@ function toRowString(value: unknown): string {
 }
 
 function toEntryValue(value: unknown) {
-  return isRecord(value) || Array.isArray(value) ? toRowString(value) : toText(value);
+  return isRecord(value) || Array.isArray(value)
+    ? toRowString(value)
+    : toText(value);
 }
 
 function toRows(value: unknown): ImportedPreviewTable["rows"] {
@@ -279,6 +282,31 @@ function getColumns(source: Record<string, unknown>) {
   );
 }
 
+function getRowColumnCount(row: ImportedPreviewTable["rows"][number]) {
+  if (Array.isArray(row)) {
+    return row.length;
+  }
+
+  if (isRecord(row)) {
+    return Object.keys(row).length;
+  }
+
+  return row ? 1 : 0;
+}
+
+function getTableLayout(
+  columns: string[],
+  rows: ImportedPreviewTable["rows"],
+  rowCount: number,
+): ImportedPreviewTable["layout"] {
+  const columnCount =
+    columns.length > 0
+      ? columns.length
+      : Math.max(0, ...rows.map(getRowColumnCount));
+
+  return columnCount >= 5 || rowCount >= 10 ? "compact" : "standard";
+}
+
 function buildTableFromRecord(
   source: Record<string, unknown>,
   title?: string,
@@ -294,6 +322,7 @@ function buildTableFromRecord(
 
   return {
     columns,
+    layout: getTableLayout(columns, rows, rowCount),
     rowCount,
     rows,
     title,

@@ -702,7 +702,44 @@ test("builds preview tables from columns and planned row counts", () => {
   assert.equal(model.isEmpty, false);
   assert.equal(model.tables.length, 1);
   assert.deepEqual(model.tables[0].columns, ["Elemento", "Valore"]);
+  assert.equal(model.tables[0].layout, "standard");
   assert.equal(model.tables[0].rowCount, 6);
+  assert.equal(model.tables[0].rows.length, 1);
+});
+
+test("builds compact preview tables without losing wide table content", () => {
+  const model = buildImportedPagePreviewModel({
+    colonne_tabella: [
+      "Colonna A",
+      "Colonna B",
+      "Colonna C",
+      "Colonna D",
+      "Colonna E",
+      "Colonna F",
+    ],
+    numero_righe: 4,
+    righe: [
+      {
+        "Colonna A": "A1",
+        "Colonna B": "B1",
+        "Colonna C": "C1",
+        "Colonna D": "D1",
+        "Colonna E": "E1",
+        "Colonna F": "F1",
+      },
+    ],
+  });
+
+  assert.equal(model.tables.length, 1);
+  assert.equal(model.tables[0].layout, "compact");
+  assert.deepEqual(model.tables[0].columns, [
+    "Colonna A",
+    "Colonna B",
+    "Colonna C",
+    "Colonna D",
+    "Colonna E",
+    "Colonna F",
+  ]);
   assert.equal(model.tables[0].rows.length, 1);
 });
 
