@@ -59,10 +59,10 @@ function longAiStyleGenericDraft() {
   const sections = sectionPlan
     .map(
       ([id, title, startPage, endPage, pageCount]) => `- id_sezione: "${id}"
-  titolo_sezione: "${title}"
-  pagina_inizio: ${startPage}
-  pagina_fine: ${endPage}
-  pagine: ${pageCount}`,
+titolo_sezione: "${title}"
+pagina_inizio: ${startPage}
+pagina_fine: ${endPage}
+pagine: ${pageCount}`,
     )
     .join("\n");
   const earlyPages = Array.from({ length: 7 }, (_, index) => {
@@ -422,7 +422,9 @@ test("does not stop parsing long AI-style drafts with ambiguous nested lists", (
   const project = importDraft(longAiStyleGenericDraft());
   const codes = issueCodes(project);
 
+  assert.equal(project.importReport.status, "success");
   assert.equal(project.importReport.errors.length, 0);
+  assert.equal(project.importReport.warnings.length, 0);
   assert.equal(project.importReport.summary.targetPageCount, 110);
   assert.equal(project.importReport.summary.generatedPageCount, 110);
   assert.equal(project.importReport.summary.sectionCount, 7);

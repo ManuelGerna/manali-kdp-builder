@@ -262,14 +262,17 @@ const PAGE_SEQUENCE_PAGE_LEVEL_KEYS = new Set(
 );
 
 const PAGE_PLAN_SECTION_START_KEYS = new Set(
-  ["id_sezione", "section_id", "id", "titolo_sezione"].map(normalizeKey),
+  ["id_sezione", "section_id", "id"].map(normalizeKey),
+);
+
+const PAGE_PLAN_SECTION_TITLE_KEYS = new Set(
+  ["titolo_sezione", "titolo", "title"].map(normalizeKey),
 );
 
 const PAGE_PLAN_SECTION_LEVEL_KEYS = new Set(
   [
     ...PAGE_PLAN_SECTION_START_KEYS,
-    "titolo",
-    "title",
+    ...PAGE_PLAN_SECTION_TITLE_KEYS,
     "pagine",
     "page_count",
     "expected_page_count",
@@ -364,6 +367,7 @@ function parseTolerantListItems(input: {
   itemLevelKeys: Set<string>;
   itemStartKeys: Set<string>;
   rawBlock: string;
+  repeatableItemStartKeys?: Set<string>;
 }) {
   const lines = toTolerantLines(input.rawBlock);
   const items: Record<string, unknown>[] = [];
@@ -385,16 +389,35 @@ function parseTolerantListItems(input: {
     }
   }
 
+  function currentItemHasAnyKey(keys: Set<string>) {
+    if (!currentItem) {
+      return false;
+    }
+
+    return Object.keys(currentItem).some((key) => keys.has(normalizeKey(key)));
+  }
+
   for (const line of lines) {
     const bulletContent = stripBullet(line.content);
     const keyValue = getTolerantKeyValue(line);
     const normalizedKey = keyValue ? normalizeKey(keyValue.key) : "";
-    const startsNewItem =
-      Boolean(keyValue && input.itemStartKeys.has(normalizedKey)) &&
+    const repeatableItemStartKeys = input.repeatableItemStartKeys;
+    const startsPrimaryItem =
+      Boolean(keyValue) &&
+      input.itemStartKeys.has(normalizedKey) &&
       (input.alwaysStartOnItemKey ||
         !currentItem ||
         keyValue?.isBullet ||
         line.indent <= currentItemIndent);
+    const startsRepeatableItem =
+      Boolean(keyValue) &&
+      repeatableItemStartKeys !== undefined &&
+      repeatableItemStartKeys.has(normalizedKey) &&
+      (!currentItem ||
+        keyValue?.isBullet ||
+        currentItemHasAnyKey(repeatableItemStartKeys));
+    const startsNewItem =
+      Boolean(keyValue) && (startsPrimaryItem || startsRepeatableItem);
 
     if (keyValue && startsNewItem) {
       flushCurrentItem();
@@ -511,6 +534,7 @@ function parsePagePlanBlock(rawBlock: string) {
     itemLevelKeys: PAGE_PLAN_SECTION_LEVEL_KEYS,
     itemStartKeys: PAGE_PLAN_SECTION_START_KEYS,
     rawBlock,
+    repeatableItemStartKeys: PAGE_PLAN_SECTION_TITLE_KEYS,
   });
 
   if (tolerantSections.length <= countPagePlanSections(parsed)) {
