@@ -91,46 +91,49 @@ function ImportedPrintTable({ table }: { table: ImportedPreviewTable }) {
   const dense = table.layout === "compact";
 
   return (
-    <table
-      className={[
-        "imported-print-table",
-        dense ? "imported-print-table-compact" : "",
-      ]
-        .filter(Boolean)
-        .join(" ")}
-    >
-      <thead>
-        <tr>
-          {columns.map((column) => (
-            <th key={column}>{formatLabel(column)}</th>
+    <div className="imported-print-table-wrap">
+      {table.title ? <p>{table.title}</p> : null}
+      <table
+        className={[
+          "imported-print-table",
+          dense ? "imported-print-table-compact" : "",
+        ]
+          .filter(Boolean)
+          .join(" ")}
+      >
+        <thead>
+          <tr>
+            {columns.map((column) => (
+              <th key={column}>{formatLabel(column)}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {table.rows.slice(0, visibleRowCount).map((row, rowIndex) => (
+            <tr key={`row-${rowIndex}`}>
+              {columns.map((column, columnIndex) => (
+                <td key={`${column}-${columnIndex}`}>
+                  {Array.isArray(row)
+                    ? row[columnIndex] ?? ""
+                    : typeof row === "string"
+                      ? columnIndex === 0
+                        ? row
+                        : ""
+                      : row[column] ?? row[formatLabel(column)] ?? ""}
+                </td>
+              ))}
+            </tr>
           ))}
-        </tr>
-      </thead>
-      <tbody>
-        {table.rows.slice(0, visibleRowCount).map((row, rowIndex) => (
-          <tr key={`row-${rowIndex}`}>
-            {columns.map((column, columnIndex) => (
-              <td key={`${column}-${columnIndex}`}>
-                {Array.isArray(row)
-                  ? row[columnIndex] ?? ""
-                  : typeof row === "string"
-                    ? columnIndex === 0
-                      ? row
-                      : ""
-                    : row[column] ?? row[formatLabel(column)] ?? ""}
-              </td>
-            ))}
-          </tr>
-        ))}
-        {Array.from({ length: blankRowCount }, (_, index) => (
-          <tr key={`blank-${index}`}>
-            {columns.map((column, columnIndex) => (
-              <td key={`${column}-${columnIndex}`}>&nbsp;</td>
-            ))}
-          </tr>
-        ))}
-      </tbody>
-    </table>
+          {Array.from({ length: blankRowCount }, (_, index) => (
+            <tr key={`blank-${index}`}>
+              {columns.map((column, columnIndex) => (
+                <td key={`${column}-${columnIndex}`}>&nbsp;</td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
@@ -154,12 +157,14 @@ function ImportedPrintBlockView({ block }: { block: ImportedPrintBlock }) {
   }
 
   if (block.type === "list") {
+    const ListTag = block.ordered ? "ol" : "ul";
+
     return (
-      <ul className="imported-print-list">
+      <ListTag className="imported-print-list">
         {block.items.map((item) => (
           <li key={item}>{item}</li>
         ))}
-      </ul>
+      </ListTag>
     );
   }
 
@@ -229,9 +234,11 @@ function ImportedPrintPreviewPage({
           </header>
           <div className="imported-print-page-content">
             {page.blocks.length === 0 ? (
-              <p className="imported-print-empty">
-                Contenuto stampabile non disponibile.
-              </p>
+              page.hasPrintableHeader ? null : (
+                <p className="imported-print-empty">
+                  Contenuto stampabile non disponibile.
+                </p>
+              )
             ) : (
               page.blocks.map((block, index) => (
                 <ImportedPrintBlockView block={block} key={index} />

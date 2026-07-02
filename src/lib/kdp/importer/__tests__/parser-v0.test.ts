@@ -946,6 +946,144 @@ test("keeps fields, prompts and tables in the print render model", () => {
 
   assert.deepEqual(
     model.pages[0].blocks.map((block) => block.type),
-    ["text", "fields", "prompts", "tables"],
+    ["text", "fields", "tables", "prompts"],
   );
+});
+
+test("keeps title-only print pages from showing empty content fallback", () => {
+  const model = buildImportedPrintRenderModel({
+    pages: [
+      {
+        content: {
+          sottotitolo: "Sottotitolo generico",
+          titolo: "Titolo generico",
+        },
+        pageNumber: 1,
+        templateId: "template_title",
+      },
+    ],
+  });
+
+  assert.equal(model.pages[0].title, "Titolo generico");
+  assert.equal(model.pages[0].subtitle, "Sottotitolo generico");
+  assert.equal(model.pages[0].hasPrintableHeader, true);
+  assert.equal(model.pages[0].blocks.length, 0);
+  assert.deepEqual(model.warnings.map((warning) => warning.code), []);
+});
+
+test("orders nested structured print blocks without flattening them as pipe text", () => {
+  const model = buildImportedPrintRenderModel({
+    pages: [
+      {
+        content: {
+          blocco_secondario: {
+            passaggi: ["Preparazione", "Verifica", "Chiusura"],
+          },
+          campi_finali: {
+            firma: "",
+            nota_finale: "Spazio conclusivo",
+          },
+          intestazione: {
+            campi: ["Data", "Nome"],
+          },
+          stato_iniziale: {
+            stato: "",
+          },
+          tabella_principale: {
+            colonne_tabella: ["Voce", "Valore"],
+            numero_righe: 3,
+          },
+        },
+        pageNumber: 1,
+        templateId: "template_structured",
+      },
+    ],
+  });
+
+  const blocks = model.pages[0].blocks;
+
+  assert.deepEqual(
+    blocks.map((block) => block.type),
+    ["group", "group", "tables", "group", "group"],
+  );
+  assert.deepEqual(
+    blocks.map((block) => (block.type === "group" ? block.title : block.type)),
+    [
+      "intestazione",
+      "stato iniziale",
+      "tables",
+      "blocco secondario",
+      "campi finali",
+    ],
+  );
+  assert.equal(blocks[4].type, "group");
+
+  if (blocks[4].type === "group") {
+    assert.deepEqual(
+      blocks[4].blocks.map((block) => block.type),
+      ["fields", "prompts"],
+    );
+  }
+});
+
+test("renders simple separated steps as an ordered print list", () => {
+  const model = buildImportedPrintRenderModel({
+    pages: [
+      {
+        content: {
+          passaggi: "1. Primo passaggio | 2. Secondo passaggio",
+        },
+        pageNumber: 1,
+        templateId: "template_steps",
+      },
+    ],
+  });
+  const [block] = model.pages[0].blocks;
+
+  assert.equal(block.type, "list");
+
+  if (block.type === "list") {
+    assert.equal(block.ordered, true);
+    assert.deepEqual(block.items, ["Primo passaggio", "Secondo passaggio"]);
+  }
+});
+
+test("renders days and habits as a compact print grid", () => {
+  const model = buildImportedPrintRenderModel({
+    pages: [
+      {
+        content: {
+          abitudini: ["Elemento A", "Elemento B"],
+          giorni: ["Lun", "Mar", "Mer"],
+        },
+        pageNumber: 1,
+        templateId: "template_grid",
+      },
+    ],
+  });
+  const [block] = model.pages[0].blocks;
+
+  assert.equal(block.type, "tables");
+
+  if (block.type === "tables") {
+    assert.deepEqual(block.tables[0].columns, ["Elemento", "Lun", "Mar", "Mer"]);
+    assert.equal(block.tables[0].rowCount, 2);
+  }
+});
+
+test("still warns when a print page has no printable content at all", () => {
+  const model = buildImportedPrintRenderModel({
+    pages: [
+      {
+        content: {},
+        pageNumber: 1,
+        templateId: "template_empty",
+      },
+    ],
+  });
+
+  assert.deepEqual(model.warnings.map((warning) => warning.code), [
+    "EMPTY_CONTENT",
+  ]);
+  assert.equal(model.pages[0].hasPrintableHeader, false);
 });

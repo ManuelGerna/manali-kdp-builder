@@ -1971,6 +1971,7 @@ button {
 .imported-print-fields,
 .imported-print-prompts,
 .imported-print-table-list,
+.imported-print-table-wrap,
 .imported-print-group {
   display: grid;
   gap: 9px;
@@ -2037,6 +2038,15 @@ button {
   border-collapse: collapse;
   font-size: 0.7rem;
   line-height: 1.2;
+}
+
+.imported-print-table-wrap > p {
+  margin: 0;
+  color: #574861;
+  font-size: 0.72rem;
+  font-weight: 900;
+  overflow-wrap: anywhere;
+  text-transform: uppercase;
 }
 
 .imported-print-table-compact {
@@ -2151,6 +2161,7 @@ button {
   .imported-print-fields,
   .imported-print-prompts,
   .imported-print-table-list,
+  .imported-print-table-wrap,
   .imported-print-group {
     gap: 7px;
   }
