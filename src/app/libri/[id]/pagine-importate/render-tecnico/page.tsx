@@ -144,7 +144,7 @@ export default async function ImportedPagesTechnicalRenderPage({
     <AppShell
       title="Renderer tecnico"
       eyebrow={book.title}
-      description="Preview tecnica print-safe delle pagine importate. Non genera PDF e non avvia export KDP."
+      description="Preview tecnica print-safe delle pagine importate, con PDF tecnico on demand per test interno. Non avvia export KDP finale."
       actions={
         <>
           <Link
@@ -159,6 +159,14 @@ export default async function ImportedPagesTechnicalRenderPage({
           >
             Anteprima visuale
           </Link>
+          {renderModel.pages.length > 0 ? (
+            <Link
+              className="button"
+              href={`/libri/${book.id}/pagine-importate/pdf-tecnico`}
+            >
+              Scarica PDF tecnico
+            </Link>
+          ) : null}
         </>
       }
     >
@@ -181,7 +189,8 @@ export default async function ImportedPagesTechnicalRenderPage({
             <p className="page-copy">
               {renderModel.pages.length} pagine renderizzate come fogli tecnici
               con area sicura e margini simulati. Questa vista prepara il lavoro
-              del futuro PDF, ma non genera file.
+              del futuro PDF finale e permette di scaricare un PDF tecnico di
+              prova per controlli interni.
             </p>
             <dl className="draft-stat-grid">
               <div>

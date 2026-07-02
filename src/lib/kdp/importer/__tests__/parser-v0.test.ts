@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
+import { PDFDocument } from "pdf-lib";
 import {
   buildGenericDraftImportRunInsert,
   buildGenericDraftPageInserts,
@@ -16,6 +17,10 @@ import {
   type KdpImportedPage,
   type KdpImportedPageSection,
 } from "../../imported-pages.ts";
+import {
+  generateImportedPagesTechnicalPdf,
+  getImportedPagesTechnicalPdfSummary,
+} from "../../imported-page-pdf.ts";
 import { buildImportedPrintRenderModel } from "../../imported-page-print-renderer.ts";
 import { buildImportedPagePreviewModel } from "../../imported-page-preview.ts";
 import { importKdpBuilderDraft } from "../index.ts";
@@ -1086,4 +1091,98 @@ test("still warns when a print page has no printable content at all", () => {
     "EMPTY_CONTENT",
   ]);
   assert.equal(model.pages[0].hasPrintableHeader, false);
+});
+
+test("summarizes imported technical PDF fallback size and margins", () => {
+  const model = buildImportedPrintRenderModel({
+    pages: [
+      {
+        content: {
+          testo: "Pagina tecnica",
+        },
+        pageNumber: 1,
+        templateId: "template_generic",
+      },
+    ],
+  });
+  const summary = getImportedPagesTechnicalPdfSummary(model);
+
+  assert.equal(summary.pageCount, 1);
+  assert.equal(summary.pageWidthPt, 7 * 72);
+  assert.equal(summary.pageHeightPt, 10 * 72);
+  assert.equal(summary.marginInsidePt, 0.65 * 72);
+  assert.equal(summary.marginOutsidePt, 0.45 * 72);
+  assert.equal(summary.marginTopPt, 0.45 * 72);
+  assert.equal(summary.marginBottomPt, 0.5 * 72);
+});
+
+test("generates imported technical PDF with one page for each imported page", async () => {
+  const model = buildImportedPrintRenderModel({
+    pages: [
+      {
+        content: {
+          titolo: "Titolo",
+        },
+        pageNumber: 1,
+        templateId: "template_title",
+      },
+      {
+        content: {
+          campi: ["Campo A"],
+          prompt: "Nota finale",
+        },
+        pageNumber: 2,
+        templateId: "template_fields",
+      },
+      {
+        content: {},
+        pageNumber: 3,
+        templateId: "template_empty",
+      },
+    ],
+  });
+  const bytes = await generateImportedPagesTechnicalPdf(model, {
+    title: "Documento tecnico",
+  });
+  const doc = await PDFDocument.load(bytes);
+
+  assert.equal(doc.getPageCount(), 3);
+
+  const firstPage = doc.getPage(0);
+  assert.equal(firstPage.getWidth(), 7 * 72);
+  assert.equal(firstPage.getHeight(), 10 * 72);
+});
+
+test("generates imported technical PDF for 110 simulated imported pages", async () => {
+  const model = buildImportedPrintRenderModel({
+    pages: Array.from({ length: 110 }, (_, index) => {
+      const pageNumber = index + 1;
+
+      return {
+        content: {
+          testo: `Contenuto tecnico pagina ${pageNumber}`,
+        },
+        pageNumber,
+        templateId: "template_generic",
+        title: `Pagina ${pageNumber}`,
+      };
+    }),
+  });
+  const bytes = await generateImportedPagesTechnicalPdf(model, {
+    title: "Documento tecnico lungo",
+  });
+  const doc = await PDFDocument.load(bytes);
+
+  assert.equal(doc.getPageCount(), 110);
+});
+
+test("rejects imported technical PDF generation without imported pages", async () => {
+  const model = buildImportedPrintRenderModel({
+    pages: [],
+  });
+
+  await assert.rejects(
+    () => generateImportedPagesTechnicalPdf(model),
+    /without pages/,
+  );
 });
