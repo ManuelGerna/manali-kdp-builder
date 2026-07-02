@@ -132,6 +132,26 @@ test("warns when repeat count does not match page range", () => {
   assert.equal(issueCodes(project).includes("PAGE_RANGE_REPEAT_MISMATCH"), true);
 });
 
+test("warns when target page numbers are missing", () => {
+  const project = importDraft(
+    draftWithPages(
+      `* numero_pagina: 1
+  template_id: "template_a"
+
+* numero_pagina: 3
+  template_id: "template_b"`,
+      3,
+    ),
+  );
+
+  assert.equal(project.importReport.status, "success_with_warnings");
+  assert.deepEqual(
+    project.pages.map((page) => page.pageNumber),
+    [1, 3],
+  );
+  assert.equal(issueCodes(project).includes("PAGE_MISSING"), true);
+});
+
 test("rotates content over generated pages", () => {
   const project = importDraft(
     draftWithPages(`* intervallo_pagine: "1-4"

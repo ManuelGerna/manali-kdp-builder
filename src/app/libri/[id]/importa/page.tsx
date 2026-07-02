@@ -10,7 +10,7 @@ import {
   hasSupabaseServerConfig,
 } from "@/lib/supabase/server";
 import type { Tables } from "@/types/database";
-import { DraftImportForm } from "./draft-import-form";
+import { GenericDraftImportForm } from "./generic-draft-import-form";
 
 type DraftImportPageProps = {
   params: Promise<{
@@ -196,7 +196,7 @@ export default async function DraftImportPage({
     <AppShell
       title="Importa bozza"
       eyebrow={book.title}
-      description="Analisi deterministica di una bozza lunga con preview prima del salvataggio."
+      description="Incolla una bozza KDP Builder per analizzarla, generare la struttura normalizzata e controllare pagine, sezioni, template e avvisi prima del salvataggio definitivo."
       actions={
         <>
           <Link className="secondary-button" href={`/libri/${book.id}/contenuti`}>
@@ -221,39 +221,44 @@ export default async function DraftImportPage({
         ) : null}
 
         <div className="grid two">
-          <Card title="Bozza da importare">
-            <DraftImportForm bookId={book.id} />
+          <Card title="Importa bozza strutturata">
+            <p className="page-copy">
+              Incolla una bozza KDP Builder per analizzarla, generare la
+              struttura normalizzata e controllare pagine, sezioni, template e
+              avvisi prima del salvataggio definitivo.
+            </p>
+            <GenericDraftImportForm />
           </Card>
 
-          <Card title="Formato supportato">
+          <Card title="Formato supportato V0">
             <ul className="panel-list panel-list-long">
               <FieldRow
-                label="Sezioni"
-                value="Titoli brevi, titoli maiuscoli, righe con emoji iniziale o separatore"
+                label="Versione"
+                value="KDP_BUILDER_DRAFT_VERSION: 0.1 consigliata; se manca, il parser genera un warning."
               />
               <FieldRow
-                label="Separatore"
-                value="Riga con tre trattini, em dash ripetuti o separatore editoriale"
+                label="Blocchi"
+                value="IDEA_LIBRO, SPECIFICHE_TECNICHE, PIANO_PAGINE, SEQUENZA_PAGINE, TEMPLATE_PAGINA, BRIEF_COPERTINA, METADATI_KDP_DRAFT e CHECKLIST."
               />
               <FieldRow
-                label="Page break"
-                value="[PAGINA 2] oppure [PAGINA 14 - PIETRA]"
+                label="Pagine"
+                value="Usa numero_pagina per pagine singole oppure intervallo_pagine con ripeti per sequenze ripetute."
               />
               <FieldRow
-                label="Immagini"
-                value="[IMMAGINE: descrizione del placeholder]"
+                label="Template"
+                value="Ogni pagina dovrebbe avere un template_id; template mancanti o non riconosciuti finiscono nel report."
               />
               <FieldRow
-                label="Note interne"
-                value="Righe tra parentesi tonde, salvate come note non stampabili"
+                label="Separazione"
+                value="Interno, brief copertina, metadati KDP e checklist vengono mostrati come blocchi distinti."
               />
               <FieldRow
                 label="Salvataggio"
-                value="Import transazionale V2: sezioni e blocchi vengono aggiunti in coda senza contenuti parziali"
+                value="Preview-only: in questo task non viene salvato nulla su Supabase e non viene generato alcun PDF."
               />
               <FieldRow
-                label="Doppio click"
-                value="Il submit finale usa un token import: click ripetuti non duplicano i contenuti"
+                label="Prossimo passo"
+                value="Dopo la revisione della struttura normalizzata si potra collegare un salvataggio definitivo dedicato."
               />
             </ul>
           </Card>

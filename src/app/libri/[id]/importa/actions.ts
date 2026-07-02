@@ -7,6 +7,10 @@ import {
   parseStructuredDraft,
   type DraftImportResult,
 } from "@/lib/kdp/draft-import";
+import {
+  importKdpBuilderDraft,
+  type NormalizedKdpProject,
+} from "@/lib/kdp/importer";
 import { createOwnershipActor } from "@/lib/kdp/ownership";
 import {
   createClient,
@@ -23,6 +27,14 @@ export type DraftImportFormState = {
   importToken: string | null;
   message: string | null;
   preview: DraftImportResult | null;
+};
+
+export type GenericDraftImportFormState = {
+  fields?: {
+    draft_text?: string;
+  };
+  message: string | null;
+  preview: NormalizedKdpProject | null;
 };
 
 const MAX_DRAFT_LENGTH = 120000;
@@ -195,6 +207,56 @@ function validateDraftText(bookId: string, draftText: string) {
   }
 
   return null;
+}
+
+function validateGenericDraftText(draftText: string) {
+  if (!draftText) {
+    return "Incolla una bozza prima di analizzarla.";
+  }
+
+  if (draftText.length > MAX_DRAFT_LENGTH) {
+    return "La bozza e' troppo lunga per il Parser V0. Dividila in piu' parti.";
+  }
+
+  return null;
+}
+
+export async function analyzeGenericDraftAction(
+  _previousState: GenericDraftImportFormState,
+  formData: FormData,
+): Promise<GenericDraftImportFormState> {
+  const draftText = getString(formData, "draft_text");
+  const fields = {
+    draft_text: draftText,
+  };
+  const validationError = validateGenericDraftText(draftText);
+
+  if (validationError) {
+    return {
+      fields,
+      message: validationError,
+      preview: null,
+    };
+  }
+
+  try {
+    return {
+      fields,
+      message: null,
+      preview: importKdpBuilderDraft(draftText),
+    };
+  } catch (error: unknown) {
+    logDraftImportAction("generic_importer_failed", {
+      errorName: getErrorName(error),
+    });
+
+    return {
+      fields,
+      message:
+        "Non riesco ad analizzare questa bozza con il Parser V0. Controlla il formato e riprova.",
+      preview: null,
+    };
+  }
 }
 
 export async function analyzeDraftAction(
