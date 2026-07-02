@@ -18,11 +18,14 @@ export default function NewBookPage() {
         <Card title="Importa bozza strutturata">
           <p className="page-copy">
             Incolla una bozza KDP Builder e controlla la struttura normalizzata
-            prima di creare o salvare un progetto definitivo.
+            prima di creare un libretto salvato.
           </p>
           <ul className="panel-list panel-list-long">
-            <FieldRow label="Modalita" value="Anteprima bozza preview-only" />
-            <FieldRow label="Salvataggio" value="Nessun libretto viene salvato" />
+            <FieldRow label="Modalita" value="Anteprima bozza e creazione" />
+            <FieldRow
+              label="Salvataggio"
+              value="Disponibile dopo una preview valida"
+            />
             <FieldRow label="Output" value="Report, sezioni, pagine e template" />
           </ul>
           <Link className="button" href="/libri/nuovo/importa">

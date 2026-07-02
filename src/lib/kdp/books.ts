@@ -21,6 +21,7 @@ export type CreateBookInput = {
   authorName: string;
   language: string;
   aiUsageType: string;
+  bookType?: string;
   actor: OwnershipActor;
 };
 
@@ -423,19 +424,25 @@ export async function createBookWithDefaultSettings(
     userIdTail: idTail(input.actor.userId),
   };
 
+  const bookInsert: TablesInsert<"kdp_books"> = {
+    id: bookId,
+    title: input.title,
+    subtitle: input.subtitle,
+    author_name: input.authorName,
+    language: input.language,
+    status: "draft",
+    ai_usage_type: input.aiUsageType,
+    created_by: input.actor.userId,
+    ...getCreateOwnershipFields(input.actor),
+  };
+
+  if (input.bookType) {
+    bookInsert.book_type = input.bookType;
+  }
+
   const { error: bookError } = await supabase
     .from("kdp_books")
-    .insert({
-      id: bookId,
-      title: input.title,
-      subtitle: input.subtitle,
-      author_name: input.authorName,
-      language: input.language,
-      status: "draft",
-      ai_usage_type: input.aiUsageType,
-      created_by: input.actor.userId,
-      ...getCreateOwnershipFields(input.actor),
-    });
+    .insert(bookInsert);
 
   if (bookError) {
     logPersistenceError("insert_kdp_books", bookError, logContext);

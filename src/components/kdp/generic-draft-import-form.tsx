@@ -10,12 +10,18 @@ import type {
 } from "@/lib/kdp/importer";
 import {
   analyzeGenericDraftAction,
+  createBookFromGenericDraftAction,
+  type CreateBookFromGenericDraftState,
   type GenericDraftImportFormState,
 } from "@/app/libri/generic-draft-import-actions";
 
 const initialState: GenericDraftImportFormState = {
   message: null,
   preview: null,
+};
+
+const initialCreateState: CreateBookFromGenericDraftState = {
+  message: null,
 };
 
 const PAGE_PREVIEW_LIMIT = 120;
@@ -27,6 +33,24 @@ function AnalyzeButton() {
     <button className="button" disabled={pending} type="submit">
       {pending ? "Analisi..." : "Analizza bozza"}
     </button>
+  );
+}
+
+function CreateBookButton() {
+  const { pending } = useFormStatus();
+
+  return (
+    <button className="button" disabled={pending} type="submit">
+      {pending ? "Creazione..." : "Crea libretto da questa bozza"}
+    </button>
+  );
+}
+
+function canCreateBookFromPreview(project: NormalizedKdpProject) {
+  return (
+    project.importReport.status !== "failed" &&
+    project.importReport.errors.length === 0 &&
+    project.pages.length > 0
   );
 }
 
@@ -409,7 +433,63 @@ function GenericDraftPreview({ project }: { project: NormalizedKdpProject }) {
   );
 }
 
-export function GenericDraftImportForm() {
+function CreateBookFromDraftPanel({
+  draftText,
+  project,
+}: {
+  draftText: string;
+  project: NormalizedKdpProject;
+}) {
+  const [state, formAction] = useActionState(
+    createBookFromGenericDraftAction,
+    initialCreateState,
+  );
+
+  if (!canCreateBookFromPreview(project)) {
+    return (
+      <section className="draft-section-preview" aria-label="Crea libretto">
+        <div>
+          <p className="section-meta">Salvataggio</p>
+          <h3>Correggi la bozza prima di creare il libretto</h3>
+        </div>
+        <p className="form-note form-note-error" role="status">
+          Il salvataggio viene abilitato solo quando la preview non contiene
+          errori bloccanti e genera almeno una pagina.
+        </p>
+      </section>
+    );
+  }
+
+  return (
+    <section className="draft-section-preview" aria-label="Crea libretto">
+      <div>
+        <p className="section-meta">Salvataggio</p>
+        <h3>Crea un libretto salvato</h3>
+      </div>
+      <p className="form-note form-note-success" role="status">
+        La bozza verra riparsata lato server. Verranno creati libro,
+        impostazioni, sezioni, report import e pagine normalizzate. Nessun PDF
+        verra generato.
+      </p>
+      <form action={formAction} className="form-grid">
+        {state.message ? (
+          <p className="form-note form-note-error" role="alert">
+            {state.message}
+          </p>
+        ) : null}
+
+        <input name="draft_text" type="hidden" value={draftText} />
+        <CreateBookButton />
+      </form>
+    </section>
+  );
+}
+
+export function GenericDraftImportForm({
+  enableCreateBook = false,
+}: {
+  enableCreateBook?: boolean;
+}) {
   const [state, formAction] = useActionState(
     analyzeGenericDraftAction,
     initialState,
@@ -426,8 +506,9 @@ export function GenericDraftImportForm() {
         ) : null}
 
         <p className="form-note form-note-warning" role="status">
-          Anteprima preview-only: nessun dato viene salvato, nessuna RPC viene
-          chiamata e nessun PDF viene generato.
+          {enableCreateBook
+            ? "Prima viene generata una anteprima. Il libretto viene salvato solo quando premi il pulsante di creazione dopo una preview valida; nessun PDF viene generato."
+            : "Anteprima preview-only: nessun dato viene salvato, nessuna RPC viene chiamata e nessun PDF viene generato."}
         </p>
 
         <div className="field">
@@ -444,7 +525,17 @@ export function GenericDraftImportForm() {
         <AnalyzeButton />
       </form>
 
-      {state.preview ? <GenericDraftPreview project={state.preview} /> : null}
+      {state.preview ? (
+        <>
+          <GenericDraftPreview project={state.preview} />
+          {enableCreateBook ? (
+            <CreateBookFromDraftPanel
+              draftText={draftText}
+              project={state.preview}
+            />
+          ) : null}
+        </>
+      ) : null}
     </div>
   );
 }

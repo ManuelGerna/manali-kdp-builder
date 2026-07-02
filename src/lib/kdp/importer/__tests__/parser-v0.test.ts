@@ -2,6 +2,14 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
+import {
+  buildGenericDraftImportRunInsert,
+  buildGenericDraftPageInserts,
+  buildGenericDraftSectionInserts,
+  canPersistGenericDraftProject,
+  getGenericDraftBookDetails,
+  hashGenericDraftText,
+} from "../../generic-draft-persistence.ts";
 import { importKdpBuilderDraft } from "../index.ts";
 import type { ImportOptions, NormalizedKdpProject } from "../index.ts";
 
@@ -454,4 +462,74 @@ test("does not stop parsing long AI-style drafts with ambiguous nested lists", (
   assert.equal(project.coverBrief?.title, "Bozza generica lunga");
   assert.equal(project.kdpMetadata?.title, "Bozza generica lunga");
   assert.equal(project.qualityChecklist?.interior?.length, 1);
+});
+
+test("rejects persistence for empty or blocking-error drafts", () => {
+  const emptyProject = importDraft("");
+  const duplicateProject = importDraft(
+    draftWithPages(`* numero_pagina: 1
+  template_id: "template_a"
+
+* numero_pagina: 1
+  template_id: "template_b"`),
+  );
+
+  assert.equal(canPersistGenericDraftProject(emptyProject).ok, false);
+  assert.equal(canPersistGenericDraftProject(duplicateProject).ok, false);
+});
+
+test("builds generic draft persistence payloads from a valid normalized project", () => {
+  const rawDraft = longAiStyleGenericDraft();
+  const project = importDraft(rawDraft);
+  const actor = {
+    email: "owner@example.com",
+    userId: "00000000-0000-4000-8000-000000000001",
+  };
+  let sectionCounter = 0;
+  const sectionPlans = buildGenericDraftSectionInserts(project, {
+    actor,
+    bookId: "00000000-0000-4000-8000-000000000002",
+    createId: () => {
+      sectionCounter += 1;
+      return `00000000-0000-4000-8000-${String(sectionCounter).padStart(
+        12,
+        "0",
+      )}`;
+    },
+  });
+  const sectionIdBySourceId = new Map(
+    sectionPlans.map((section) => [
+      section.sourceSectionId,
+      section.insert.id as string,
+    ]),
+  );
+  const importRun = buildGenericDraftImportRunInsert(project, {
+    actor,
+    bookId: "00000000-0000-4000-8000-000000000002",
+    draftHash: hashGenericDraftText(rawDraft),
+    importRunId: "00000000-0000-4000-8000-000000000010",
+    importToken: "00000000-0000-4000-8000-000000000011",
+  });
+  const pagePlans = buildGenericDraftPageInserts(project, {
+    bookId: "00000000-0000-4000-8000-000000000002",
+    importRunId: "00000000-0000-4000-8000-000000000010",
+    sectionIdBySourceId,
+  });
+  const bookDetails = getGenericDraftBookDetails(project);
+
+  assert.equal(canPersistGenericDraftProject(project).ok, true);
+  assert.equal(bookDetails.bookType, "generic_kdp_book");
+  assert.equal(bookDetails.title, "Bozza generica lunga");
+  assert.equal(sectionPlans.length, 7);
+  assert.equal(sectionPlans[0].insert.section_type, "chapter");
+  assert.equal(sectionPlans[0].insert.sort_order, 1);
+  assert.equal(importRun.import_kind, "generic_draft_v0");
+  assert.equal(importRun.parser_version, "0.1.0");
+  assert.equal(importRun.source_draft_version, "0.1");
+  assert.equal("updated_by_user_id" in importRun, false);
+  assert.equal(pagePlans.length, 110);
+  assert.equal(pagePlans[0].insert.section_id, sectionPlans[0].insert.id);
+  assert.equal(pagePlans[0].insert.status, "imported");
+  assert.equal(pagePlans[20].insert.source_type, "generated_interval");
+  assert.equal(pagePlans[104].insert.source_ref, "105-110");
 });

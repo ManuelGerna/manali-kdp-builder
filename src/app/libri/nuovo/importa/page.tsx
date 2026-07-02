@@ -9,7 +9,7 @@ export default function NewBookDraftImportPage() {
     <AppShell
       title="Anteprima bozza"
       eyebrow="Nuovo libretto"
-      description="Analizza una bozza KDP Builder prima di creare un progetto definitivo."
+      description="Analizza una bozza KDP Builder e crea un libretto salvato dopo una preview valida."
       actions={
         <Link className="secondary-button" href="/libri/nuovo">
           Torna a Nuovo libretto
@@ -22,19 +22,21 @@ export default function NewBookDraftImportPage() {
             <p className="page-copy">
               Incolla una bozza strutturata per generare una anteprima
               normalizzata con progetto, sezioni, pagine, template e avvisi.
+              Se il report non contiene errori bloccanti, potrai creare il
+              libretto da questa bozza.
             </p>
-            <GenericDraftImportForm />
+            <GenericDraftImportForm enableCreateBook />
           </Card>
 
           <Card title="Stato del flusso">
             <ul className="panel-list panel-list-long">
               <FieldRow
                 label="Anteprima"
-                value="La bozza viene analizzata senza creare un libretto."
+                value="La bozza viene analizzata prima del salvataggio."
               />
               <FieldRow
                 label="Salvataggio"
-                value="Nessun libretto verra salvato in questa fase."
+                value="Dopo una preview valida puoi creare un libretto salvato."
               />
               <FieldRow
                 label="PDF"
@@ -42,7 +44,7 @@ export default function NewBookDraftImportPage() {
               />
               <FieldRow
                 label="Prossimo passaggio"
-                value="Il salvataggio definitivo sara implementato in un passaggio successivo."
+                value="Renderer, copertina e integrazione KDP restano passaggi successivi."
               />
             </ul>
           </Card>

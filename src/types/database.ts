@@ -408,6 +408,82 @@ export type Database = {
           },
         ];
       };
+      kdp_imported_pages: {
+        Row: {
+          id: string;
+          book_id: string;
+          import_run_id: string | null;
+          section_id: string | null;
+          page_number: number;
+          template_id: string | null;
+          title: string | null;
+          source_type: string | null;
+          source_ref: string | null;
+          status: string;
+          content: Json;
+          warnings: Json;
+          errors: Json;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          book_id: string;
+          import_run_id?: string | null;
+          section_id?: string | null;
+          page_number: number;
+          template_id?: string | null;
+          title?: string | null;
+          source_type?: string | null;
+          source_ref?: string | null;
+          status?: string;
+          content?: Json;
+          warnings?: Json;
+          errors?: Json;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          book_id?: string;
+          import_run_id?: string | null;
+          section_id?: string | null;
+          page_number?: number;
+          template_id?: string | null;
+          title?: string | null;
+          source_type?: string | null;
+          source_ref?: string | null;
+          status?: string;
+          content?: Json;
+          warnings?: Json;
+          errors?: Json;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [
+          {
+            foreignKeyName: "kdp_imported_pages_book_id_fkey";
+            columns: ["book_id"];
+            isOneToOne: false;
+            referencedRelation: "kdp_books";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "kdp_imported_pages_import_run_id_fkey";
+            columns: ["import_run_id"];
+            isOneToOne: false;
+            referencedRelation: "kdp_import_runs";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "kdp_imported_pages_section_id_fkey";
+            columns: ["section_id"];
+            isOneToOne: false;
+            referencedRelation: "kdp_sections";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       kdp_import_runs: {
         Row: {
           id: string;
@@ -415,6 +491,13 @@ export type Database = {
           import_token: string;
           draft_hash: string;
           report: Json;
+          import_kind: string;
+          parser_version: string | null;
+          source_draft_version: string | null;
+          normalized_project: Json | null;
+          cover_brief: Json | null;
+          kdp_metadata: Json | null;
+          quality_checklist: Json | null;
           created_by_user_id: string | null;
           created_by_email: string | null;
           created_at: string;
@@ -425,6 +508,13 @@ export type Database = {
           import_token: string;
           draft_hash: string;
           report?: Json;
+          import_kind?: string;
+          parser_version?: string | null;
+          source_draft_version?: string | null;
+          normalized_project?: Json | null;
+          cover_brief?: Json | null;
+          kdp_metadata?: Json | null;
+          quality_checklist?: Json | null;
           created_by_user_id?: string | null;
           created_by_email?: string | null;
           created_at?: string;
@@ -435,6 +525,13 @@ export type Database = {
           import_token?: string;
           draft_hash?: string;
           report?: Json;
+          import_kind?: string;
+          parser_version?: string | null;
+          source_draft_version?: string | null;
+          normalized_project?: Json | null;
+          cover_brief?: Json | null;
+          kdp_metadata?: Json | null;
+          quality_checklist?: Json | null;
           created_by_user_id?: string | null;
           created_by_email?: string | null;
           created_at?: string;
