@@ -10,7 +10,7 @@ import {
   hasSupabaseServerConfig,
 } from "@/lib/supabase/server";
 import type { Tables } from "@/types/database";
-import { GenericDraftImportForm } from "./generic-draft-import-form";
+import { GenericDraftImportForm } from "@/components/kdp/generic-draft-import-form";
 
 type DraftImportPageProps = {
   params: Promise<{

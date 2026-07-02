@@ -11,7 +11,7 @@ import type {
 import {
   analyzeGenericDraftAction,
   type GenericDraftImportFormState,
-} from "./actions";
+} from "@/app/libri/generic-draft-import-actions";
 
 const initialState: GenericDraftImportFormState = {
   message: null,
@@ -249,7 +249,7 @@ function SectionsPanel({ sections }: { sections: BookSection[] }) {
               </div>
               <h4>{section.title}</h4>
               <p className="preview-block-meta">
-                Pagine attese: {section.expectedPageCount ?? "n/d"} · Pagine
+                Pagine attese: {section.expectedPageCount ?? "n/d"} - Pagine
                 assegnate: {section.actualPageCount ?? 0}
               </p>
               {section.warnings?.length ? (
@@ -280,7 +280,7 @@ function PagePreviewItem({ page }: { page: BookPage }) {
       <h4>{page.title ?? "Senza titolo"}</h4>
       <p className="preview-block-meta">
         template_id: {page.templateId ?? "mancante"}
-        {page.sectionId ? ` · sezione: ${page.sectionId}` : ""}
+        {page.sectionId ? ` - sezione: ${page.sectionId}` : ""}
       </p>
       {page.warnings?.length ? (
         <p className="section-internal-notes">{page.warnings.join(" ")}</p>
