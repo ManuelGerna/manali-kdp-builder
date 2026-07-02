@@ -16,6 +16,7 @@ import {
   type KdpImportedPage,
   type KdpImportedPageSection,
 } from "../../imported-pages.ts";
+import { buildImportedPrintRenderModel } from "../../imported-page-print-renderer.ts";
 import { buildImportedPagePreviewModel } from "../../imported-page-preview.ts";
 import { importKdpBuilderDraft } from "../index.ts";
 import type { ImportOptions, NormalizedKdpProject } from "../index.ts";
@@ -820,5 +821,131 @@ test("keeps technical imported page fields out of the main preview content", () 
       "status",
       "template id",
     ],
+  );
+});
+
+test("builds print renderer settings with safe fallback page size and margins", () => {
+  const model = buildImportedPrintRenderModel({
+    pages: [],
+  });
+
+  assert.equal(model.settings.pageSize.label, "7 x 10 in");
+  assert.equal(model.settings.pageSize.widthIn, 7);
+  assert.equal(model.settings.pageSize.heightIn, 10);
+  assert.equal(model.settings.pageSize.source, "fallback");
+  assert.deepEqual(model.settings.margins, {
+    bottomIn: 0.5,
+    insideIn: 0.65,
+    outsideIn: 0.45,
+    source: "fallback",
+    topIn: 0.45,
+  });
+});
+
+test("builds print renderer settings from normalized technical specs", () => {
+  const model = buildImportedPrintRenderModel({
+    bookSettings: {
+      trimSize: "6x9",
+    },
+    normalizedProject: {
+      technicalSpecs: {
+        margins: {
+          bottom: "0.52 in",
+          inside: "0.72 in",
+          outside: "0.48 in",
+          top: "0.42 in",
+        },
+        trimSize: "7\u00d710 in",
+      },
+    },
+    pages: [],
+  });
+
+  assert.equal(model.settings.pageSize.label, "7 x 10 in");
+  assert.equal(model.settings.pageSize.source, "technical_specs");
+  assert.deepEqual(model.settings.margins, {
+    bottomIn: 0.52,
+    insideIn: 0.72,
+    outsideIn: 0.48,
+    source: "technical_specs",
+    topIn: 0.42,
+  });
+});
+
+test("builds and orders a print renderer model with 110 imported pages", () => {
+  const pages = Array.from({ length: 110 }, (_, index) => ({
+    content: {
+      text: `Pagina ${110 - index}`,
+    },
+    pageNumber: 110 - index,
+    templateId: "template_generic",
+    title: `Pagina ${110 - index}`,
+  }));
+  const model = buildImportedPrintRenderModel({
+    pages,
+  });
+
+  assert.equal(model.pages.length, 110);
+  assert.equal(model.pages[0].pageNumber, 1);
+  assert.equal(model.pages.at(-1)?.pageNumber, 110);
+});
+
+test("adds print warnings for empty content, unknown template and dense tables", () => {
+  const model = buildImportedPrintRenderModel({
+    pages: [
+      {
+        content: {},
+        pageNumber: 1,
+        templateId: null,
+      },
+      {
+        content: {
+          colonne_tabella: [
+            "Colonna A",
+            "Colonna B",
+            "Colonna C",
+            "Colonna D",
+            "Colonna E",
+          ],
+          numero_righe: 12,
+        },
+        pageNumber: 2,
+        templateId: "template_table",
+      },
+    ],
+  });
+
+  assert.deepEqual(
+    model.warnings.map((warning) => warning.code),
+    ["EMPTY_CONTENT", "UNKNOWN_TEMPLATE", "TABLE_DENSE"],
+  );
+  assert.equal(model.pages[1].blocks[0].type, "tables");
+});
+
+test("keeps fields, prompts and tables in the print render model", () => {
+  const model = buildImportedPrintRenderModel({
+    pages: [
+      {
+        content: {
+          campi: ["Campo A", "Campo B"],
+          colonne_tabella: ["Voce", "Valore"],
+          prompt: "Annota una risposta.",
+          righe: [
+            {
+              Valore: "Dettaglio",
+              Voce: "Elemento",
+            },
+          ],
+          text: "Introduzione",
+        },
+        pageNumber: 1,
+        templateId: "template_generic",
+      },
+    ],
+  });
+
+  assert.deepEqual(
+    model.pages[0].blocks.map((block) => block.type),
+    ["text", "fields", "prompts", "tables"],
   );
 });
