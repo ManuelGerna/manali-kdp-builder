@@ -332,6 +332,14 @@ export default async function ImportedPagesPage({
           <Link className="secondary-button" href={`/libri/${book.id}`}>
             Torna al libretto
           </Link>
+          {summary.pageCount > 0 ? (
+            <Link
+              className="button"
+              href={`/libri/${book.id}/pagine-importate/anteprima`}
+            >
+              Anteprima visuale
+            </Link>
+          ) : null}
           <Link
             className="secondary-button"
             href={`/libri/${book.id}/contenuti`}

@@ -16,6 +16,7 @@ import {
   type KdpImportedPage,
   type KdpImportedPageSection,
 } from "../../imported-pages.ts";
+import { buildImportedPagePreviewModel } from "../../imported-page-preview.ts";
 import { importKdpBuilderDraft } from "../index.ts";
 import type { ImportOptions, NormalizedKdpProject } from "../index.ts";
 
@@ -657,4 +658,101 @@ test("handles books without imported pages", () => {
   assert.equal(summary.unassignedPageCount, 0);
   assert.deepEqual(summary.statusCounts, {});
   assert.deepEqual(groups, []);
+});
+
+test("builds a readable preview model for empty imported page content", () => {
+  const model = buildImportedPagePreviewModel({});
+
+  assert.equal(model.isEmpty, true);
+  assert.deepEqual(model.fields, []);
+  assert.deepEqual(model.lists, []);
+  assert.deepEqual(model.prompts, []);
+  assert.deepEqual(model.tables, []);
+});
+
+test("builds preview fields, lists, prompts and text from generic imported content", () => {
+  const model = buildImportedPagePreviewModel({
+    campi: ["Nome", "Data", { label: "Obiettivo", value: "Nota libera" }],
+    lista: ["Punto A", "Punto B"],
+    prompt: "Scrivi una risposta sintetica.",
+    sottotitolo: "Sottotitolo generico",
+    testo: "Testo introduttivo generico.",
+  });
+
+  assert.equal(model.isEmpty, false);
+  assert.deepEqual(model.fields, ["Nome", "Data", "Obiettivo: Nota libera"]);
+  assert.deepEqual(model.lists, [["Punto A", "Punto B"]]);
+  assert.deepEqual(model.prompts, ["Scrivi una risposta sintetica."]);
+  assert.equal(model.subtitle, "Sottotitolo generico");
+  assert.deepEqual(model.text, ["Testo introduttivo generico."]);
+});
+
+test("builds preview tables from columns and planned row counts", () => {
+  const model = buildImportedPagePreviewModel({
+    colonne_tabella: ["Elemento", "Valore"],
+    numero_righe: 6,
+    righe: [
+      {
+        Elemento: "Voce A",
+        Valore: "Dettaglio A",
+      },
+    ],
+  });
+
+  assert.equal(model.isEmpty, false);
+  assert.equal(model.tables.length, 1);
+  assert.deepEqual(model.tables[0].columns, ["Elemento", "Valore"]);
+  assert.equal(model.tables[0].rowCount, 6);
+  assert.equal(model.tables[0].rows.length, 1);
+});
+
+test("builds preview blocks from nested generic content", () => {
+  const model = buildImportedPagePreviewModel({
+    blocchi: [
+      "Nota libera",
+      {
+        titolo: "Blocco compilabile",
+        tipo: "box",
+        campi: ["Campo A"],
+        blocchi: [
+          {
+            titolo: "Sotto blocco",
+            prompt_finale: "Prompt finale generico",
+          },
+        ],
+      },
+    ],
+  });
+
+  assert.equal(model.isEmpty, false);
+  assert.equal(model.blocks.length, 2);
+  assert.deepEqual(model.blocks[0].text, ["Nota libera"]);
+  assert.equal(model.blocks[1].title, "Blocco compilabile");
+  assert.deepEqual(model.blocks[1].fields, ["Campo A"]);
+  assert.equal(model.blocks[1].blocks[0].title, "Sotto blocco");
+  assert.deepEqual(model.blocks[1].blocks[0].prompts, [
+    "Prompt finale generico",
+  ]);
+});
+
+test("keeps unrecognized imported page content as readable fallback entries", () => {
+  const model = buildImportedPagePreviewModel({
+    campo_custom: "Valore custom",
+    gruppo_custom: {
+      etichetta: "Voce",
+      valore: "Dettaglio",
+    },
+  });
+
+  assert.equal(model.isEmpty, false);
+  assert.deepEqual(model.fallbackEntries, [
+    {
+      label: "campo custom",
+      value: "Valore custom",
+    },
+    {
+      label: "gruppo custom",
+      value: "etichetta: Voce | valore: Dettaglio",
+    },
+  ]);
 });
