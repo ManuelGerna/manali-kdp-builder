@@ -53,6 +53,10 @@ const MID_GRAY = rgb(0.42, 0.42, 0.42);
 const LIGHT_GRAY = rgb(0.78, 0.78, 0.78);
 const FILL_GRAY = rgb(0.96, 0.96, 0.96);
 
+type DrawBlockOptions = {
+  fillPromptLines?: boolean;
+};
+
 function toPoints(value: number) {
   return value * POINTS_PER_INCH;
 }
@@ -340,52 +344,167 @@ function drawRule(layout: PdfLayout) {
   return true;
 }
 
-function drawFields(layout: PdfLayout, fields: string[], dense: boolean) {
+function splitFieldLabelValue(field: string) {
+  const [label, ...valueParts] = field.split(":");
+  const value = valueParts.join(":").trim();
+
+  return {
+    label: label.trim() || field.trim(),
+    value,
+  };
+}
+
+function formatPdfLabel(value: string) {
+  const cleanValue = value.replace(/[_\s]+/g, " ").trim();
+
+  return cleanValue ? `${cleanValue[0].toUpperCase()}${cleanValue.slice(1)}` : "";
+}
+
+function getFieldColumnCount(fieldCount: number, isGrid: boolean) {
+  if (!isGrid) {
+    return 1;
+  }
+
+  if (fieldCount >= 5) {
+    return 3;
+  }
+
+  if (fieldCount >= 3) {
+    return 2;
+  }
+
+  return fieldCount;
+}
+
+function drawFields(
+  layout: PdfLayout,
+  block: Extract<ImportedPrintBlock, { type: "fields" }>,
+  dense: boolean,
+) {
+  const fields = block.fields;
+  const isGrid = block.layout === "grid" || fields.length >= 2;
+  const columns = Math.max(1, getFieldColumnCount(fields.length, isGrid));
   const gap = dense ? 4 : 6;
-  const labelSize = dense ? 6.2 : 7;
-  const boxHeight = dense ? 13 : 16;
+  const labelSize = dense ? 5.8 : 6.6;
+  const valueSize = dense ? 6.2 : 7;
+  const boxHeight = dense ? 17 : 21;
+  const cellWidth = (layout.contentWidth - gap * (columns - 1)) / columns;
 
-  for (const field of fields) {
-    const labelLines = wrapText(field, layout.fonts.bodyBold, labelSize, layout.contentWidth);
-    const height = labelLines.length * labelSize * 1.15 + boxHeight + gap;
+  for (let startIndex = 0; startIndex < fields.length; startIndex += columns) {
+    const rowFields = fields.slice(startIndex, startIndex + columns);
+    const rowModels = rowFields.map(splitFieldLabelValue);
+    const labelLineGroups = rowModels.map((field) =>
+      wrapText(formatPdfLabel(field.label), layout.fonts.bodyBold, labelSize, cellWidth),
+    );
+    const labelHeight =
+      Math.max(1, ...labelLineGroups.map((lines) => lines.length)) *
+      labelSize *
+      1.12;
+    const rowHeight = labelHeight + boxHeight + gap;
 
-    if (!ensureRoom(layout, height)) {
+    if (!ensureRoom(layout, rowHeight)) {
       return false;
     }
 
-    for (const line of labelLines) {
-      layout.page.drawText(line, {
-        color: MID_GRAY,
-        font: layout.fonts.bodyBold,
-        size: labelSize,
-        x: layout.x,
-        y: layout.y,
+    for (const [fieldIndex, field] of rowModels.entries()) {
+      const cellX = layout.x + fieldIndex * (cellWidth + gap);
+      let labelY = layout.y;
+
+      for (const line of labelLineGroups[fieldIndex]) {
+        layout.page.drawText(sanitizePdfText(line), {
+          color: MID_GRAY,
+          font: layout.fonts.bodyBold,
+          size: labelSize,
+          x: cellX,
+          y: labelY,
+        });
+        labelY -= labelSize * 1.12;
+      }
+
+      const boxY = layout.y - labelHeight - boxHeight + labelSize * 0.25;
+
+      layout.page.drawRectangle({
+        borderColor: LIGHT_GRAY,
+        borderWidth: 0.45,
+        color: rgb(1, 1, 1),
+        height: boxHeight,
+        width: cellWidth,
+        x: cellX,
+        y: boxY,
       });
-      layout.y -= labelSize * 1.15;
+
+      if (field.value) {
+        const valueLines = wrapText(
+          field.value,
+          layout.fonts.body,
+          valueSize,
+          cellWidth - 6,
+        );
+
+        for (const [lineIndex, line] of valueLines.slice(0, 2).entries()) {
+          layout.page.drawText(sanitizePdfText(line), {
+            color: GRAY,
+            font: layout.fonts.body,
+            size: valueSize,
+            x: cellX + 3,
+            y: boxY + boxHeight - valueSize * (lineIndex + 1) - 3,
+          });
+        }
+      }
     }
 
-    layout.page.drawRectangle({
-      borderColor: LIGHT_GRAY,
-      borderWidth: 0.5,
-      color: rgb(1, 1, 1),
-      height: boxHeight,
-      width: layout.contentWidth,
-      x: layout.x,
-      y: layout.y - boxHeight,
-    });
-    layout.y -= boxHeight + gap;
+    layout.y -= rowHeight;
   }
 
+  layout.y -= dense ? 2 : 4;
   return true;
 }
 
-function drawPrompts(layout: PdfLayout, prompts: string[], dense: boolean) {
+export function getImportedTechnicalPdfWritableLineCount(input: {
+  availableHeight: number;
+  dense?: boolean;
+  fillRemaining?: boolean;
+  lineHeight?: number;
+  promptLineCount?: number;
+}) {
+  const dense = input.dense ?? false;
+  const lineHeight = input.lineHeight ?? (dense ? 10 : 12);
+
+  if (!input.fillRemaining) {
+    return dense ? 3 : 4;
+  }
+
+  return Math.max(
+    dense ? 8 : 10,
+    Math.floor(
+      (input.availableHeight -
+        (input.promptLineCount ?? 0) * lineHeight -
+        12) /
+        lineHeight,
+    ),
+  );
+}
+
+function drawPrompts(
+  layout: PdfLayout,
+  prompts: string[],
+  dense: boolean,
+  options: {
+    fillRemaining?: boolean;
+  } = {},
+) {
   const fontSize = dense ? 7.2 : 8;
   const lineHeight = dense ? 10 : 12;
 
   for (const prompt of prompts) {
     const promptLines = wrapText(prompt, layout.fonts.bodyItalic, fontSize, layout.contentWidth);
-    const noteLines = dense ? 3 : 4;
+    const noteLines = getImportedTechnicalPdfWritableLineCount({
+      availableHeight: layout.y - layout.bottomY,
+      dense,
+      fillRemaining: options.fillRemaining,
+      lineHeight,
+      promptLineCount: promptLines.length,
+    });
     const height = promptLines.length * lineHeight + noteLines * lineHeight + 8;
 
     if (!ensureRoom(layout, height)) {
@@ -481,20 +600,96 @@ function getCellText(row: unknown, column: string, columnIndex: number) {
   return "";
 }
 
+function getTableColumnWidths(columns: string[], contentWidth: number) {
+  if (columns.length <= 1) {
+    return [contentWidth];
+  }
+
+  if (columns.length >= 8) {
+    const firstColumnWidth = Math.min(contentWidth * 0.28, 92);
+    const otherColumnWidth = (contentWidth - firstColumnWidth) / (columns.length - 1);
+
+    return [
+      firstColumnWidth,
+      ...Array.from({ length: columns.length - 1 }, () => otherColumnWidth),
+    ];
+  }
+
+  return Array.from({ length: columns.length }, () => contentWidth / columns.length);
+}
+
+function getTableDrawingMetrics({
+  columns,
+  layout,
+  requestedRows,
+  tableLayout,
+}: {
+  columns: string[];
+  layout: PdfLayout;
+  requestedRows: number;
+  tableLayout: "compact" | "standard";
+}) {
+  const isWide = columns.length >= 5;
+  const isVeryWide = columns.length >= 8;
+  const compact = tableLayout === "compact" || isWide || requestedRows >= 10;
+  const size = isVeryWide ? 4.4 : compact ? 5.3 : 6.4;
+  const headerHeight = isVeryWide ? 13 : compact ? 15 : 17;
+  const preferredRowHeight = isVeryWide ? 12 : compact ? 14 : 18;
+  const minRowHeight = isVeryWide ? 9.5 : compact ? 11 : 14;
+  const availableHeight = Math.max(0, layout.y - layout.bottomY - 8);
+  let rowHeight = preferredRowHeight;
+  let visibleRows = requestedRows;
+  let overflow = false;
+
+  if (headerHeight + rowHeight * visibleRows > availableHeight) {
+    const fittedRowHeight =
+      (availableHeight - headerHeight) / Math.max(1, visibleRows);
+
+    rowHeight = Math.max(minRowHeight, Math.min(preferredRowHeight, fittedRowHeight));
+  }
+
+  if (headerHeight + rowHeight * visibleRows > availableHeight) {
+    visibleRows = Math.max(
+      1,
+      Math.floor((availableHeight - headerHeight) / rowHeight),
+    );
+    overflow = visibleRows < requestedRows;
+  }
+
+  return {
+    headerHeight,
+    overflow,
+    rowHeight,
+    size,
+    visibleRows,
+  };
+}
+
 function drawTable(layout: PdfLayout, table: Extract<ImportedPrintBlock, { type: "tables" }>["tables"][number]) {
   const columns = table.columns.length > 0 ? table.columns : ["Spazio", "Contenuto", "Note"];
-  const size = table.layout === "compact" || columns.length >= 5 ? TABLE_DENSE_SIZE : TABLE_SIZE;
-  const rowHeight = size * 1.75;
-  const titleHeight = table.title ? size * 1.8 : 0;
-  const requestedRows = Math.max(table.rowCount, table.rows.length);
-  const visibleRows = Math.min(requestedRows, 18);
-  const tableHeight = titleHeight + rowHeight * (visibleRows + 1) + 6;
+  const requestedRows = Math.max(table.rowCount, table.rows.length, 4);
+  const titleSize = columns.length >= 5 ? TABLE_DENSE_SIZE + 0.6 : TABLE_SIZE + 0.6;
+  const titleHeight = table.title ? titleSize * 1.8 : 0;
+  const metrics = getTableDrawingMetrics({
+    columns,
+    layout: {
+      ...layout,
+      y: layout.y - titleHeight,
+    },
+    requestedRows,
+    tableLayout: table.layout,
+  });
+  const tableHeight =
+    titleHeight +
+    metrics.headerHeight +
+    metrics.rowHeight * metrics.visibleRows +
+    8;
 
   if (!ensureRoom(layout, tableHeight)) {
     return false;
   }
 
-  if (requestedRows > visibleRows) {
+  if (metrics.overflow) {
     layout.overflow = true;
   }
 
@@ -502,43 +697,69 @@ function drawTable(layout: PdfLayout, table: Extract<ImportedPrintBlock, { type:
     layout.page.drawText(sanitizePdfText(table.title), {
       color: MID_GRAY,
       font: layout.fonts.bodyBold,
-      size: size + 0.4,
+      size: titleSize,
       x: layout.x,
       y: layout.y,
     });
     layout.y -= titleHeight;
   }
 
-  const columnWidth = layout.contentWidth / columns.length;
+  const columnWidths = getTableColumnWidths(columns, layout.contentWidth);
   const tableTop = layout.y;
 
   layout.page.drawRectangle({
     borderColor: LIGHT_GRAY,
     borderWidth: 0.5,
     color: FILL_GRAY,
-    height: rowHeight,
+    height: metrics.headerHeight,
     width: layout.contentWidth,
     x: layout.x,
-    y: tableTop - rowHeight,
+    y: tableTop - metrics.headerHeight,
   });
 
+  let columnX = layout.x;
   for (const [index, column] of columns.entries()) {
-    const x = layout.x + index * columnWidth;
-    layout.page.drawText(sanitizePdfText(column.replaceAll("_", " ")), {
+    const columnWidth = columnWidths[index] ?? 0;
+    const x = columnX;
+    const headerLine =
+      wrapText(
+        column.replaceAll("_", " "),
+        layout.fonts.bodyBold,
+        metrics.size,
+        Math.max(4, columnWidth - 4),
+      )[0] ?? "";
+
+    layout.page.drawText(sanitizePdfText(headerLine), {
       color: GRAY,
       font: layout.fonts.bodyBold,
-      size,
+      size: metrics.size,
       x: x + 2,
-      y: tableTop - rowHeight + size * 0.55,
+      y: tableTop - metrics.headerHeight + metrics.size * 0.78,
     });
     layout.page.drawLine({
       color: LIGHT_GRAY,
-      end: { x, y: tableTop - rowHeight * (visibleRows + 1) },
+      end: {
+        x,
+        y: tableTop - metrics.headerHeight - metrics.rowHeight * metrics.visibleRows,
+      },
       start: { x, y: tableTop },
       thickness: 0.35,
     });
+    columnX += columnWidth;
   }
 
+  layout.page.drawLine({
+    color: LIGHT_GRAY,
+    end: {
+      x: layout.x + layout.contentWidth,
+      y: tableTop - metrics.headerHeight - metrics.rowHeight * metrics.visibleRows,
+    },
+    start: {
+      x: layout.x + layout.contentWidth,
+      y: tableTop,
+    },
+    thickness: 0.35,
+  });
   layout.page.drawLine({
     color: LIGHT_GRAY,
     end: { x: layout.x + layout.contentWidth, y: tableTop },
@@ -546,9 +767,9 @@ function drawTable(layout: PdfLayout, table: Extract<ImportedPrintBlock, { type:
     thickness: 0.35,
   });
 
-  for (let rowIndex = 0; rowIndex < visibleRows; rowIndex += 1) {
+  for (let rowIndex = 0; rowIndex < metrics.visibleRows; rowIndex += 1) {
     const row = table.rows[rowIndex];
-    const rowTop = tableTop - rowHeight * (rowIndex + 1);
+    const rowTop = tableTop - metrics.headerHeight - metrics.rowHeight * rowIndex;
 
     layout.page.drawLine({
       color: LIGHT_GRAY,
@@ -557,23 +778,32 @@ function drawTable(layout: PdfLayout, table: Extract<ImportedPrintBlock, { type:
       thickness: 0.35,
     });
 
+    let cellX = layout.x;
     for (const [columnIndex, column] of columns.entries()) {
       const text = getCellText(row, column, columnIndex);
+      const columnWidth = columnWidths[columnIndex] ?? 0;
 
       if (!text) {
+        cellX += columnWidth;
         continue;
       }
 
-      const cellX = layout.x + columnIndex * columnWidth + 2;
-      const clipped = wrapText(text, layout.fonts.body, size, columnWidth - 4)[0] ?? "";
+      const clipped =
+        wrapText(
+          text,
+          layout.fonts.body,
+          metrics.size,
+          Math.max(4, columnWidth - 4),
+        )[0] ?? "";
 
       layout.page.drawText(clipped, {
         color: GRAY,
         font: layout.fonts.body,
-        size,
-        x: cellX,
-        y: rowTop - rowHeight + size * 0.55,
+        size: metrics.size,
+        x: cellX + 2,
+        y: rowTop - metrics.rowHeight + metrics.size * 0.78,
       });
+      cellX += columnWidth;
     }
   }
 
@@ -581,19 +811,23 @@ function drawTable(layout: PdfLayout, table: Extract<ImportedPrintBlock, { type:
     color: LIGHT_GRAY,
     end: {
       x: layout.x + layout.contentWidth,
-      y: tableTop - rowHeight * (visibleRows + 1),
+      y: tableTop - metrics.headerHeight - metrics.rowHeight * metrics.visibleRows,
     },
     start: {
       x: layout.x,
-      y: tableTop - rowHeight * (visibleRows + 1),
+      y: tableTop - metrics.headerHeight - metrics.rowHeight * metrics.visibleRows,
     },
     thickness: 0.35,
   });
-  layout.y = tableTop - rowHeight * (visibleRows + 1) - 8;
+  layout.y = tableTop - metrics.headerHeight - metrics.rowHeight * metrics.visibleRows - 8;
   return true;
 }
 
-function drawGroup(layout: PdfLayout, block: Extract<ImportedPrintBlock, { type: "group" }>, dense: boolean) {
+function drawGroup(
+  layout: PdfLayout,
+  block: Extract<ImportedPrintBlock, { type: "group" }>,
+  dense: boolean,
+) {
   if (block.title) {
     if (!drawParagraph(layout, block.title, {
       color: MID_GRAY,
@@ -615,7 +849,9 @@ function drawGroup(layout: PdfLayout, block: Extract<ImportedPrintBlock, { type:
   }
 
   for (const child of block.blocks) {
-    if (!drawBlock(layout, child, dense)) {
+    if (!drawBlock(layout, child, dense, {
+      fillPromptLines: false,
+    })) {
       return false;
     }
   }
@@ -623,7 +859,12 @@ function drawGroup(layout: PdfLayout, block: Extract<ImportedPrintBlock, { type:
   return true;
 }
 
-function drawBlock(layout: PdfLayout, block: ImportedPrintBlock, dense: boolean): boolean {
+function drawBlock(
+  layout: PdfLayout,
+  block: ImportedPrintBlock,
+  dense: boolean,
+  options: DrawBlockOptions = {},
+): boolean {
   if (block.type === "text") {
     for (const text of block.text) {
       if (!drawParagraph(layout, text, {
@@ -637,11 +878,13 @@ function drawBlock(layout: PdfLayout, block: ImportedPrintBlock, dense: boolean)
   }
 
   if (block.type === "fields") {
-    return drawFields(layout, block.fields, dense);
+    return drawFields(layout, block, dense);
   }
 
   if (block.type === "prompts") {
-    return drawPrompts(layout, block.prompts, dense);
+    return drawPrompts(layout, block.prompts, dense, {
+      fillRemaining: options.fillPromptLines,
+    });
   }
 
   if (block.type === "list") {
@@ -673,30 +916,31 @@ function drawBlock(layout: PdfLayout, block: ImportedPrintBlock, dense: boolean)
   return true;
 }
 
+export function getImportedTechnicalPdfFooterText(page: ImportedPrintPage) {
+  if (page.pageNumber === 1 && page.blocks.length === 0 && page.hasPrintableHeader) {
+    return null;
+  }
+
+  return String(page.pageNumber);
+}
+
 function drawPageFooter(layout: PdfLayout, page: ImportedPrintPage) {
-  const footer = `Pagina ${page.pageNumber}${page.templateId ? ` - ${page.templateId}` : ""}`;
+  const footer = getImportedTechnicalPdfFooterText(page);
+
+  if (!footer) {
+    return;
+  }
+
   const footerSize = 6.5;
+  const footerWidth = layout.fonts.body.widthOfTextAtSize(footer, footerSize);
 
   layout.page.drawText(sanitizePdfText(footer), {
     color: MID_GRAY,
     font: layout.fonts.body,
     size: footerSize,
-    x: layout.x,
+    x: (layout.pageWidth - footerWidth) / 2,
     y: Math.max(12, layout.bottomY * 0.45),
   });
-
-  if (layout.overflow) {
-    const warning = "Contenuto tecnico da verificare: possibile overflow.";
-    const warningWidth = layout.fonts.bodyItalic.widthOfTextAtSize(warning, footerSize);
-
-    layout.page.drawText(warning, {
-      color: rgb(0.55, 0.25, 0.05),
-      font: layout.fonts.bodyItalic,
-      size: footerSize,
-      x: Math.max(layout.x, layout.pageWidth - layout.x - warningWidth),
-      y: Math.max(12, layout.bottomY * 0.45),
-    });
-  }
 }
 
 async function createFonts(doc: PDFDocument): Promise<PdfFonts> {
@@ -741,19 +985,19 @@ function createPageLayout({
 
 function drawPageHeader(layout: PdfLayout, page: ImportedPrintPage) {
   if (page.pageNumber === 1 && page.blocks.length === 0 && page.hasPrintableHeader) {
-    layout.y = layout.pageHeight * 0.62;
+    layout.y = layout.pageHeight * 0.64;
     drawCenteredText(layout, page.title, {
       font: layout.fonts.headingBold,
       maxWidth: layout.contentWidth,
-      size: 22,
+      size: 28,
     });
 
     if (page.subtitle) {
-      layout.y -= 8;
+      layout.y -= 10;
       drawCenteredText(layout, page.subtitle, {
         font: layout.fonts.heading,
         maxWidth: layout.contentWidth,
-        size: 12,
+        size: 13,
       });
     }
 
@@ -778,6 +1022,25 @@ function drawPageHeader(layout: PdfLayout, page: ImportedPrintPage) {
   drawRule(layout);
 }
 
+function hasBlockType(blocks: ImportedPrintBlock[], type: ImportedPrintBlock["type"]): boolean {
+  return blocks.some((block) => {
+    if (block.type === type) {
+      return true;
+    }
+
+    return block.type === "group" ? hasBlockType(block.blocks, type) : false;
+  });
+}
+
+function shouldFillPromptLines(page: ImportedPrintPage) {
+  return (
+    hasBlockType(page.blocks, "prompts") &&
+    !hasBlockType(page.blocks, "tables") &&
+    !hasBlockType(page.blocks, "fields") &&
+    getContentWeight(page.blocks) <= 8
+  );
+}
+
 function drawImportedPage({
   doc,
   fonts,
@@ -793,6 +1056,7 @@ function drawImportedPage({
   const dense =
     getContentWeight(page.blocks) > 24 ||
     page.warnings.some((warning) => warning.code === "CONTENT_MAY_OVERFLOW");
+  const fillPromptLines = shouldFillPromptLines(page);
 
   drawPageHeader(layout, page);
 
@@ -805,7 +1069,9 @@ function drawImportedPage({
   }
 
   for (const block of page.blocks) {
-    if (!drawBlock(layout, block, dense)) {
+    if (!drawBlock(layout, block, dense, {
+      fillPromptLines,
+    })) {
       break;
     }
   }

@@ -19,6 +19,8 @@ import {
 } from "../../imported-pages.ts";
 import {
   generateImportedPagesTechnicalPdf,
+  getImportedTechnicalPdfFooterText,
+  getImportedTechnicalPdfWritableLineCount,
   getImportedPagesTechnicalPdfSummary,
 } from "../../imported-page-pdf.ts";
 import { buildImportedPrintRenderModel } from "../../imported-page-print-renderer.ts";
@@ -976,6 +978,31 @@ test("keeps title-only print pages from showing empty content fallback", () => {
   assert.deepEqual(model.warnings.map((warning) => warning.code), []);
 });
 
+test("keeps title-only PDF pages free from technical footers", () => {
+  const model = buildImportedPrintRenderModel({
+    pages: [
+      {
+        content: {
+          sottotitolo: "Sottotitolo generico",
+          titolo: "Titolo generico",
+        },
+        pageNumber: 1,
+        templateId: "template_title",
+      },
+      {
+        content: {
+          testo: "Pagina interna",
+        },
+        pageNumber: 2,
+        templateId: "template_internal",
+      },
+    ],
+  });
+
+  assert.equal(getImportedTechnicalPdfFooterText(model.pages[0]), null);
+  assert.equal(getImportedTechnicalPdfFooterText(model.pages[1]), "2");
+});
+
 test("orders nested structured print blocks without flattening them as pipe text", () => {
   const model = buildImportedPrintRenderModel({
     pages: [
@@ -1029,6 +1056,79 @@ test("orders nested structured print blocks without flattening them as pipe text
       ["fields", "prompts"],
     );
   }
+});
+
+test("renders structured fillable sheets as field grids and tables", () => {
+  const model = buildImportedPrintRenderModel({
+    pages: [
+      {
+        content: {
+          blocco_secondario: {
+            campi: ["Tipo", "Durata"],
+          },
+          campi_finali: {
+            note_finali: "",
+            valutazione: "",
+          },
+          intestazione: {
+            data: "",
+            durata: "",
+            focus: "",
+            giorno: "",
+            ora_inizio: "",
+          },
+          stato_iniziale: {
+            energia: "",
+            preparazione: "",
+            sonno: "",
+            umore: "",
+          },
+          tabella_principale: {
+            colonne_tabella: ["Voce", "Serie", "Ripetizioni", "Carico", "Note"],
+            numero_righe: 8,
+          },
+        },
+        pageNumber: 21,
+        templateId: "template_structured",
+      },
+    ],
+  });
+  const [headerGroup, stateGroup, tableBlock] = model.pages[0].blocks;
+
+  assert.equal(headerGroup.type, "group");
+  assert.equal(stateGroup.type, "group");
+  assert.equal(tableBlock.type, "tables");
+
+  if (headerGroup.type === "group") {
+    assert.equal(headerGroup.blocks[0].type, "fields");
+
+    if (headerGroup.blocks[0].type === "fields") {
+      assert.equal(headerGroup.blocks[0].layout, "grid");
+      assert.deepEqual(headerGroup.blocks[0].fields, [
+        "data",
+        "durata",
+        "focus",
+        "giorno",
+        "ora inizio",
+      ]);
+    }
+  }
+
+  assert.equal(model.pages[0].blocks.some((block) => block.type === "list"), false);
+});
+
+test("plans extended writable lines for note-style imported PDF pages", () => {
+  const defaultLines = getImportedTechnicalPdfWritableLineCount({
+    availableHeight: 420,
+  });
+  const extendedLines = getImportedTechnicalPdfWritableLineCount({
+    availableHeight: 420,
+    fillRemaining: true,
+    promptLineCount: 1,
+  });
+
+  assert.equal(defaultLines, 4);
+  assert.ok(extendedLines > 25);
 });
 
 test("renders simple separated steps as an ordered print list", () => {

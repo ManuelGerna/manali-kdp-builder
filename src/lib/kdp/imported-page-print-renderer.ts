@@ -51,6 +51,7 @@ export type ImportedPrintBlock =
     }
   | {
       fields: string[];
+      layout?: "grid" | "stack";
       type: "fields";
     }
   | {
@@ -245,6 +246,20 @@ function isPromptKey(value: string) {
 
 function isFieldKey(value: string) {
   return hasKeyFragment(value, ["campi", "fields", "form", "input"]);
+}
+
+function getFieldBlock(fields: string[]): ImportedPrintBlock | null {
+  const cleanFields = fields.map((field) => field.trim()).filter(Boolean);
+
+  if (cleanFields.length === 0) {
+    return null;
+  }
+
+  return {
+    fields: cleanFields,
+    layout: cleanFields.length >= 2 ? "grid" : "stack",
+    type: "fields",
+  };
 }
 
 function isListKey(value: string) {
@@ -720,12 +735,9 @@ function getEntryBlocks(key: string, value: unknown): ImportedPrintBlock[] {
   const text = toText(value);
 
   if (!text) {
-    return [
-      {
-        fields: [normalizeLabel(key)],
-        type: "fields",
-      },
-    ];
+    const fieldBlock = getFieldBlock([normalizeLabel(key)]);
+
+    return fieldBlock ? [fieldBlock] : [];
   }
 
   if (isPromptKey(key) || isFinalKey(key)) {
@@ -738,12 +750,15 @@ function getEntryBlocks(key: string, value: unknown): ImportedPrintBlock[] {
   }
 
   if (isFieldKey(key) || isHeaderKey(key) || isStateKey(key)) {
-    return [
-      {
-        fields: [`${normalizeLabel(key)}: ${text}`],
-        type: "fields",
-      },
-    ];
+    const fieldBlock = getFieldBlock([`${normalizeLabel(key)}: ${text}`]);
+
+    return fieldBlock ? [fieldBlock] : [];
+  }
+
+  if (text.length <= 90) {
+    const fieldBlock = getFieldBlock([`${normalizeLabel(key)}: ${text}`]);
+
+    return fieldBlock ? [fieldBlock] : [];
   }
 
   return [
@@ -847,7 +862,23 @@ function getRecordPrintBlocks(source: Record<string, unknown>) {
 
   return orderedBlocks
     .sort((first, second) => first.order - second.order)
-    .map(({ block }) => block);
+    .map(({ block }) => block)
+    .reduce<ImportedPrintBlock[]>((blocks, block) => {
+      const previous = blocks.at(-1);
+
+      if (previous?.type === "fields" && block.type === "fields") {
+        previous.fields.push(...block.fields);
+        previous.layout =
+          previous.fields.length >= 2 || block.layout === "grid"
+            ? "grid"
+            : "stack";
+
+        return blocks;
+      }
+
+      blocks.push(block);
+      return blocks;
+    }, []);
 }
 
 function getPageBlocks(
@@ -864,10 +895,11 @@ function getPageBlocks(
   }
 
   if (model.fields.length > 0) {
-    blocks.push({
-      fields: model.fields,
-      type: "fields",
-    });
+    const fieldBlock = getFieldBlock(model.fields);
+
+    if (fieldBlock) {
+      blocks.push(fieldBlock);
+    }
   }
 
   for (const list of model.lists) {
