@@ -10,6 +10,12 @@ import {
   getGenericDraftBookDetails,
   hashGenericDraftText,
 } from "../../generic-draft-persistence.ts";
+import {
+  buildImportedPagesSummary,
+  groupImportedPagesBySection,
+  type KdpImportedPage,
+  type KdpImportedPageSection,
+} from "../../imported-pages.ts";
 import { importKdpBuilderDraft } from "../index.ts";
 import type { ImportOptions, NormalizedKdpProject } from "../index.ts";
 
@@ -532,4 +538,123 @@ test("builds generic draft persistence payloads from a valid normalized project"
   assert.equal(pagePlans[0].insert.status, "imported");
   assert.equal(pagePlans[20].insert.source_type, "generated_interval");
   assert.equal(pagePlans[104].insert.source_ref, "105-110");
+});
+
+test("summarizes and groups imported pages by section", () => {
+  const sections: KdpImportedPageSection[] = [
+    {
+      id: "section-a",
+      sort_order: 1,
+      title: "Sezione A",
+    },
+  ];
+  const pages: KdpImportedPage[] = [
+    {
+      id: "page-3",
+      book_id: "book-1",
+      import_run_id: "run-1",
+      section_id: null,
+      page_number: 3,
+      template_id: "template_b",
+      title: "Pagina 3",
+      source_type: "fixed_page",
+      source_ref: null,
+      status: "needs_review",
+      content: {},
+      warnings: ["Da controllare"],
+      errors: [],
+      created_at: "2026-07-01T00:00:03.000Z",
+      updated_at: "2026-07-01T00:00:03.000Z",
+    },
+    {
+      id: "page-1",
+      book_id: "book-1",
+      import_run_id: "run-1",
+      section_id: "section-a",
+      page_number: 1,
+      template_id: "template_a",
+      title: "Pagina 1",
+      source_type: "fixed_page",
+      source_ref: "1",
+      status: "imported",
+      content: { text: "Contenuto" },
+      warnings: [],
+      errors: [],
+      created_at: "2026-07-01T00:00:01.000Z",
+      updated_at: "2026-07-01T00:00:01.000Z",
+    },
+    {
+      id: "page-2",
+      book_id: "book-1",
+      import_run_id: "run-1",
+      section_id: "section-a",
+      page_number: 2,
+      template_id: "template_a",
+      title: "Pagina 2",
+      source_type: "generated_interval",
+      source_ref: "2-4",
+      status: "imported",
+      content: { prompt: "Prompt" },
+      warnings: [],
+      errors: [],
+      created_at: "2026-07-01T00:00:02.000Z",
+      updated_at: "2026-07-01T00:00:02.000Z",
+    },
+    {
+      id: "page-4",
+      book_id: "book-1",
+      import_run_id: "run-1",
+      section_id: "missing-section",
+      page_number: 4,
+      template_id: null,
+      title: "Pagina 4",
+      source_type: null,
+      source_ref: null,
+      status: "invalid",
+      content: {},
+      warnings: [],
+      errors: ["Errore"],
+      created_at: "2026-07-01T00:00:04.000Z",
+      updated_at: "2026-07-01T00:00:04.000Z",
+    },
+  ];
+
+  const summary = buildImportedPagesSummary(pages, sections);
+  const groups = groupImportedPagesBySection(pages, sections);
+
+  assert.equal(summary.pageCount, 4);
+  assert.equal(summary.sectionCount, 1);
+  assert.equal(summary.templateCount, 2);
+  assert.deepEqual(summary.templateIds, ["template_a", "template_b"]);
+  assert.equal(summary.unassignedPageCount, 1);
+  assert.deepEqual(summary.statusCounts, {
+    imported: 2,
+    invalid: 1,
+    needs_review: 1,
+  });
+  assert.deepEqual(summary.sourceTypeCounts, {
+    fixed_page: 2,
+    generated_interval: 1,
+    non_rilevato: 1,
+  });
+  assert.deepEqual(
+    groups.map((group) => group.title),
+    ["Sezione A", "Sezione non disponibile", "Pagine senza sezione"],
+  );
+  assert.deepEqual(
+    groups[0].pages.map((page) => page.page_number),
+    [1, 2],
+  );
+});
+
+test("handles books without imported pages", () => {
+  const summary = buildImportedPagesSummary([], []);
+  const groups = groupImportedPagesBySection([], []);
+
+  assert.equal(summary.pageCount, 0);
+  assert.equal(summary.sectionCount, 0);
+  assert.equal(summary.templateCount, 0);
+  assert.equal(summary.unassignedPageCount, 0);
+  assert.deepEqual(summary.statusCounts, {});
+  assert.deepEqual(groups, []);
 });

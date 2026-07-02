@@ -10,9 +10,11 @@ import {
   RestoreBookForm,
 } from "@/app/libri/book-archive-actions";
 import { listAssets } from "@/lib/kdp/assets";
+import { getImportedPagesReadModel } from "@/lib/kdp/imported-pages";
 import { formatInternalOwner } from "@/lib/kdp/ownership";
 import {
   AI_USAGE_LABELS,
+  BOOK_TYPE_OPTIONS,
   BOOK_STATUSES,
   INTERIOR_TYPE_LABELS,
   PAPER_TYPE_LABELS,
@@ -57,6 +59,20 @@ function toBookStatus(book: KdpBook): BookStatus {
 
 function formatAiUsage(aiUsageType: string) {
   return AI_USAGE_LABELS[aiUsageType as AiUsageType] ?? aiUsageType;
+}
+
+function formatBookType(bookType: string) {
+  const option = BOOK_TYPE_OPTIONS.find((item) => item.value === bookType);
+
+  if (option) {
+    return option.label;
+  }
+
+  if (bookType === "generic_kdp_book") {
+    return "Generic KDP book";
+  }
+
+  return bookType.replaceAll("_", " ");
 }
 
 function formatBoolean(value: boolean) {
@@ -202,6 +218,14 @@ export default async function BookDetailPage({ params }: BookDetailPageProps) {
     listSectionBlocks(supabase, book.id),
     listAssets(supabase, book.id),
   ]);
+  const importedPagesResult = await getImportedPagesReadModel(supabase, {
+    bookId: book.id,
+    sections,
+  });
+  const importedPagesSummary = importedPagesResult.data?.summary ?? null;
+  const showImportedPagesCard =
+    book.book_type === "generic_kdp_book" ||
+    Boolean(importedPagesSummary?.pageCount);
   let exportReadiness: ExportReadiness;
 
   if (blocksResult.data === null || assetsResult.data === null) {
@@ -272,7 +296,7 @@ export default async function BookDetailPage({ params }: BookDetailPageProps) {
           <ul className="panel-list">
             <FieldRow label="Autore" value={book.author_name} />
             <FieldRow label="Lingua" value={book.language.toUpperCase()} />
-            <FieldRow label="Tipo" value="Crystal guide journal" />
+            <FieldRow label="Tipo" value={formatBookType(book.book_type)} />
             <FieldRow
               label="Uso AI"
               value={formatAiUsage(book.ai_usage_type)}
@@ -326,6 +350,41 @@ export default async function BookDetailPage({ params }: BookDetailPageProps) {
             </p>
           )}
         </Card>
+
+        {showImportedPagesCard ? (
+          <Card title="Pagine importate">
+            <p className="page-copy">
+              {importedPagesSummary
+                ? `${importedPagesSummary.pageCount} pagine generate dalla bozza.`
+                : "Pagine importate non disponibili in questo momento."}
+            </p>
+            <ul className="panel-list">
+              <FieldRow
+                label="Sezioni"
+                value={importedPagesSummary?.sectionCount ?? sections.length}
+              />
+              <FieldRow
+                label="Template"
+                value={importedPagesSummary?.templateCount ?? "n/d"}
+              />
+              <FieldRow
+                label="Senza sezione"
+                value={importedPagesSummary?.unassignedPageCount ?? "n/d"}
+              />
+            </ul>
+            {importedPagesResult.data === null ? (
+              <p className="form-note form-note-warning">
+                {importedPagesResult.error}
+              </p>
+            ) : null}
+            <Link
+              className="button"
+              href={`/libri/${book.id}/pagine-importate`}
+            >
+              Apri pagine importate
+            </Link>
+          </Card>
+        ) : null}
 
         <Card title="Sezioni">
           {sections.length === 0 ? (
