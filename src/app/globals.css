@@ -1575,8 +1575,8 @@ button {
 
 .imported-page-preview {
   display: grid;
-  min-height: 560px;
-  gap: 18px;
+  min-height: 500px;
+  gap: 16px;
   border: 1px solid #d8cfe0;
   border-radius: 8px;
   background: #fffdf8;
@@ -1587,7 +1587,7 @@ button {
 
 .imported-page-preview-title {
   align-content: center;
-  min-height: 600px;
+  min-height: 540px;
   text-align: center;
 }
 
@@ -1619,14 +1619,6 @@ button {
   color: var(--muted);
   line-height: 1.5;
   overflow-wrap: anywhere;
-}
-
-.imported-page-preview-meta {
-  justify-content: flex-start;
-}
-
-.imported-page-preview-title .imported-page-preview-meta {
-  justify-content: center;
 }
 
 .imported-page-preview-body {
@@ -1664,6 +1656,7 @@ button {
 .imported-page-preview-field {
   display: grid;
   gap: 8px;
+  break-inside: avoid;
 }
 
 .imported-page-preview-field span:first-child {
@@ -1674,16 +1667,17 @@ button {
   overflow-wrap: anywhere;
 }
 
-.imported-page-preview-field span:last-child {
-  min-height: 34px;
+.imported-page-preview-field-box {
+  min-height: 42px;
   border: 1px solid #dcd3e4;
   border-radius: 6px;
   background: #fff;
+  box-shadow: inset 0 -1px 0 rgba(87, 72, 97, 0.12);
 }
 
 .imported-page-preview-prompts {
   display: grid;
-  gap: 10px;
+  gap: 12px;
 }
 
 .imported-page-preview-lists {
@@ -1703,6 +1697,12 @@ button {
   overflow-wrap: anywhere;
 }
 
+.imported-page-preview-note {
+  display: grid;
+  gap: 10px;
+  break-inside: avoid;
+}
+
 .imported-page-preview-prompt {
   border: 1px solid #d9cce2;
   border-left: 4px solid var(--brand);
@@ -1712,10 +1712,26 @@ button {
   padding: 12px;
 }
 
+.imported-page-preview-note-area {
+  display: grid;
+  gap: 11px;
+  border: 1px solid #ded4e5;
+  border-radius: 8px;
+  background: #fff;
+  padding: 13px 12px;
+}
+
+.imported-page-preview-note-area span {
+  min-height: 18px;
+  border-bottom: 1px solid #d8cfe0;
+}
+
 .imported-page-preview-table-shell {
   display: grid;
   gap: 8px;
   min-width: 0;
+  overflow-x: auto;
+  padding-bottom: 2px;
 }
 
 .imported-page-preview-table-shell h5,
@@ -1727,8 +1743,8 @@ button {
 }
 
 .imported-page-preview-table {
-  width: 100%;
-  table-layout: fixed;
+  width: max(100%, 620px);
+  table-layout: auto;
   border-collapse: collapse;
   font-size: 0.82rem;
 }
@@ -1737,6 +1753,7 @@ button {
 .imported-page-preview-table td {
   min-height: 28px;
   border: 1px solid #dcd3e4;
+  min-width: 132px;
   padding: 7px;
   text-align: left;
   vertical-align: top;
@@ -1794,6 +1811,50 @@ button {
   color: var(--muted);
   font-size: 0.76rem;
   font-weight: 900;
+}
+
+.imported-page-preview-technical {
+  display: grid;
+  gap: 8px;
+  border-top: 1px solid #e8dfed;
+  padding-top: 10px;
+}
+
+.imported-page-preview-technical summary {
+  width: fit-content;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 0.78rem;
+  font-weight: 900;
+}
+
+.imported-page-preview-technical dl {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+}
+
+.imported-page-preview-technical div {
+  display: grid;
+  gap: 4px;
+}
+
+.imported-page-preview-technical dt,
+.imported-page-preview-technical dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.imported-page-preview-technical dt {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.imported-page-preview-technical dd {
+  color: #4e4355;
+  font-size: 0.84rem;
 }
 
 .validation-layout {

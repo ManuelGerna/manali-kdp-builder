@@ -756,3 +756,32 @@ test("keeps unrecognized imported page content as readable fallback entries", ()
     },
   ]);
 });
+
+test("keeps technical imported page fields out of the main preview content", () => {
+  const model = buildImportedPagePreviewModel({
+    errors: [],
+    normalizedSectionId: "section-1",
+    section_id: "section-db-id",
+    source_ref: "21-100",
+    sourceType: "generated_interval",
+    status: "imported",
+    template_id: "template_generic",
+    testo: "Contenuto visibile",
+    warnings: [],
+  });
+
+  assert.equal(model.isEmpty, false);
+  assert.deepEqual(model.text, ["Contenuto visibile"]);
+  assert.deepEqual(model.fallbackEntries, []);
+  assert.deepEqual(
+    model.technicalEntries.map((entry) => entry.label),
+    [
+      "normalizedSectionId",
+      "section id",
+      "source ref",
+      "sourceType",
+      "status",
+      "template id",
+    ],
+  );
+});

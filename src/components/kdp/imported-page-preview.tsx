@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import {
   buildImportedPagePreviewModel,
   type ImportedPreviewBlock,
+  type ImportedPreviewEntry,
   type ImportedPreviewTable,
 } from "@/lib/kdp/imported-page-preview";
 import type { Json } from "@/types/database";
@@ -145,7 +146,7 @@ function PreviewFields({ fields }: { fields: string[] }) {
       {fields.map((field, index) => (
         <div className="imported-page-preview-field" key={`${index}-${field}`}>
           <span>{field}</span>
-          <span aria-hidden="true" />
+          <span className="imported-page-preview-field-box" aria-hidden="true" />
         </div>
       ))}
     </div>
@@ -160,9 +161,15 @@ function PreviewPrompts({ prompts }: { prompts: string[] }) {
   return (
     <div className="imported-page-preview-prompts">
       {prompts.map((prompt, index) => (
-        <p className="imported-page-preview-prompt" key={`${index}-${prompt}`}>
-          {prompt}
-        </p>
+        <div className="imported-page-preview-note" key={`${index}-${prompt}`}>
+          <p className="imported-page-preview-prompt">{prompt}</p>
+          <div className="imported-page-preview-note-area" aria-hidden="true">
+            <span />
+            <span />
+            <span />
+            <span />
+          </div>
+        </div>
       ))}
     </div>
   );
@@ -197,6 +204,68 @@ function PreviewTables({ tables }: { tables: ImportedPreviewTable[] }) {
       table={table}
     />
   ));
+}
+
+function PreviewTechnicalDetails({
+  entries,
+  sourceType,
+  status,
+  templateId,
+}: {
+  entries: ImportedPreviewEntry[];
+  sourceType: string | null;
+  status: string;
+  templateId: string | null;
+}) {
+  const technicalEntries: ImportedPreviewEntry[] = [
+    {
+      label: "status",
+      value: status,
+    },
+    ...(templateId
+      ? [
+          {
+            label: "template id",
+            value: templateId,
+          },
+        ]
+      : []),
+    ...(sourceType
+      ? [
+          {
+            label: "source type",
+            value: sourceType,
+          },
+        ]
+      : []),
+    ...entries,
+  ];
+
+  if (technicalEntries.length === 0) {
+    return null;
+  }
+
+  return (
+    <details className="imported-page-preview-technical">
+      <summary>Dettagli tecnici</summary>
+      <dl>
+        {technicalEntries.map((entry, index) => (
+          <div key={`${entry.label}-${index}`}>
+            <dt>{formatLabel(entry.label)}</dt>
+            <dd>
+              {entry.label === "status" ? (
+                <span className={`section-chip ${getStatusChipClass(status)}`}>
+                  {formatLabel(entry.value)}
+                </span>
+              ) : (
+                formatLabel(entry.value)
+              )}
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </details>
+  );
 }
 
 function PreviewBlock({
@@ -264,17 +333,6 @@ export function ImportedPagePreview({
             <p className="imported-page-preview-subtitle">{model.subtitle}</p>
           ) : null}
         </div>
-        <div className="section-chip-row imported-page-preview-meta">
-          <span className={`section-chip ${getStatusChipClass(status)}`}>
-            {formatLabel(status)}
-          </span>
-          <span className="section-chip">
-            {templateId ? `template: ${templateId}` : "template mancante"}
-          </span>
-          <span className="section-chip">
-            {formatLabel(sourceType ?? "source non rilevata")}
-          </span>
-        </div>
       </header>
 
       <div className="imported-page-preview-body">
@@ -305,6 +363,12 @@ export function ImportedPagePreview({
           </dl>
         ) : null}
       </div>
+      <PreviewTechnicalDetails
+        entries={model.technicalEntries}
+        sourceType={sourceType}
+        status={status}
+        templateId={templateId}
+      />
     </article>
   );
 }

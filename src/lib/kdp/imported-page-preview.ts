@@ -7,6 +7,11 @@ export type ImportedPreviewTable = {
   title?: string;
 };
 
+export type ImportedPreviewEntry = {
+  label: string;
+  value: string;
+};
+
 export type ImportedPreviewBlock = {
   blocks: ImportedPreviewBlock[];
   fields: string[];
@@ -22,15 +27,13 @@ export type ImportedPreviewBlock = {
 export type ImportedPagePreviewModel = {
   blocks: ImportedPreviewBlock[];
   fields: string[];
-  fallbackEntries: Array<{
-    label: string;
-    value: string;
-  }>;
+  fallbackEntries: ImportedPreviewEntry[];
   isEmpty: boolean;
   lists: string[][];
   prompts: string[];
   subtitle?: string;
   tables: ImportedPreviewTable[];
+  technicalEntries: ImportedPreviewEntry[];
   text: string[];
 };
 
@@ -75,6 +78,23 @@ const SUBTITLE_KEYS = ["sottotitolo", "subtitle"] as const;
 
 const TABLE_KEYS = ["table", "tabella"] as const;
 const TABLES_KEYS = ["tables", "tabelle"] as const;
+
+const TECHNICAL_KEYS = new Set([
+  "debug",
+  "errors",
+  "extras",
+  "importrunid",
+  "normalizedsectionid",
+  "raw",
+  "rawtext",
+  "sectionid",
+  "sourceref",
+  "sourcetype",
+  "status",
+  "templateid",
+  "warnings",
+]);
+
 const HANDLED_KEYS = new Set<string>([
   ...TEXT_KEYS,
   ...FIELD_KEYS,
@@ -105,6 +125,14 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function normalizeLabel(value: string) {
   return value.replaceAll("_", " ");
+}
+
+function normalizeKey(value: string) {
+  return value.replace(/[\s_-]/g, "").toLowerCase();
+}
+
+function isTechnicalKey(value: string) {
+  return TECHNICAL_KEYS.has(normalizeKey(value));
 }
 
 function toText(value: unknown) {
@@ -168,6 +196,10 @@ function toRowString(value: unknown): string {
   }
 
   return toText(value);
+}
+
+function toEntryValue(value: unknown) {
+  return isRecord(value) || Array.isArray(value) ? toRowString(value) : toText(value);
 }
 
 function toRows(value: unknown): ImportedPreviewTable["rows"] {
@@ -358,13 +390,23 @@ function collectBlocks(source: Record<string, unknown>): ImportedPreviewBlock[] 
 
 function collectFallbackEntries(source: Record<string, unknown>) {
   return Object.entries(source)
-    .filter(([key, value]) => !HANDLED_KEYS.has(key) && value !== undefined)
+    .filter(
+      ([key, value]) =>
+        !HANDLED_KEYS.has(key) && !isTechnicalKey(key) && value !== undefined,
+    )
     .map(([key, value]) => ({
       label: normalizeLabel(key),
-      value:
-        isRecord(value) || Array.isArray(value)
-          ? toRowString(value)
-          : toText(value),
+      value: toEntryValue(value),
+    }))
+    .filter((entry) => entry.value);
+}
+
+function collectTechnicalEntries(source: Record<string, unknown>) {
+  return Object.entries(source)
+    .filter(([key, value]) => isTechnicalKey(key) && value !== undefined)
+    .map(([key, value]) => ({
+      label: normalizeLabel(key),
+      value: toEntryValue(value),
     }))
     .filter((entry) => entry.value);
 }
@@ -383,6 +425,7 @@ export function buildImportedPagePreviewModel(
       lists: [],
       prompts: [],
       tables: [],
+      technicalEntries: [],
       text: text ? [text] : [],
     };
   }
@@ -395,6 +438,7 @@ export function buildImportedPagePreviewModel(
   const tables = collectTables(content);
   const blocks = collectBlocks(content);
   const fallbackEntries = collectFallbackEntries(content);
+  const technicalEntries = collectTechnicalEntries(content);
   const isEmpty =
     text.length === 0 &&
     fields.length === 0 &&
@@ -414,6 +458,7 @@ export function buildImportedPagePreviewModel(
     prompts,
     subtitle,
     tables,
+    technicalEntries,
     text,
   };
 }
