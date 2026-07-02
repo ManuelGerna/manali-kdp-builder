@@ -1874,16 +1874,24 @@ button {
 
 .imported-print-layout {
   gap: 20px;
+  min-width: 0;
 }
 
 .imported-print-document {
   display: grid;
   gap: 24px;
+  width: 100%;
+  min-width: 0;
+  justify-items: center;
 }
 
+/* Screen width scales the preview; aspect-ratio and margin vars keep print geometry. */
 .imported-print-page-frame {
   display: grid;
   gap: 10px;
+  width: 100%;
+  max-width: 720px;
+  min-width: 0;
 }
 
 .imported-print-page-meta {
@@ -1897,7 +1905,9 @@ button {
 
 .imported-print-page-sheet {
   display: grid;
-  width: min(100%, 720px);
+  width: 100%;
+  max-width: 720px;
+  min-width: 0;
   aspect-ratio: var(--print-page-aspect-ratio);
   border: 1px solid #cfc6d7;
   border-radius: 4px;
@@ -1914,6 +1924,7 @@ button {
   display: grid;
   align-content: start;
   gap: 12px;
+  min-width: 0;
   border: 1px dashed #d9d0e0;
   padding: 12px;
 }
@@ -1963,6 +1974,7 @@ button {
 .imported-print-group {
   display: grid;
   gap: 9px;
+  min-width: 0;
 }
 
 .imported-print-field {
@@ -2020,6 +2032,7 @@ button {
 
 .imported-print-table {
   width: 100%;
+  max-width: 100%;
   table-layout: fixed;
   border-collapse: collapse;
   font-size: 0.7rem;
@@ -2038,6 +2051,7 @@ button {
   text-align: left;
   vertical-align: top;
   overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .imported-print-table-compact th,
@@ -2106,6 +2120,62 @@ button {
 }
 
 @media (max-width: 560px) {
+  .imported-print-layout {
+    gap: 14px;
+  }
+
+  .imported-print-document {
+    gap: 18px;
+  }
+
+  .imported-print-page-frame {
+    max-width: calc(100vw - 28px);
+  }
+
+  .imported-print-page-meta,
+  .imported-print-warning-list {
+    font-size: 0.76rem;
+  }
+
+  .imported-print-page-sheet {
+    box-shadow: 0 10px 24px rgba(49, 40, 56, 0.12);
+  }
+
+  .imported-print-safe-area {
+    gap: 8px;
+    padding: 8px;
+  }
+
+  .imported-print-page-content,
+  .imported-print-text,
+  .imported-print-fields,
+  .imported-print-prompts,
+  .imported-print-table-list,
+  .imported-print-group {
+    gap: 7px;
+  }
+
+  .imported-print-page-header h3 {
+    font-size: 0.94rem;
+  }
+
+  .imported-print-page-title .imported-print-page-header h3 {
+    font-size: 1.2rem;
+  }
+
+  .imported-print-table {
+    font-size: 0.58rem;
+  }
+
+  .imported-print-table-compact {
+    font-size: 0.52rem;
+  }
+
+  .imported-print-table th,
+  .imported-print-table td {
+    padding: 2px;
+  }
+
   .imported-page-preview-table-shell-compact {
     overflow-x: auto;
   }
