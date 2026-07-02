@@ -180,6 +180,363 @@ export function normalizeRawText(rawText: string): {
   };
 }
 
+type TolerantLine = {
+  content: string;
+  indent: number;
+};
+
+type TolerantKeyValue = {
+  hasValue: boolean;
+  isBullet: boolean;
+  key: string;
+  rawValue: string;
+};
+
+type ActiveTolerantList = {
+  items: unknown[];
+  lastRecord?: Record<string, unknown>;
+};
+
+const PAGE_SEQUENCE_START_KEYS = new Set(
+  [
+    "numero_pagina",
+    "page_number",
+    "pagina",
+    "intervallo_pagine",
+    "page_range",
+    "range",
+  ].map(normalizeKey),
+);
+
+const PAGE_SEQUENCE_PAGE_LEVEL_KEYS = new Set(
+  [
+    ...PAGE_SEQUENCE_START_KEYS,
+    "template_id",
+    "templateid",
+    "template",
+    "template_version",
+    "ripeti",
+    "repeat",
+    "repeat_count",
+    "titolo",
+    "title",
+    "titolo_pattern",
+    "title_pattern",
+    "section_id",
+    "id_sezione",
+    "section",
+    "layout_hints",
+    "layout",
+    "testo",
+    "text",
+    "body",
+    "campi",
+    "fields",
+    "prompt",
+    "prompts",
+    "prompt_finale",
+    "final_prompt",
+    "rotazione_prompt",
+    "rotation_prompt",
+    "rotation_prompts",
+    "prompt_rotation",
+    "tabella",
+    "table",
+    "tabelle",
+    "tables",
+    "colonne_tabella",
+    "colonne",
+    "columns",
+    "righe",
+    "rows",
+    "numero_righe",
+    "row_count",
+    "rows_count",
+    "giorni",
+    "days",
+    "blocchi",
+    "blocks",
+    "footer_text",
+    "footer",
+  ].map(normalizeKey),
+);
+
+const PAGE_PLAN_SECTION_START_KEYS = new Set(
+  ["id_sezione", "section_id", "id", "titolo_sezione"].map(normalizeKey),
+);
+
+const PAGE_PLAN_SECTION_LEVEL_KEYS = new Set(
+  [
+    ...PAGE_PLAN_SECTION_START_KEYS,
+    "titolo",
+    "title",
+    "pagine",
+    "page_count",
+    "expected_page_count",
+    "pagina_inizio",
+    "start_page",
+    "startPage",
+    "pagina_fine",
+    "end_page",
+    "endPage",
+    "note",
+    "notes",
+  ].map(normalizeKey),
+);
+
+function getIndent(value: string) {
+  const match = value.replace(/\t/g, "  ").match(/^ */);
+
+  return match?.[0].length ?? 0;
+}
+
+function stripBullet(content: string) {
+  const match = content.match(/^[-*]\s+(.*)$/);
+
+  return match ? match[1].trim() : null;
+}
+
+function splitTolerantKeyValue(content: string) {
+  const separatorIndex = content.indexOf(":");
+
+  if (separatorIndex === -1) {
+    return null;
+  }
+
+  const key = content.slice(0, separatorIndex).trim();
+  const rawValue = content.slice(separatorIndex + 1).trim();
+
+  if (!key) {
+    return null;
+  }
+
+  return {
+    hasValue: rawValue.length > 0,
+    key,
+    rawValue,
+  };
+}
+
+function toTolerantLines(rawBlock: string): TolerantLine[] {
+  return rawBlock
+    .replace(/\t/g, "  ")
+    .split("\n")
+    .map((raw): TolerantLine | null => {
+      const content = raw.trim();
+
+      if (!content || content.startsWith("#")) {
+        return null;
+      }
+
+      return {
+        content,
+        indent: getIndent(raw),
+      };
+    })
+    .filter((line): line is TolerantLine => Boolean(line));
+}
+
+function getTolerantKeyValue(line: TolerantLine): TolerantKeyValue | null {
+  const bulletContent = stripBullet(line.content);
+  const keyValue = splitTolerantKeyValue(bulletContent ?? line.content);
+
+  if (!keyValue) {
+    return null;
+  }
+
+  return {
+    ...keyValue,
+    isBullet: bulletContent !== null,
+  };
+}
+
+function appendTolerantText(record: Record<string, unknown>, content: string) {
+  const existing = record.__text;
+
+  record.__text =
+    typeof existing === "string" && existing
+      ? `${existing}\n${content}`
+      : content;
+}
+
+function parseTolerantListItems(input: {
+  alwaysStartOnItemKey?: boolean;
+  itemLevelKeys: Set<string>;
+  itemStartKeys: Set<string>;
+  rawBlock: string;
+}) {
+  const lines = toTolerantLines(input.rawBlock);
+  const items: Record<string, unknown>[] = [];
+  let activeList: ActiveTolerantList | null = null;
+  let currentItem: Record<string, unknown> | null = null;
+  let currentItemIndent = 0;
+
+  function flushCurrentItem() {
+    if (currentItem) {
+      items.push(currentItem);
+      currentItem = null;
+      activeList = null;
+    }
+  }
+
+  function setCurrentField(key: string, value: unknown) {
+    if (currentItem) {
+      currentItem[key] = value;
+    }
+  }
+
+  for (const line of lines) {
+    const bulletContent = stripBullet(line.content);
+    const keyValue = getTolerantKeyValue(line);
+    const normalizedKey = keyValue ? normalizeKey(keyValue.key) : "";
+    const startsNewItem =
+      Boolean(keyValue && input.itemStartKeys.has(normalizedKey)) &&
+      (input.alwaysStartOnItemKey ||
+        !currentItem ||
+        keyValue?.isBullet ||
+        line.indent <= currentItemIndent);
+
+    if (keyValue && startsNewItem) {
+      flushCurrentItem();
+      currentItem = {
+        [keyValue.key]: keyValue.hasValue ? parseScalar(keyValue.rawValue) : null,
+      };
+      currentItemIndent = line.indent;
+      continue;
+    }
+
+    if (!currentItem) {
+      continue;
+    }
+
+    if (!keyValue) {
+      const listText = bulletContent ?? line.content;
+
+      if (activeList && bulletContent !== null) {
+        activeList.items.push(parseScalar(listText));
+      } else {
+        appendTolerantText(currentItem, listText);
+      }
+
+      continue;
+    }
+
+    if (keyValue.isBullet && activeList) {
+      const listRecord = {
+        [keyValue.key]: keyValue.hasValue
+          ? parseScalar(keyValue.rawValue)
+          : null,
+      };
+
+      activeList.items.push(listRecord);
+      activeList.lastRecord = listRecord;
+      continue;
+    }
+
+    if (
+      activeList?.lastRecord &&
+      !input.itemLevelKeys.has(normalizedKey)
+    ) {
+      activeList.lastRecord[keyValue.key] = keyValue.hasValue
+        ? parseScalar(keyValue.rawValue)
+        : null;
+      continue;
+    }
+
+    if (keyValue.hasValue) {
+      setCurrentField(keyValue.key, parseScalar(keyValue.rawValue));
+      activeList = null;
+      continue;
+    }
+
+    const nestedItems: unknown[] = [];
+    setCurrentField(keyValue.key, nestedItems);
+    activeList = {
+      items: nestedItems,
+    };
+  }
+
+  flushCurrentItem();
+
+  return items;
+}
+
+function countPageSequenceDefinitions(value: unknown): number {
+  if (Array.isArray(value)) {
+    return value.filter(
+      (item) =>
+        isRecord(item) &&
+        Object.keys(item).some((key) =>
+          PAGE_SEQUENCE_START_KEYS.has(normalizeKey(key)),
+        ),
+    ).length;
+  }
+
+  if (!isRecord(value)) {
+    return 0;
+  }
+
+  const nestedPages = readField(value, ["pages", "pagine", "sequenza_pagine"]);
+
+  return countPageSequenceDefinitions(nestedPages);
+}
+
+function countPagePlanSections(value: unknown) {
+  if (!isRecord(value)) {
+    return 0;
+  }
+
+  const sections = readField(value, ["sezioni", "sections"]);
+
+  return Array.isArray(sections) ? sections.filter(isRecord).length : 0;
+}
+
+function parsePageSequenceBlock(rawBlock: string) {
+  const parsed = parseYamlLikeBlock(rawBlock);
+  const tolerantItems = parseTolerantListItems({
+    alwaysStartOnItemKey: true,
+    itemLevelKeys: PAGE_SEQUENCE_PAGE_LEVEL_KEYS,
+    itemStartKeys: PAGE_SEQUENCE_START_KEYS,
+    rawBlock,
+  });
+
+  return tolerantItems.length > countPageSequenceDefinitions(parsed)
+    ? tolerantItems
+    : parsed;
+}
+
+function parsePagePlanBlock(rawBlock: string) {
+  const parsed = parseYamlLikeBlock(rawBlock);
+  const tolerantSections = parseTolerantListItems({
+    itemLevelKeys: PAGE_PLAN_SECTION_LEVEL_KEYS,
+    itemStartKeys: PAGE_PLAN_SECTION_START_KEYS,
+    rawBlock,
+  });
+
+  if (tolerantSections.length <= countPagePlanSections(parsed)) {
+    return parsed;
+  }
+
+  return {
+    ...(isRecord(parsed) ? parsed : {}),
+    sezioni: tolerantSections,
+  };
+}
+
+function parseDraftBlock(key: string, value: string) {
+  const normalizedKey = normalizeKey(key);
+
+  if (normalizedKey === normalizeKey("SEQUENZA_PAGINE")) {
+    return parsePageSequenceBlock(value);
+  }
+
+  if (normalizedKey === normalizeKey("PIANO_PAGINE")) {
+    return parsePagePlanBlock(value);
+  }
+
+  return parseYamlLikeBlock(value);
+}
+
 export function detectDraftVersion(rawText: string) {
   const match = rawText.match(/^\s*KDP_BUILDER_DRAFT_VERSION\s*:\s*([^\n]+)/im);
   const version = match ? String(parseScalar(match[1])).trim() : undefined;
@@ -247,7 +604,7 @@ export function parseDraftBlocks(blocks: TopLevelBlocks): ParsedDraft {
   const parsedBlocks = Object.fromEntries(
     Object.entries(blocks.rawBlocks).map(([key, value]) => [
       key,
-      parseYamlLikeBlock(value),
+      parseDraftBlock(key, value),
     ]),
   );
 
