@@ -21,6 +21,7 @@ import {
   generateImportedPagesTechnicalPdf,
   getImportedTechnicalPdfFooterText,
   getImportedTechnicalPdfSparseFieldPlan,
+  getImportedTechnicalPdfTablePlan,
   getImportedTechnicalPdfWritableLineCount,
   getImportedPagesTechnicalPdfSummary,
 } from "../../imported-page-pdf.ts";
@@ -1469,6 +1470,50 @@ test("generates imported technical PDF for fill-page workbook layouts", async ()
     assert.equal(page.getWidth(), 7 * 72);
     assert.equal(page.getHeight(), 10 * 72);
   }
+});
+
+test("keeps weekly planner PDF tables fixed-row and expands row height", () => {
+  const rows = [
+    "Lunedì",
+    "Martedì",
+    "Mercoledì",
+    "Giovedì",
+    "Venerdì",
+    "Sabato",
+    "Domenica",
+  ].map((day) => ({
+    Giorno: day,
+    "Focus allenamento": "",
+    Note: "",
+    Orario: "",
+  }));
+  const plan = getImportedTechnicalPdfTablePlan({
+    availableHeight: 520,
+    columns: ["Giorno", "Focus allenamento", "Orario", "Note"],
+    extraHeight: 420,
+    rowCount: 7,
+    rows,
+  });
+
+  assert.equal(plan.fixedRows, true);
+  assert.equal(plan.canAddRows, false);
+  assert.equal(plan.requestedRows, 7);
+  assert.equal(plan.visibleRows, 7);
+  assert.ok(plan.rowHeight > 38);
+});
+
+test("keeps open-ended PDF log tables expandable", () => {
+  const plan = getImportedTechnicalPdfTablePlan({
+    availableHeight: 520,
+    columns: ["Data", "Peso", "Note"],
+    extraHeight: 420,
+    rowCount: 4,
+    rows: [],
+  });
+
+  assert.equal(plan.fixedRows, false);
+  assert.equal(plan.canAddRows, true);
+  assert.ok(plan.visibleRows > plan.requestedRows);
 });
 
 test("generates imported technical PDF for sparse workbook pages", async () => {

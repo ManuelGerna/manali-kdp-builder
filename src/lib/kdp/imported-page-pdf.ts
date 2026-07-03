@@ -51,11 +51,24 @@ const TABLE_DENSE_SIZE = 5;
 const GRAY = rgb(0.15, 0.15, 0.15);
 const MID_GRAY = rgb(0.42, 0.42, 0.42);
 const LIGHT_GRAY = rgb(0.78, 0.78, 0.78);
-const FILL_GRAY = rgb(0.96, 0.96, 0.96);
+const HEADER_FILL_GRAY = rgb(0.985, 0.985, 0.985);
 
 type DrawBlockOptions = {
   fillAllocations?: WeakMap<ImportedPrintBlock, number>;
   fillPromptLines?: boolean;
+};
+
+type ImportedPrintTable = Extract<
+  ImportedPrintBlock,
+  { type: "tables" }
+>["tables"][number];
+
+export type ImportedTechnicalPdfTablePlan = {
+  canAddRows: boolean;
+  fixedRows: boolean;
+  requestedRows: number;
+  rowHeight: number;
+  visibleRows: number;
 };
 
 function toPoints(value: number) {
@@ -1373,8 +1386,51 @@ function normalizeTableColumn(value: string) {
   return value.replace(/[\s_-]/g, "").toLowerCase();
 }
 
+function normalizeTableCell(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "");
+}
+
+const WEEKDAY_LABELS = new Map<string, string>([
+  ["lun", "monday"],
+  ["lunedi", "monday"],
+  ["monday", "monday"],
+  ["mon", "monday"],
+  ["mar", "tuesday"],
+  ["martedi", "tuesday"],
+  ["tue", "tuesday"],
+  ["tuesday", "tuesday"],
+  ["mer", "wednesday"],
+  ["mercoledi", "wednesday"],
+  ["wed", "wednesday"],
+  ["wednesday", "wednesday"],
+  ["gio", "thursday"],
+  ["giovedi", "thursday"],
+  ["thu", "thursday"],
+  ["thursday", "thursday"],
+  ["ven", "friday"],
+  ["venerdi", "friday"],
+  ["fri", "friday"],
+  ["friday", "friday"],
+  ["sab", "saturday"],
+  ["sabato", "saturday"],
+  ["sat", "saturday"],
+  ["saturday", "saturday"],
+  ["dom", "sunday"],
+  ["domenica", "sunday"],
+  ["sun", "sunday"],
+  ["sunday", "sunday"],
+]);
+
+function getWeekdayKey(value: string) {
+  return WEEKDAY_LABELS.get(normalizeTableCell(value));
+}
+
 function isHabitTrackerTable(
-  table: Extract<ImportedPrintBlock, { type: "tables" }>["tables"][number],
+  table: ImportedPrintTable,
 ) {
   const [firstColumn, ...dayColumns] = table.columns;
   const normalizedFirstColumn = normalizeTableColumn(firstColumn ?? "");
@@ -1385,6 +1441,29 @@ function isHabitTrackerTable(
     dayColumns.length <= 31 &&
     table.rowCount >= 3
   );
+}
+
+function isFixedRowPlannerTable(table: ImportedPrintTable) {
+  const firstColumn = table.columns[0] ?? "";
+
+  if (table.rows.length < 5 || table.rows.length > 7 || !firstColumn) {
+    return false;
+  }
+
+  const weekdayKeys = table.rows
+    .map((row) => getWeekdayKey(getCellText(row, firstColumn, 0)))
+    .filter((weekday): weekday is NonNullable<typeof weekday> => Boolean(weekday));
+  const uniqueWeekdays = new Set(weekdayKeys);
+
+  return weekdayKeys.length === table.rows.length && uniqueWeekdays.size >= 5;
+}
+
+function getRequestedTableRows(table: ImportedPrintTable) {
+  if (isFixedRowPlannerTable(table)) {
+    return Math.max(1, table.rows.length);
+  }
+
+  return Math.max(table.rowCount, table.rows.length, 4);
 }
 
 function drawCenteredCellText({
@@ -1477,7 +1556,7 @@ function drawHabitTrackerTable(
   layout.page.drawRectangle({
     borderColor: LIGHT_GRAY,
     borderWidth: 0,
-    color: FILL_GRAY,
+    color: HEADER_FILL_GRAY,
     height: headerHeight,
     width: layout.contentWidth,
     x: layout.x,
@@ -1487,7 +1566,7 @@ function drawHabitTrackerTable(
   layout.page.drawText("Abitudine", {
     color: GRAY,
     font: layout.fonts.bodyBold,
-    size: 5.2,
+    size: 5.4,
     x: layout.x + 3,
     y: tableTop - headerHeight + 3.2,
   });
@@ -1584,8 +1663,12 @@ function getTableColumnWidths(columns: string[], contentWidth: number) {
 }
 
 function canAddWritableTableRows(
-  table: Extract<ImportedPrintBlock, { type: "tables" }>["tables"][number],
+  table: ImportedPrintTable,
 ) {
+  if (isFixedRowPlannerTable(table)) {
+    return false;
+  }
+
   if (table.rows.length === 0 || table.rowCount > table.rows.length) {
     return true;
   }
@@ -1601,6 +1684,7 @@ function getTableDrawingMetrics({
   canAddRows,
   columns,
   extraHeight = 0,
+  fixedRows = false,
   layout,
   requestedRows,
   tableLayout,
@@ -1608,6 +1692,7 @@ function getTableDrawingMetrics({
   canAddRows: boolean;
   columns: string[];
   extraHeight?: number;
+  fixedRows?: boolean;
   layout: PdfLayout;
   requestedRows: number;
   tableLayout: "compact" | "standard";
@@ -1616,10 +1701,21 @@ function getTableDrawingMetrics({
   const isVeryWide = columns.length >= 8;
   const compact = tableLayout === "compact" || isWide || requestedRows >= 10;
   const size = isVeryWide ? 4.4 : compact ? 5.3 : 6.4;
+  const headerSize = isVeryWide ? 4.5 : compact ? 5.5 : 6.7;
   const headerHeight = isVeryWide ? 13 : compact ? 15 : 17;
   const preferredRowHeight = isVeryWide ? 12 : compact ? 14 : 18;
   const minRowHeight = isVeryWide ? 9.5 : compact ? 11 : 14;
-  const maxRowHeight = isVeryWide ? 24 : compact ? 30 : 38;
+  const maxRowHeight = fixedRows
+    ? isVeryWide
+      ? 28
+      : compact
+        ? 48
+        : 64
+    : isVeryWide
+      ? 24
+      : compact
+        ? 30
+        : 38;
   const availableHeight = Math.max(0, layout.y - layout.bottomY - 8);
   const preferredTableHeight = headerHeight + preferredRowHeight * requestedRows;
   const targetTableHeight = Math.min(
@@ -1662,6 +1758,7 @@ function getTableDrawingMetrics({
 
   return {
     headerHeight,
+    headerSize,
     overflow,
     rowHeight,
     size,
@@ -1669,9 +1766,55 @@ function getTableDrawingMetrics({
   };
 }
 
+export function getImportedTechnicalPdfTablePlan(input: {
+  availableHeight?: number;
+  columns: string[];
+  contentWidth?: number;
+  extraHeight?: number;
+  rowCount?: number;
+  rows?: ImportedPrintTable["rows"];
+  tableLayout?: "compact" | "standard";
+}): ImportedTechnicalPdfTablePlan {
+  const table: ImportedPrintTable = {
+    columns: input.columns,
+    layout: input.tableLayout ?? "standard",
+    rowCount: input.rowCount ?? input.rows?.length ?? 0,
+    rows: input.rows ?? [],
+  };
+  const fixedRows = isFixedRowPlannerTable(table);
+  const requestedRows = getRequestedTableRows(table);
+  const metrics = getTableDrawingMetrics({
+    canAddRows: canAddWritableTableRows(table),
+    columns: input.columns,
+    extraHeight: input.extraHeight ?? 0,
+    fixedRows,
+    layout: {
+      bottomY: 0,
+      contentWidth: input.contentWidth ?? 420,
+      fonts: {} as PdfFonts,
+      overflow: false,
+      page: {} as PDFPage,
+      pageHeight: input.availableHeight ?? 500,
+      pageWidth: input.contentWidth ?? 420,
+      x: 0,
+      y: input.availableHeight ?? 500,
+    },
+    requestedRows,
+    tableLayout: input.tableLayout ?? "standard",
+  });
+
+  return {
+    canAddRows: canAddWritableTableRows(table),
+    fixedRows,
+    requestedRows,
+    rowHeight: metrics.rowHeight,
+    visibleRows: metrics.visibleRows,
+  };
+}
+
 function drawTable(
   layout: PdfLayout,
-  table: Extract<ImportedPrintBlock, { type: "tables" }>["tables"][number],
+  table: ImportedPrintTable,
   extraHeight = 0,
 ) {
   if (isHabitTrackerTable(table)) {
@@ -1679,13 +1822,15 @@ function drawTable(
   }
 
   const columns = table.columns.length > 0 ? table.columns : ["Spazio", "Contenuto", "Note"];
-  const requestedRows = Math.max(table.rowCount, table.rows.length, 4);
+  const fixedRows = isFixedRowPlannerTable(table);
+  const requestedRows = getRequestedTableRows(table);
   const titleSize = columns.length >= 5 ? TABLE_DENSE_SIZE + 0.6 : TABLE_SIZE + 0.6;
   const titleHeight = table.title ? titleSize * 1.8 : 0;
   const metrics = getTableDrawingMetrics({
     canAddRows: canAddWritableTableRows(table),
     columns,
     extraHeight,
+    fixedRows,
     layout: {
       ...layout,
       y: layout.y - titleHeight,
@@ -1724,7 +1869,7 @@ function drawTable(
   layout.page.drawRectangle({
     borderColor: LIGHT_GRAY,
     borderWidth: 0.5,
-    color: FILL_GRAY,
+    color: HEADER_FILL_GRAY,
     height: metrics.headerHeight,
     width: layout.contentWidth,
     x: layout.x,
@@ -1739,16 +1884,16 @@ function drawTable(
       wrapText(
         column.replaceAll("_", " "),
         layout.fonts.bodyBold,
-        metrics.size,
+        metrics.headerSize,
         Math.max(4, columnWidth - 4),
       )[0] ?? "";
 
     layout.page.drawText(sanitizePdfText(headerLine), {
       color: GRAY,
       font: layout.fonts.bodyBold,
-      size: metrics.size,
+      size: metrics.headerSize,
       x: x + 2,
-      y: tableTop - metrics.headerHeight + metrics.size * 0.78,
+      y: tableTop - metrics.headerHeight + metrics.headerSize * 0.78,
     });
     layout.page.drawLine({
       color: LIGHT_GRAY,
@@ -2134,7 +2279,7 @@ function estimatePromptsHeight(
 
 function estimateTableHeight(
   layout: PdfLayout,
-  table: Extract<ImportedPrintBlock, { type: "tables" }>["tables"][number],
+  table: ImportedPrintTable,
 ) {
   if (isHabitTrackerTable(table)) {
     const rows = Math.max(table.rowCount, table.rows.length);
@@ -2146,12 +2291,14 @@ function estimateTableHeight(
   const columns = table.columns.length > 0
     ? table.columns
     : ["Spazio", "Contenuto", "Note"];
-  const requestedRows = Math.max(table.rowCount, table.rows.length, 4);
+  const fixedRows = isFixedRowPlannerTable(table);
+  const requestedRows = getRequestedTableRows(table);
   const titleSize = columns.length >= 5 ? TABLE_DENSE_SIZE + 0.6 : TABLE_SIZE + 0.6;
   const titleHeight = table.title ? titleSize * 1.8 : 0;
   const metrics = getTableDrawingMetrics({
     canAddRows: false,
     columns,
+    fixedRows,
     layout: {
       ...layout,
       y: layout.y - titleHeight,
