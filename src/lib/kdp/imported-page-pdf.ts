@@ -54,6 +54,7 @@ const LIGHT_GRAY = rgb(0.78, 0.78, 0.78);
 const FILL_GRAY = rgb(0.96, 0.96, 0.96);
 
 type DrawBlockOptions = {
+  fillAllocations?: WeakMap<ImportedPrintBlock, number>;
   fillPromptLines?: boolean;
 };
 
@@ -372,6 +373,7 @@ function drawFields(
   layout: PdfLayout,
   block: Extract<ImportedPrintBlock, { type: "fields" }>,
   dense: boolean,
+  extraHeight = 0,
 ) {
   const fields = block.fields;
   const isGrid = block.layout === "grid" || fields.length >= 2;
@@ -379,7 +381,13 @@ function drawFields(
   const gap = dense ? 4 : 6;
   const labelSize = dense ? 5.8 : 6.6;
   const valueSize = dense ? 6.2 : 7;
-  const boxHeight = dense ? 17 : 21;
+  const rowCount = Math.max(1, Math.ceil(fields.length / columns));
+  const baseBoxHeight = dense ? 17 : 21;
+  const maxBoxHeight = dense ? 42 : 58;
+  const boxHeight = Math.min(
+    maxBoxHeight,
+    baseBoxHeight + Math.max(0, extraHeight) / rowCount,
+  );
   const cellWidth = (layout.contentWidth - gap * (columns - 1)) / columns;
 
   for (let startIndex = 0; startIndex < fields.length; startIndex += columns) {
@@ -482,6 +490,7 @@ function drawPrompts(
   prompts: string[],
   dense: boolean,
   options: {
+    extraHeight?: number;
     fillRemaining?: boolean;
   } = {},
 ) {
@@ -490,21 +499,49 @@ function drawPrompts(
   const boxPadding = dense ? 5 : 6;
   const boxGap = dense ? 4 : 6;
   const writableWidth = layout.contentWidth - boxPadding * 2;
-
-  for (const prompt of prompts) {
-    const promptLines = wrapText(
-      prompt,
-      layout.fonts.bodyItalic,
-      fontSize,
-      writableWidth,
+  const baseNoteLines = dense ? 3 : 4;
+  const promptLineGroups = prompts.map((prompt) =>
+    wrapText(prompt, layout.fonts.bodyItalic, fontSize, writableWidth),
+  );
+  const fillTargetHeight = options.fillRemaining
+    ? layout.y - layout.bottomY
+    : Math.max(0, options.extraHeight ?? 0) +
+      promptLineGroups.reduce(
+        (total, lines) =>
+          total +
+          boxPadding * 2 +
+          lines.length * lineHeight +
+          baseNoteLines * lineHeight +
+          boxGap,
+        0,
+      );
+  const availableForNotes =
+    fillTargetHeight -
+    promptLineGroups.reduce(
+      (total, lines) =>
+        total + boxPadding * 2 + lines.length * lineHeight + boxGap,
+      0,
     );
-    const noteLines = getImportedTechnicalPdfWritableLineCount({
-      availableHeight: layout.y - layout.bottomY - boxPadding * 2,
-      dense,
-      fillRemaining: options.fillRemaining,
-      lineHeight,
-      promptLineCount: promptLines.length,
-    });
+  const targetNoteLines =
+    options.fillRemaining || (options.extraHeight ?? 0) > 0
+      ? Math.max(
+          baseNoteLines * prompts.length,
+          Math.floor(availableForNotes / lineHeight),
+        )
+      : baseNoteLines * prompts.length;
+  const extraNoteLines = Math.max(
+    0,
+    targetNoteLines - baseNoteLines * prompts.length,
+  );
+  const noteLineCounts = promptLineGroups.map((_, index) => {
+    const sharedExtra = Math.floor(extraNoteLines / Math.max(1, prompts.length));
+    const remainder = index < extraNoteLines % Math.max(1, prompts.length) ? 1 : 0;
+
+    return baseNoteLines + sharedExtra + remainder;
+  });
+
+  for (const [promptIndex, promptLines] of promptLineGroups.entries()) {
+    const noteLines = noteLineCounts[promptIndex] ?? baseNoteLines;
     const height =
       boxPadding * 2 +
       promptLines.length * lineHeight +
@@ -672,6 +709,7 @@ function drawCenteredCellText({
 function drawHabitTrackerTable(
   layout: PdfLayout,
   table: Extract<ImportedPrintBlock, { type: "tables" }>["tables"][number],
+  extraHeight = 0,
 ) {
   const columns = table.columns;
   const dayColumns = columns.slice(1);
@@ -679,7 +717,20 @@ function drawHabitTrackerTable(
   const titleSize = 6.2;
   const titleHeight = table.title ? 12 : 0;
   const headerHeight = 12;
-  const rowHeight = rows.length >= 8 ? 15 : 17;
+  const baseRowHeight = rows.length >= 8 ? 15 : 17;
+  const availableTableHeight = Math.max(0, layout.y - layout.bottomY - 8);
+  const targetTableHeight = Math.min(
+    availableTableHeight,
+    titleHeight + headerHeight + baseRowHeight * rows.length + extraHeight,
+  );
+  const rowHeight = Math.min(
+    48,
+    Math.max(
+      baseRowHeight,
+      (targetTableHeight - titleHeight - headerHeight) /
+        Math.max(1, rows.length),
+    ),
+  );
   const firstColumnWidth = Math.min(layout.contentWidth * 0.28, 86);
   const dayWidth = (layout.contentWidth - firstColumnWidth) / dayColumns.length;
   const tableHeight = titleHeight + headerHeight + rowHeight * rows.length + 8;
@@ -820,13 +871,31 @@ function getTableColumnWidths(columns: string[], contentWidth: number) {
   return Array.from({ length: columns.length }, () => contentWidth / columns.length);
 }
 
+function canAddWritableTableRows(
+  table: Extract<ImportedPrintBlock, { type: "tables" }>["tables"][number],
+) {
+  if (table.rows.length === 0 || table.rowCount > table.rows.length) {
+    return true;
+  }
+
+  return table.rows.every((row) =>
+    table.columns.every((column, columnIndex) =>
+      columnIndex === 0 ? true : !getCellText(row, column, columnIndex),
+    ),
+  );
+}
+
 function getTableDrawingMetrics({
+  canAddRows,
   columns,
+  extraHeight = 0,
   layout,
   requestedRows,
   tableLayout,
 }: {
+  canAddRows: boolean;
   columns: string[];
+  extraHeight?: number;
   layout: PdfLayout;
   requestedRows: number;
   tableLayout: "compact" | "standard";
@@ -838,10 +907,31 @@ function getTableDrawingMetrics({
   const headerHeight = isVeryWide ? 13 : compact ? 15 : 17;
   const preferredRowHeight = isVeryWide ? 12 : compact ? 14 : 18;
   const minRowHeight = isVeryWide ? 9.5 : compact ? 11 : 14;
+  const maxRowHeight = isVeryWide ? 24 : compact ? 30 : 38;
   const availableHeight = Math.max(0, layout.y - layout.bottomY - 8);
+  const preferredTableHeight = headerHeight + preferredRowHeight * requestedRows;
+  const targetTableHeight = Math.min(
+    availableHeight,
+    preferredTableHeight + Math.max(0, extraHeight),
+  );
   let rowHeight = preferredRowHeight;
   let visibleRows = requestedRows;
   let overflow = false;
+
+  if (canAddRows && targetTableHeight > preferredTableHeight + preferredRowHeight) {
+    const expandedRows = Math.floor(
+      (targetTableHeight - headerHeight) / preferredRowHeight,
+    );
+
+    visibleRows = Math.max(requestedRows, Math.min(expandedRows, 24));
+  }
+
+  if (targetTableHeight > headerHeight + rowHeight * visibleRows) {
+    rowHeight = Math.min(
+      maxRowHeight,
+      (targetTableHeight - headerHeight) / Math.max(1, visibleRows),
+    );
+  }
 
   if (headerHeight + rowHeight * visibleRows > availableHeight) {
     const fittedRowHeight =
@@ -867,9 +957,13 @@ function getTableDrawingMetrics({
   };
 }
 
-function drawTable(layout: PdfLayout, table: Extract<ImportedPrintBlock, { type: "tables" }>["tables"][number]) {
+function drawTable(
+  layout: PdfLayout,
+  table: Extract<ImportedPrintBlock, { type: "tables" }>["tables"][number],
+  extraHeight = 0,
+) {
   if (isHabitTrackerTable(table)) {
-    return drawHabitTrackerTable(layout, table);
+    return drawHabitTrackerTable(layout, table, extraHeight);
   }
 
   const columns = table.columns.length > 0 ? table.columns : ["Spazio", "Contenuto", "Note"];
@@ -877,7 +971,9 @@ function drawTable(layout: PdfLayout, table: Extract<ImportedPrintBlock, { type:
   const titleSize = columns.length >= 5 ? TABLE_DENSE_SIZE + 0.6 : TABLE_SIZE + 0.6;
   const titleHeight = table.title ? titleSize * 1.8 : 0;
   const metrics = getTableDrawingMetrics({
+    canAddRows: canAddWritableTableRows(table),
     columns,
+    extraHeight,
     layout: {
       ...layout,
       y: layout.y - titleHeight,
@@ -1033,6 +1129,7 @@ function drawGroup(
   layout: PdfLayout,
   block: Extract<ImportedPrintBlock, { type: "group" }>,
   dense: boolean,
+  options: DrawBlockOptions = {},
 ) {
   if (block.title) {
     if (!drawParagraph(layout, block.title, {
@@ -1056,6 +1153,7 @@ function drawGroup(
 
   for (const child of block.blocks) {
     if (!drawBlock(layout, child, dense, {
+      fillAllocations: options.fillAllocations,
       fillPromptLines: false,
     })) {
       return false;
@@ -1071,6 +1169,8 @@ function drawBlock(
   dense: boolean,
   options: DrawBlockOptions = {},
 ): boolean {
+  const extraHeight = options.fillAllocations?.get(block) ?? 0;
+
   if (block.type === "text") {
     for (const text of block.text) {
       if (!drawParagraph(layout, text, {
@@ -1084,11 +1184,12 @@ function drawBlock(
   }
 
   if (block.type === "fields") {
-    return drawFields(layout, block, dense);
+    return drawFields(layout, block, dense, extraHeight);
   }
 
   if (block.type === "prompts") {
     return drawPrompts(layout, block.prompts, dense, {
+      extraHeight,
       fillRemaining: options.fillPromptLines,
     });
   }
@@ -1098,8 +1199,10 @@ function drawBlock(
   }
 
   if (block.type === "tables") {
+    const tableExtraHeight = extraHeight / Math.max(1, block.tables.length);
+
     for (const table of block.tables) {
-      if (!drawTable(layout, table)) {
+      if (!drawTable(layout, table, tableExtraHeight)) {
         return false;
       }
     }
@@ -1108,7 +1211,7 @@ function drawBlock(
   }
 
   if (block.type === "group") {
-    return drawGroup(layout, block, dense);
+    return drawGroup(layout, block, dense, options);
   }
 
   for (const entry of block.entries) {
@@ -1120,6 +1223,262 @@ function drawBlock(
   }
 
   return true;
+}
+
+function estimateParagraphHeight(
+  layout: PdfLayout,
+  value: string,
+  size: number,
+  options?: {
+    maxWidth?: number;
+    spacingAfter?: number;
+  },
+) {
+  const lines = wrapText(
+    value,
+    layout.fonts.body,
+    size,
+    options?.maxWidth ?? layout.contentWidth,
+  );
+
+  return lines.length * size * 1.22 + (options?.spacingAfter ?? size * 0.45);
+}
+
+function estimateFieldsHeight(
+  layout: PdfLayout,
+  block: Extract<ImportedPrintBlock, { type: "fields" }>,
+  dense: boolean,
+) {
+  const fields = block.fields;
+  const isGrid = block.layout === "grid" || fields.length >= 2;
+  const columns = Math.max(1, getFieldColumnCount(fields.length, isGrid));
+  const gap = dense ? 4 : 6;
+  const labelSize = dense ? 5.8 : 6.6;
+  const boxHeight = dense ? 17 : 21;
+  const cellWidth = (layout.contentWidth - gap * (columns - 1)) / columns;
+  let height = 0;
+
+  for (let startIndex = 0; startIndex < fields.length; startIndex += columns) {
+    const rowFields = fields.slice(startIndex, startIndex + columns);
+    const labelLineGroups = rowFields.map((field) =>
+      wrapText(
+        formatPdfLabel(splitFieldLabelValue(field).label),
+        layout.fonts.bodyBold,
+        labelSize,
+        cellWidth,
+      ),
+    );
+    const labelHeight =
+      Math.max(1, ...labelLineGroups.map((lines) => lines.length)) *
+      labelSize *
+      1.12;
+
+    height += labelHeight + boxHeight + gap;
+  }
+
+  return height + (dense ? 2 : 4);
+}
+
+function estimatePromptsHeight(
+  layout: PdfLayout,
+  block: Extract<ImportedPrintBlock, { type: "prompts" }>,
+  dense: boolean,
+) {
+  const fontSize = dense ? 7.2 : 8;
+  const lineHeight = dense ? 10 : 12;
+  const boxPadding = dense ? 5 : 6;
+  const boxGap = dense ? 4 : 6;
+  const writableWidth = layout.contentWidth - boxPadding * 2;
+  const noteLines = dense ? 3 : 4;
+
+  return block.prompts.reduce((total, prompt) => {
+    const promptLines = wrapText(
+      prompt,
+      layout.fonts.bodyItalic,
+      fontSize,
+      writableWidth,
+    );
+
+    return (
+      total +
+      boxPadding * 2 +
+      promptLines.length * lineHeight +
+      noteLines * lineHeight +
+      boxGap
+    );
+  }, 0);
+}
+
+function estimateTableHeight(
+  layout: PdfLayout,
+  table: Extract<ImportedPrintBlock, { type: "tables" }>["tables"][number],
+) {
+  if (isHabitTrackerTable(table)) {
+    const rows = Math.max(table.rowCount, table.rows.length);
+    const rowHeight = rows >= 8 ? 15 : 17;
+
+    return (table.title ? 12 : 0) + 12 + rowHeight * rows + 8;
+  }
+
+  const columns = table.columns.length > 0
+    ? table.columns
+    : ["Spazio", "Contenuto", "Note"];
+  const requestedRows = Math.max(table.rowCount, table.rows.length, 4);
+  const titleSize = columns.length >= 5 ? TABLE_DENSE_SIZE + 0.6 : TABLE_SIZE + 0.6;
+  const titleHeight = table.title ? titleSize * 1.8 : 0;
+  const metrics = getTableDrawingMetrics({
+    canAddRows: false,
+    columns,
+    layout: {
+      ...layout,
+      y: layout.y - titleHeight,
+    },
+    requestedRows,
+    tableLayout: table.layout,
+  });
+
+  return titleHeight + metrics.headerHeight + metrics.rowHeight * metrics.visibleRows + 8;
+}
+
+function estimateBlockHeight(
+  layout: PdfLayout,
+  block: ImportedPrintBlock,
+  dense: boolean,
+): number {
+  if (block.type === "text") {
+    return block.text.reduce(
+      (total, text) =>
+        total + estimateParagraphHeight(layout, text, dense ? DENSE_BODY_SIZE : BODY_SIZE),
+      0,
+    );
+  }
+
+  if (block.type === "fields") {
+    return estimateFieldsHeight(layout, block, dense);
+  }
+
+  if (block.type === "prompts") {
+    return estimatePromptsHeight(layout, block, dense);
+  }
+
+  if (block.type === "list") {
+    const size = dense ? DENSE_BODY_SIZE : BODY_SIZE;
+
+    return block.items.reduce((total, item) => {
+      const lines = wrapText(item, layout.fonts.body, size, layout.contentWidth - 10);
+
+      return total + Math.max(1, lines.length) * size * 1.22 + 2;
+    }, 3);
+  }
+
+  if (block.type === "tables") {
+    return block.tables.reduce(
+      (total, table) => total + estimateTableHeight(layout, table),
+      0,
+    );
+  }
+
+  if (block.type === "group") {
+    const titleHeight = block.title
+      ? estimateParagraphHeight(layout, block.title, dense ? 7 : 8, {
+          spacingAfter: 3,
+        })
+      : 0;
+    const subtitleHeight = block.subtitle
+      ? estimateParagraphHeight(layout, block.subtitle, dense ? 7 : 8, {
+          spacingAfter: 3,
+        })
+      : 0;
+
+    return (
+      titleHeight +
+      subtitleHeight +
+      block.blocks.reduce(
+        (total, child) => total + estimateBlockHeight(layout, child, dense),
+        0,
+      )
+    );
+  }
+
+  return block.entries.reduce(
+    (total, entry) =>
+      total +
+      estimateParagraphHeight(
+        layout,
+        `${entry.label}: ${entry.value}`,
+        dense ? DENSE_BODY_SIZE : BODY_SIZE,
+      ),
+    0,
+  );
+}
+
+function getExpandableBlockWeight(block: ImportedPrintBlock) {
+  if (block.type === "tables") {
+    return block.tables.some(isHabitTrackerTable) ? 9 : 8;
+  }
+
+  if (block.type === "prompts") {
+    return 3.5;
+  }
+
+  if (block.type === "fields") {
+    return 1.4;
+  }
+
+  return 0;
+}
+
+function collectExpandableBlocks(
+  blocks: ImportedPrintBlock[],
+  targets: Array<{ block: ImportedPrintBlock; weight: number }> = [],
+) {
+  for (const block of blocks) {
+    if (block.type === "group") {
+      collectExpandableBlocks(block.blocks, targets);
+      continue;
+    }
+
+    const weight = getExpandableBlockWeight(block);
+
+    if (weight > 0) {
+      targets.push({ block, weight });
+    }
+  }
+
+  return targets;
+}
+
+function getFillPageAllocations(
+  layout: PdfLayout,
+  blocks: ImportedPrintBlock[],
+  dense: boolean,
+) {
+  const allocations = new WeakMap<ImportedPrintBlock, number>();
+  const targets = collectExpandableBlocks(blocks);
+
+  if (targets.length === 0) {
+    return allocations;
+  }
+
+  const availableHeight = Math.max(0, layout.y - layout.bottomY - 6);
+  const estimatedHeight = blocks.reduce(
+    (total, block) => total + estimateBlockHeight(layout, block, dense),
+    0,
+  );
+  const targetHeight = availableHeight * 0.9;
+  const extraHeight = Math.max(0, targetHeight - estimatedHeight);
+
+  if (extraHeight < 24) {
+    return allocations;
+  }
+
+  const totalWeight = targets.reduce((total, target) => total + target.weight, 0);
+
+  for (const target of targets) {
+    allocations.set(target.block, (extraHeight * target.weight) / totalWeight);
+  }
+
+  return allocations;
 }
 
 export function getImportedTechnicalPdfFooterText(page: ImportedPrintPage) {
@@ -1265,6 +1624,7 @@ function drawImportedPage({
   const fillPromptLines = shouldFillPromptLines(page);
 
   drawPageHeader(layout, page);
+  const fillAllocations = getFillPageAllocations(layout, page.blocks, dense);
 
   if (page.blocks.length === 0 && !page.hasPrintableHeader) {
     drawParagraph(layout, "Contenuto stampabile non disponibile.", {
@@ -1276,6 +1636,7 @@ function drawImportedPage({
 
   for (const block of page.blocks) {
     if (!drawBlock(layout, block, dense, {
+      fillAllocations,
       fillPromptLines,
     })) {
       break;

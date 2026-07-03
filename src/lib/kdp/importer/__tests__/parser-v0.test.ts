@@ -1380,6 +1380,96 @@ test("generates imported technical PDF with one page for each imported page", as
   assert.equal(firstPage.getHeight(), 10 * 72);
 });
 
+test("generates imported technical PDF for fill-page workbook layouts", async () => {
+  const model = buildImportedPrintRenderModel({
+    pages: [
+      {
+        content: {
+          punti: [
+            "Quali cambiamenti noto?",
+            "Cosa mi sembra piu facile rispetto all'inizio?",
+            "Cosa devo ancora migliorare?",
+            "Cosa posso correggere nel mio piano?",
+          ],
+        },
+        pageNumber: 14,
+        templateId: "template_progress_notes",
+      },
+      {
+        content: {
+          abitudini: [
+            "Allenamento",
+            "Acqua",
+            "Passi",
+            "Sonno",
+            "Stretching",
+            "Alimentazione",
+          ],
+          giorni: 31,
+        },
+        pageNumber: 18,
+        templateId: "template_habit_tracker",
+      },
+      {
+        content: {
+          campi_finali: ["Note finali", "Feedback", "Prossima correzione"],
+          campi_iniziali: [
+            "Data",
+            "Giorno",
+            "Focus allenamento",
+            "Ora inizio",
+            "Durata",
+          ],
+          stato_iniziale: [
+            "Energia 1-5",
+            "Umore",
+            "Sonno",
+            "Riscaldamento completato",
+          ],
+          tabella_principale: {
+            colonne_tabella: [
+              "Esercizio",
+              "Serie",
+              "Ripetizioni",
+              "Carico",
+              "Recupero",
+              "Note",
+            ],
+            numero_righe: 8,
+          },
+        },
+        pageNumber: 21,
+        templateId: "template_workout",
+      },
+      {
+        content: {
+          campi: ["Misura iniziale", "Misura finale", "Osservazioni"],
+        },
+        pageNumber: 101,
+        templateId: "template_record",
+      },
+      {
+        content: {
+          prompt: "Note libere della settimana",
+        },
+        pageNumber: 105,
+        templateId: "template_notes",
+      },
+    ],
+  });
+  const bytes = await generateImportedPagesTechnicalPdf(model, {
+    title: "Workbook fill-page",
+  });
+  const doc = await PDFDocument.load(bytes);
+
+  assert.equal(doc.getPageCount(), 5);
+
+  for (const page of doc.getPages()) {
+    assert.equal(page.getWidth(), 7 * 72);
+    assert.equal(page.getHeight(), 10 * 72);
+  }
+});
+
 test("generates imported technical PDF for 110 simulated imported pages", async () => {
   const model = buildImportedPrintRenderModel({
     pages: Array.from({ length: 110 }, (_, index) => {
