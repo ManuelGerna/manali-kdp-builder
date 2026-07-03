@@ -20,6 +20,7 @@ import {
 import {
   generateImportedPagesTechnicalPdf,
   getImportedTechnicalPdfFooterText,
+  getImportedTechnicalPdfSparseFieldPlan,
   getImportedTechnicalPdfWritableLineCount,
   getImportedPagesTechnicalPdfSummary,
 } from "../../imported-page-pdf.ts";
@@ -1586,6 +1587,50 @@ test("generates imported technical PDF for sparse workbook pages", async () => {
     assert.equal(page.getWidth(), 7 * 72);
     assert.equal(page.getHeight(), 10 * 72);
   }
+});
+
+test("plans sparse PDF field layouts without dropping long labels", () => {
+  const fields = [
+    "Obiettivo principale",
+    "Perche voglio raggiungerlo",
+    "Cosa voglio migliorare",
+    "Come capiro che sto facendo progressi",
+    "Ostacoli principali",
+    "Piano d'azione",
+    "Ricompensa",
+    "Note finali",
+  ];
+  const plan = getImportedTechnicalPdfSparseFieldPlan({
+    availableHeight: 95,
+    contentWidth: 420,
+    fields,
+  });
+
+  assert.equal(plan.mode, "compact");
+  assert.deepEqual(plan.renderedLabels, fields);
+  assert.ok(plan.rows.length <= 4);
+});
+
+test("keeps sparse PDF mixed fields compact before long prompts", () => {
+  const fields = [
+    "Nome",
+    "Data di inizio",
+    "Obiettivo principale",
+    "Ricompensa al completamento",
+  ];
+  const plan = getImportedTechnicalPdfSparseFieldPlan({
+    availableHeight: 290,
+    contentWidth: 420,
+    extraHeight: 70,
+    fields,
+  });
+
+  assert.deepEqual(plan.renderedLabels, fields);
+  assert.deepEqual(plan.rows[0], ["Nome", "Data di inizio"]);
+  assert.deepEqual(plan.rows.slice(1), [
+    ["Obiettivo principale"],
+    ["Ricompensa al completamento"],
+  ]);
 });
 
 test("generates imported technical PDF for 110 simulated imported pages", async () => {
