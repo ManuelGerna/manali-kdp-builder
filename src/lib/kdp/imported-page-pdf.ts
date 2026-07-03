@@ -44,8 +44,8 @@ export type ImportedPagesTechnicalPdfSummary = {
 
 const POINTS_PER_INCH = 72;
 const FALLBACK_FILE_NAME = "pagine-importate-technical.pdf";
-const BODY_SIZE = 8.6;
-const DENSE_BODY_SIZE = 7.6;
+const BODY_SIZE = 8.8;
+const DENSE_BODY_SIZE = 7.7;
 const TABLE_SIZE = 5.8;
 const TABLE_DENSE_SIZE = 5;
 const GRAY = rgb(0.15, 0.15, 0.15);
@@ -325,7 +325,7 @@ function drawCenteredText(
 }
 
 function drawRule(layout: PdfLayout) {
-  if (!ensureRoom(layout, 8)) {
+  if (!ensureRoom(layout, 12)) {
     return false;
   }
 
@@ -341,7 +341,7 @@ function drawRule(layout: PdfLayout) {
     },
     thickness: 0.45,
   });
-  layout.y -= 9;
+  layout.y -= 13;
   return true;
 }
 
@@ -370,6 +370,42 @@ type PdfFieldModel = ReturnType<typeof splitFieldLabelValue> & {
 type PdfFieldRow = {
   columns: 1 | 2;
   fields: PdfFieldModel[];
+};
+
+export type ImportedTechnicalPdfSparseFieldLayoutMode =
+  | "balanced"
+  | "compact"
+  | "editorial";
+
+export type ImportedTechnicalPdfSparseFieldPlan = {
+  mode: ImportedTechnicalPdfSparseFieldLayoutMode;
+  renderedLabels: string[];
+  rows: string[][];
+};
+
+type PdfSparseFieldRowMeasurement = PdfFieldRow & {
+  baseBoxHeight: number;
+  cellWidth: number;
+  labelHeight: number;
+  labelLineGroups: string[][];
+  maxBoxHeight: number;
+  weight: number;
+};
+
+type PdfSparseFieldResolvedPlan = {
+  boxHeights: number[];
+  cellGap: number;
+  gap: number;
+  labelSize: number;
+  mode: ImportedTechnicalPdfSparseFieldLayoutMode;
+  rows: PdfSparseFieldRowMeasurement[];
+  totalHeight: number;
+  valueSize: number;
+};
+
+type PdfSparseFieldPlanCandidate = {
+  mode: ImportedTechnicalPdfSparseFieldLayoutMode;
+  rows: PdfFieldRow[];
 };
 
 const SHORT_FIELD_LABEL_FRAGMENTS = [
@@ -452,7 +488,34 @@ function getFieldIntent(label: string): PdfFieldIntent {
   return "medium";
 }
 
-function getFieldIntentWeight(intent: PdfFieldIntent) {
+function getFieldIntentWeight(
+  intent: PdfFieldIntent,
+  mode: ImportedTechnicalPdfSparseFieldLayoutMode = "editorial",
+) {
+  if (mode === "compact") {
+    if (intent === "long") {
+      return 1.25;
+    }
+
+    if (intent === "medium") {
+      return 0.9;
+    }
+
+    return 0.55;
+  }
+
+  if (mode === "balanced") {
+    if (intent === "long") {
+      return 1.55;
+    }
+
+    if (intent === "medium") {
+      return 1;
+    }
+
+    return 0.5;
+  }
+
   if (intent === "long") {
     return 2.1;
   }
@@ -464,28 +527,84 @@ function getFieldIntentWeight(intent: PdfFieldIntent) {
   return 0.45;
 }
 
-function getSparseFieldBaseBoxHeight(intent: PdfFieldIntent, dense: boolean) {
+function getSparseFieldBaseBoxHeight(
+  intent: PdfFieldIntent,
+  dense: boolean,
+  mode: ImportedTechnicalPdfSparseFieldLayoutMode = "editorial",
+) {
+  if (mode === "compact") {
+    if (intent === "long") {
+      return dense ? 28 : 34;
+    }
+
+    if (intent === "medium") {
+      return dense ? 24 : 29;
+    }
+
+    return dense ? 20 : 24;
+  }
+
+  if (mode === "balanced") {
+    if (intent === "long") {
+      return dense ? 40 : 52;
+    }
+
+    if (intent === "medium") {
+      return dense ? 32 : 42;
+    }
+
+    return dense ? 22 : 27;
+  }
+
   if (intent === "long") {
-    return dense ? 58 : 76;
+    return dense ? 48 : 64;
   }
 
   if (intent === "medium") {
-    return dense ? 38 : 52;
+    return dense ? 36 : 48;
   }
 
-  return dense ? 24 : 30;
+  return dense ? 22 : 27;
 }
 
-function getSparseFieldMaxBoxHeight(intent: PdfFieldIntent, dense: boolean) {
+function getSparseFieldMaxBoxHeight(
+  intent: PdfFieldIntent,
+  dense: boolean,
+  mode: ImportedTechnicalPdfSparseFieldLayoutMode = "editorial",
+) {
+  if (mode === "compact") {
+    if (intent === "long") {
+      return dense ? 52 : 66;
+    }
+
+    if (intent === "medium") {
+      return dense ? 44 : 56;
+    }
+
+    return dense ? 32 : 40;
+  }
+
+  if (mode === "balanced") {
+    if (intent === "long") {
+      return dense ? 78 : 102;
+    }
+
+    if (intent === "medium") {
+      return dense ? 58 : 76;
+    }
+
+    return dense ? 34 : 44;
+  }
+
   if (intent === "long") {
-    return dense ? 116 : 158;
+    return dense ? 92 : 120;
   }
 
   if (intent === "medium") {
-    return dense ? 78 : 104;
+    return dense ? 66 : 86;
   }
 
-  return dense ? 42 : 54;
+  return dense ? 34 : 44;
 }
 
 function getFieldRows(fields: PdfFieldModel[]): PdfFieldRow[] {
@@ -497,7 +616,7 @@ function getFieldRows(fields: PdfFieldModel[]): PdfFieldRow[] {
   function flushCompactFields() {
     while (pendingCompactFields.length > 0) {
       const rowFields =
-        !preferSingleColumn && pendingCompactFields.length >= 2
+        pendingCompactFields.length >= 2
           ? pendingCompactFields.splice(0, 2)
           : pendingCompactFields.splice(0, 1);
 
@@ -509,7 +628,7 @@ function getFieldRows(fields: PdfFieldModel[]): PdfFieldRow[] {
   }
 
   for (const field of fields) {
-    if (preferSingleColumn || field.intent === "long") {
+    if (field.intent === "long" || (preferSingleColumn && field.intent !== "short")) {
       flushCompactFields();
       rows.push({
         columns: 1,
@@ -523,6 +642,297 @@ function getFieldRows(fields: PdfFieldModel[]): PdfFieldRow[] {
 
   flushCompactFields();
   return rows;
+}
+
+function getTwoColumnFieldRows(fields: PdfFieldModel[]): PdfFieldRow[] {
+  const rows: PdfFieldRow[] = [];
+
+  for (let startIndex = 0; startIndex < fields.length; startIndex += 2) {
+    const rowFields = fields.slice(startIndex, startIndex + 2);
+
+    rows.push({
+      columns: rowFields.length === 2 ? 2 : 1,
+      fields: rowFields,
+    });
+  }
+
+  return rows;
+}
+
+function getBalancedFieldRows(fields: PdfFieldModel[]): PdfFieldRow[] {
+  if (fields.length <= 4) {
+    return getFieldRows(fields);
+  }
+
+  return getTwoColumnFieldRows(fields);
+}
+
+function getSparseFieldCandidatePlans(
+  fields: PdfFieldModel[],
+): PdfSparseFieldPlanCandidate[] {
+  const candidates: PdfSparseFieldPlanCandidate[] = [
+    {
+      mode: "editorial",
+      rows: getFieldRows(fields),
+    },
+    {
+      mode: "balanced",
+      rows: getBalancedFieldRows(fields),
+    },
+    {
+      mode: "compact",
+      rows: getTwoColumnFieldRows(fields),
+    },
+  ];
+  const seen = new Set<string>();
+
+  return candidates.filter((candidate) => {
+    const key = candidate.rows
+      .map((row) => `${row.columns}:${row.fields.map((field) => field.label).join("|")}`)
+      .join("::");
+    const planKey = `${candidate.mode}:${key}`;
+
+    if (seen.has(planKey)) {
+      return false;
+    }
+
+    seen.add(planKey);
+    return true;
+  });
+}
+
+function getSparseFieldTypography(
+  mode: ImportedTechnicalPdfSparseFieldLayoutMode,
+  dense: boolean,
+) {
+  if (mode === "compact") {
+    return {
+      cellGap: dense ? 4 : 5,
+      gap: dense ? 4 : 5,
+      labelSize: dense ? 6.8 : 7.4,
+      valueSize: dense ? 6.5 : 7.1,
+    };
+  }
+
+  if (mode === "balanced") {
+    return {
+      cellGap: dense ? 5 : 6,
+      gap: dense ? 5 : 6,
+      labelSize: dense ? 7 : 7.8,
+      valueSize: dense ? 6.7 : 7.3,
+    };
+  }
+
+  return {
+    cellGap: dense ? 5 : 7,
+    gap: dense ? 5 : 7,
+    labelSize: dense ? 7.2 : 8.2,
+    valueSize: dense ? 6.8 : 7.5,
+  };
+}
+
+function getRowIntent(row: PdfFieldRow): PdfFieldIntent {
+  if (row.fields.some((field) => field.intent === "long")) {
+    return "long";
+  }
+
+  if (row.fields.some((field) => field.intent === "medium")) {
+    return "medium";
+  }
+
+  return "short";
+}
+
+function estimateSparseFieldLabelLines(
+  label: string,
+  labelSize: number,
+  cellWidth: number,
+) {
+  const formattedLabel = formatPdfLabel(label);
+  const averageCharacterWidth = Math.max(3.2, labelSize * 0.48);
+  const charactersPerLine = Math.max(
+    6,
+    Math.floor(cellWidth / averageCharacterWidth),
+  );
+
+  return Math.max(1, Math.ceil(formattedLabel.length / charactersPerLine));
+}
+
+function resolveSparseFieldPlan(input: {
+  availableHeight: number;
+  contentWidth: number;
+  dense: boolean;
+  extraHeight: number;
+  fields: PdfFieldModel[];
+  measureLabelLines: (
+    field: PdfFieldModel,
+    labelSize: number,
+    cellWidth: number,
+  ) => string[];
+}): PdfSparseFieldResolvedPlan {
+  const candidates = getSparseFieldCandidatePlans(input.fields);
+  const safeAvailableHeight = Math.max(0, input.availableHeight);
+  let fallbackPlan: PdfSparseFieldResolvedPlan | null = null;
+
+  for (const candidate of candidates) {
+    const typography = getSparseFieldTypography(candidate.mode, input.dense);
+    const rows = candidate.rows.map((row) => {
+      const cellWidth =
+        row.columns === 2
+          ? (input.contentWidth - typography.cellGap) / 2
+          : input.contentWidth;
+      const labelLineGroups = row.fields.map((field) =>
+        input.measureLabelLines(field, typography.labelSize, cellWidth),
+      );
+      const labelHeight =
+        Math.max(1, ...labelLineGroups.map((lines) => lines.length)) *
+        typography.labelSize *
+        1.18;
+      const rowIntent = getRowIntent(row);
+
+      return {
+        ...row,
+        baseBoxHeight: getSparseFieldBaseBoxHeight(
+          rowIntent,
+          input.dense,
+          candidate.mode,
+        ),
+        cellWidth,
+        labelHeight,
+        labelLineGroups,
+        maxBoxHeight: getSparseFieldMaxBoxHeight(
+          rowIntent,
+          input.dense,
+          candidate.mode,
+        ),
+        weight: getFieldIntentWeight(rowIntent, candidate.mode),
+      };
+    });
+    const baseHeight = rows.reduce(
+      (total, row) => total + row.labelHeight + row.baseBoxHeight + typography.gap,
+      0,
+    );
+    const plan = buildSparseFieldPlan({
+      availableHeight: safeAvailableHeight,
+      baseHeight,
+      extraHeight: input.extraHeight,
+      mode: candidate.mode,
+      rows,
+      typography,
+    });
+
+    if (!fallbackPlan || plan.totalHeight <= fallbackPlan.totalHeight) {
+      fallbackPlan = plan;
+    }
+
+    if (baseHeight <= safeAvailableHeight) {
+      return plan;
+    }
+  }
+
+  return fallbackPlan ?? {
+    boxHeights: [],
+    cellGap: 0,
+    gap: 0,
+    labelSize: input.dense ? 6.8 : 7.4,
+    mode: "compact",
+    rows: [],
+    totalHeight: 0,
+    valueSize: input.dense ? 6.5 : 7.1,
+  };
+}
+
+function buildSparseFieldPlan(input: {
+  availableHeight: number;
+  baseHeight: number;
+  extraHeight: number;
+  mode: ImportedTechnicalPdfSparseFieldLayoutMode;
+  rows: PdfSparseFieldRowMeasurement[];
+  typography: ReturnType<typeof getSparseFieldTypography>;
+}): PdfSparseFieldResolvedPlan {
+  const preferredMinBoxHeight = input.rows.length >= 4
+    ? input.typography.labelSize * 2.2
+    : input.typography.labelSize * 2.7;
+  const requiredNonBoxHeight = input.rows.reduce(
+    (total, row) => total + row.labelHeight + input.typography.gap,
+    0,
+  );
+  const baseBoxHeight = input.rows.reduce(
+    (total, row) => total + row.baseBoxHeight,
+    0,
+  );
+  const availableBoxHeight = Math.max(0, input.availableHeight - requiredNonBoxHeight);
+  const minBoxHeight =
+    input.rows.length > 0 &&
+    availableBoxHeight < preferredMinBoxHeight * input.rows.length
+      ? Math.max(8, availableBoxHeight / input.rows.length)
+      : preferredMinBoxHeight;
+  const scale =
+    input.baseHeight > input.availableHeight && baseBoxHeight > 0
+      ? Math.min(1, availableBoxHeight / baseBoxHeight)
+      : 1;
+  const scaledBaseBoxHeights = input.rows.map((row) =>
+    Math.max(minBoxHeight, row.baseBoxHeight * scale),
+  );
+  const scaledBaseHeight =
+    requiredNonBoxHeight +
+    scaledBaseBoxHeights.reduce((total, height) => total + height, 0);
+  const availableExtra = Math.max(
+    0,
+    Math.min(input.extraHeight, input.availableHeight - scaledBaseHeight),
+  );
+  const totalWeight = input.rows.reduce((total, row) => total + row.weight, 0);
+  const boxHeights = input.rows.map((row, index) => {
+    const weightedExtra =
+      totalWeight > 0 ? (availableExtra * row.weight) / totalWeight : 0;
+
+    return Math.min(row.maxBoxHeight, scaledBaseBoxHeights[index] + weightedExtra);
+  });
+  const totalHeight =
+    requiredNonBoxHeight + boxHeights.reduce((total, height) => total + height, 0);
+
+  return {
+    boxHeights,
+    cellGap: input.typography.cellGap,
+    gap: input.typography.gap,
+    labelSize: input.typography.labelSize,
+    mode: input.mode,
+    rows: input.rows,
+    totalHeight,
+    valueSize: input.typography.valueSize,
+  };
+}
+
+export function getImportedTechnicalPdfSparseFieldPlan(input: {
+  availableHeight: number;
+  contentWidth?: number;
+  dense?: boolean;
+  extraHeight?: number;
+  fields: string[];
+}): ImportedTechnicalPdfSparseFieldPlan {
+  const fields = input.fields
+    .map(splitFieldLabelValue)
+    .map((field) => ({
+      ...field,
+      intent: getFieldIntent(field.label),
+    }));
+  const plan = resolveSparseFieldPlan({
+    availableHeight: input.availableHeight,
+    contentWidth: input.contentWidth ?? 420,
+    dense: input.dense ?? false,
+    extraHeight: input.extraHeight ?? 0,
+    fields,
+    measureLabelLines: (field, labelSize, cellWidth) =>
+      Array.from({
+        length: estimateSparseFieldLabelLines(field.label, labelSize, cellWidth),
+      }).map(() => ""),
+  });
+
+  return {
+    mode: plan.mode,
+    renderedLabels: plan.rows.flatMap((row) => row.fields.map((field) => field.label)),
+    rows: plan.rows.map((row) => row.fields.map((field) => field.label)),
+  };
 }
 
 function getFieldColumnCount(
@@ -562,7 +972,7 @@ function drawFields(
     getFieldColumnCount(fields.length, isGrid, { sparse }),
   );
   const gap = dense ? 4 : 6;
-  const labelSize = dense ? 5.8 : 6.6;
+  const labelSize = dense ? 6 : 6.8;
   const valueSize = dense ? 6.2 : 7;
   const rowCount = Math.max(1, Math.ceil(fields.length / columns));
   const baseBoxHeight = sparse ? (dense ? 30 : 36) : dense ? 17 : 21;
@@ -665,73 +1075,57 @@ function drawSparseFields(
       ...field,
       intent: getFieldIntent(field.label),
     }));
-  const rows = getFieldRows(fieldModels);
-  const gap = dense ? 5 : 7;
-  const labelSize = dense ? 6.8 : 7.8;
-  const valueSize = dense ? 6.7 : 7.4;
-  const rowWeights = rows.map((row) =>
-    Math.max(...row.fields.map((field) => getFieldIntentWeight(field.intent))),
+  const compactBudget = estimateFieldsHeight(layout, block, dense) + Math.max(0, extraHeight);
+  const availableHeight = Math.max(
+    0,
+    Math.min(layout.y - layout.bottomY - 4, compactBudget),
   );
-  const totalWeight = rowWeights.reduce((total, weight) => total + weight, 0);
-  const cellGap = dense ? 5 : 7;
-
-  for (const [rowIndex, row] of rows.entries()) {
-    const cellWidth =
-      row.columns === 2
-        ? (layout.contentWidth - cellGap) / 2
-        : layout.contentWidth;
-    const labelLineGroups = row.fields.map((field) =>
+  const plan = resolveSparseFieldPlan({
+    availableHeight,
+    contentWidth: layout.contentWidth,
+    dense,
+    extraHeight,
+    fields: fieldModels,
+    measureLabelLines: (field, labelSize, cellWidth) =>
       wrapText(
         formatPdfLabel(field.label),
         layout.fonts.bodyBold,
         labelSize,
         cellWidth,
       ),
-    );
-    const labelHeight =
-      Math.max(1, ...labelLineGroups.map((lines) => lines.length)) *
-      labelSize *
-      1.18;
-    const rowIntent =
-      row.fields.some((field) => field.intent === "long")
-        ? "long"
-        : row.fields.some((field) => field.intent === "medium")
-          ? "medium"
-          : "short";
-    const baseBoxHeight = getSparseFieldBaseBoxHeight(rowIntent, dense);
-    const maxBoxHeight = getSparseFieldMaxBoxHeight(rowIntent, dense);
-    const rowExtra =
-      totalWeight > 0 ? (Math.max(0, extraHeight) * rowWeights[rowIndex]) / totalWeight : 0;
-    const boxHeight = Math.min(maxBoxHeight, baseBoxHeight + rowExtra);
-    const rowHeight = labelHeight + boxHeight + gap;
+  });
+
+  for (const [rowIndex, row] of plan.rows.entries()) {
+    const boxHeight = plan.boxHeights[rowIndex] ?? getSparseFieldBaseBoxHeight("short", dense);
+    const rowHeight = row.labelHeight + boxHeight + plan.gap;
 
     if (!ensureRoom(layout, rowHeight)) {
       return false;
     }
 
     for (const [fieldIndex, field] of row.fields.entries()) {
-      const cellX = layout.x + fieldIndex * (cellWidth + cellGap);
+      const cellX = layout.x + fieldIndex * (row.cellWidth + plan.cellGap);
       let labelY = layout.y;
 
-      for (const line of labelLineGroups[fieldIndex]) {
+      for (const line of row.labelLineGroups[fieldIndex] ?? []) {
         layout.page.drawText(sanitizePdfText(line), {
           color: MID_GRAY,
           font: layout.fonts.bodyBold,
-          size: labelSize,
+          size: plan.labelSize,
           x: cellX,
           y: labelY,
         });
-        labelY -= labelSize * 1.18;
+        labelY -= plan.labelSize * 1.18;
       }
 
-      const boxY = layout.y - labelHeight - boxHeight + labelSize * 0.25;
+      const boxY = layout.y - row.labelHeight - boxHeight + plan.labelSize * 0.25;
 
       layout.page.drawRectangle({
         borderColor: LIGHT_GRAY,
         borderWidth: 0.5,
         color: rgb(1, 1, 1),
         height: boxHeight,
-        width: cellWidth,
+        width: row.cellWidth,
         x: cellX,
         y: boxY,
       });
@@ -740,17 +1134,17 @@ function drawSparseFields(
         const valueLines = wrapText(
           field.value,
           layout.fonts.body,
-          valueSize,
-          cellWidth - 6,
+          plan.valueSize,
+          row.cellWidth - 6,
         );
 
         for (const [lineIndex, line] of valueLines.slice(0, 2).entries()) {
           layout.page.drawText(sanitizePdfText(line), {
             color: GRAY,
             font: layout.fonts.body,
-            size: valueSize,
+            size: plan.valueSize,
             x: cellX + 3,
-            y: boxY + boxHeight - valueSize * (lineIndex + 1) - 4,
+            y: boxY + boxHeight - plan.valueSize * (lineIndex + 1) - 4,
           });
         }
       }
@@ -803,20 +1197,35 @@ function drawPrompts(
   const boxGap = dense ? 4 : 6;
   const writableWidth = layout.contentWidth - boxPadding * 2;
   const baseNoteLines = dense ? 3 : 4;
+  const minNoteLines = dense ? 1 : 2;
   const promptLineGroups = prompts.map((prompt) =>
     wrapText(prompt, layout.fonts.bodyItalic, fontSize, writableWidth),
   );
+  const availableHeight = Math.max(0, layout.y - layout.bottomY - 4);
+  const baseHeight = promptLineGroups.reduce(
+    (total, lines) =>
+      total +
+      boxPadding * 2 +
+      lines.length * lineHeight +
+      baseNoteLines * lineHeight +
+      boxGap,
+    0,
+  );
+  const minimumHeight = promptLineGroups.reduce(
+    (total, lines) =>
+      total +
+      boxPadding * 2 +
+      lines.length * lineHeight +
+      minNoteLines * lineHeight +
+      boxGap,
+    0,
+  );
+  const safeMinNoteLines = minimumHeight > availableHeight ? 0 : minNoteLines;
   const fillTargetHeight = options.fillRemaining
-    ? layout.y - layout.bottomY
-    : Math.max(0, options.extraHeight ?? 0) +
-      promptLineGroups.reduce(
-        (total, lines) =>
-          total +
-          boxPadding * 2 +
-          lines.length * lineHeight +
-          baseNoteLines * lineHeight +
-          boxGap,
-        0,
+    ? availableHeight
+    : Math.min(
+        availableHeight,
+        Math.max(minimumHeight, Math.max(0, options.extraHeight ?? 0) + baseHeight),
       );
   const availableForNotes =
     fillTargetHeight -
@@ -828,19 +1237,19 @@ function drawPrompts(
   const targetNoteLines =
     options.fillRemaining || (options.extraHeight ?? 0) > 0
       ? Math.max(
-          baseNoteLines * prompts.length,
+          safeMinNoteLines * prompts.length,
           Math.floor(availableForNotes / lineHeight),
         )
       : baseNoteLines * prompts.length;
   const extraNoteLines = Math.max(
     0,
-    targetNoteLines - baseNoteLines * prompts.length,
+    targetNoteLines - safeMinNoteLines * prompts.length,
   );
   const noteLineCounts = promptLineGroups.map((_, index) => {
     const sharedExtra = Math.floor(extraNoteLines / Math.max(1, prompts.length));
     const remainder = index < extraNoteLines % Math.max(1, prompts.length) ? 1 : 0;
 
-    return baseNoteLines + sharedExtra + remainder;
+    return safeMinNoteLines + sharedExtra + remainder;
   });
 
   for (const [promptIndex, promptLines] of promptLineGroups.entries()) {
