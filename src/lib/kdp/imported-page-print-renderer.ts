@@ -221,7 +221,12 @@ function hasKeyFragment(value: string, fragments: string[]) {
 }
 
 function isHeaderKey(value: string) {
-  return hasKeyFragment(value, ["header", "intestazione", "testata"]);
+  return hasKeyFragment(value, [
+    "campiiniziali",
+    "header",
+    "intestazione",
+    "testata",
+  ]);
 }
 
 function isStateKey(value: string) {
@@ -260,6 +265,58 @@ function getFieldBlock(fields: string[]): ImportedPrintBlock | null {
     layout: cleanFields.length >= 2 ? "grid" : "stack",
     type: "fields",
   };
+}
+
+function getFieldGroupBlock(key: string, fields: string[]): ImportedPrintBlock | null {
+  const fieldBlock = getFieldBlock(fields);
+
+  return fieldBlock
+    ? {
+        blocks: [fieldBlock],
+        title: normalizeLabel(key),
+        type: "group",
+      }
+    : null;
+}
+
+function getPromptBlock(prompts: string[]): ImportedPrintBlock | null {
+  const cleanPrompts = prompts.map((prompt) => prompt.trim()).filter(Boolean);
+
+  return cleanPrompts.length > 0
+    ? {
+        prompts: cleanPrompts,
+        type: "prompts",
+      }
+    : null;
+}
+
+function isLikelyWritablePrompt(value: string) {
+  const normalized = value.trim().toLowerCase();
+
+  return (
+    normalized.endsWith("?") ||
+    /^(che|come|cosa|quale|quali|quando|quanto|quanta|quanti|quante|perche|perché)\b/.test(
+      normalized,
+    )
+  );
+}
+
+function isPromptList(items: string[]) {
+  if (items.length === 0) {
+    return false;
+  }
+
+  const promptCount = items.filter(isLikelyWritablePrompt).length;
+
+  return promptCount >= Math.ceil(items.length / 2);
+}
+
+function isFieldLikeKey(key: string) {
+  return isFieldKey(key) || isHeaderKey(key) || isStateKey(key);
+}
+
+function shouldRenderListAsFields(key: string) {
+  return isFieldLikeKey(key) || (isFinalKey(key) && isFieldKey(key));
 }
 
 function isListKey(value: string) {
@@ -610,12 +667,49 @@ function getTableBlockFromRows(
   };
 }
 
+function getDayColumns(value: unknown) {
+  if (typeof value === "number" && Number.isInteger(value) && value > 0) {
+    return Array.from({ length: Math.min(value, 31) }, (_, index) =>
+      String(index + 1),
+    );
+  }
+
+  const days = toTextList(value);
+  const numericDayCount =
+    days.length === 1 && /^\d+$/.test(days[0]) ? Number(days[0]) : null;
+
+  if (numericDayCount && numericDayCount > 0) {
+    return Array.from(
+      { length: Math.min(numericDayCount, 31) },
+      (_, index) => String(index + 1),
+    );
+  }
+
+  return days;
+}
+
+function getHabitGridDays(source: Record<string, unknown>) {
+  for (const key of HABIT_GRID_DAY_KEYS) {
+    const days = getDayColumns(source[key]);
+
+    if (days.length > 0) {
+      return days;
+    }
+  }
+
+  return [];
+}
+
+function getHabitGridItems(source: Record<string, unknown>) {
+  return HABIT_GRID_ITEM_KEYS.flatMap((key) => toTextList(source[key]));
+}
+
 function getHabitGridBlock(
   source: Record<string, unknown>,
   title?: string,
 ): ImportedPrintBlock | null {
-  const days = HABIT_GRID_DAY_KEYS.flatMap((key) => toTextList(source[key]));
-  const items = HABIT_GRID_ITEM_KEYS.flatMap((key) => toTextList(source[key]));
+  const days = getHabitGridDays(source);
+  const items = getHabitGridItems(source);
 
   if (days.length === 0 || items.length === 0) {
     return null;
@@ -641,8 +735,8 @@ function getHabitGridBlock(
 }
 
 function hasHabitGrid(source: Record<string, unknown>) {
-  const days = HABIT_GRID_DAY_KEYS.some((key) => toTextList(source[key]).length > 0);
-  const items = HABIT_GRID_ITEM_KEYS.some((key) => toTextList(source[key]).length > 0);
+  const days = getHabitGridDays(source).length > 0;
+  const items = getHabitGridItems(source).length > 0;
 
   return days && items;
 }
@@ -709,6 +803,18 @@ function getEntryBlocks(key: string, value: unknown): ImportedPrintBlock[] {
 
     if (list.length === 0) {
       return [];
+    }
+
+    if (shouldRenderListAsFields(key)) {
+      const fieldBlock = getFieldGroupBlock(key, list);
+
+      return fieldBlock ? [fieldBlock] : [];
+    }
+
+    if (isPromptKey(key) || isFinalKey(key) || isPromptList(list)) {
+      const promptBlock = getPromptBlock(list);
+
+      return promptBlock ? [promptBlock] : [];
     }
 
     return [
@@ -903,6 +1009,16 @@ function getPageBlocks(
   }
 
   for (const list of model.lists) {
+    if (isPromptList(list)) {
+      const promptBlock = getPromptBlock(list);
+
+      if (promptBlock) {
+        blocks.push(promptBlock);
+      }
+
+      continue;
+    }
+
     blocks.push({
       items: list,
       type: "list",

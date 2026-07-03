@@ -1117,6 +1117,101 @@ test("renders structured fillable sheets as field grids and tables", () => {
   assert.equal(model.pages[0].blocks.some((block) => block.type === "list"), false);
 });
 
+test("renders workout field arrays as writable fields instead of bullet lists", () => {
+  const model = buildImportedPrintRenderModel({
+    pages: [
+      {
+        content: {
+          campi_finali: ["Note finali", "Feedback", "Prossima correzione"],
+          campi_iniziali: [
+            "Data",
+            "Giorno",
+            "Focus allenamento",
+            "Ora inizio",
+            "Durata",
+          ],
+          stato_iniziale: [
+            "Energia 1-5",
+            "Umore",
+            "Sonno",
+            "Riscaldamento completato",
+          ],
+        },
+        pageNumber: 21,
+        templateId: "template_workout",
+      },
+    ],
+  });
+  const blocks = model.pages[0].blocks;
+  const fieldGroups = blocks.filter((block) => block.type === "group");
+
+  assert.equal(blocks.some((block) => block.type === "list"), false);
+  assert.deepEqual(
+    fieldGroups.map((block) => (block.type === "group" ? block.title : "")),
+    ["campi iniziali", "stato iniziale", "campi finali"],
+  );
+
+  const headerGroup = fieldGroups[0];
+  const stateGroup = fieldGroups[1];
+
+  if (headerGroup?.type === "group") {
+    const [fields] = headerGroup.blocks;
+
+    assert.equal(fields?.type, "fields");
+
+    if (fields?.type === "fields") {
+      assert.deepEqual(fields.fields, [
+        "Data",
+        "Giorno",
+        "Focus allenamento",
+        "Ora inizio",
+        "Durata",
+      ]);
+    }
+  }
+
+  if (stateGroup?.type === "group") {
+    const [fields] = stateGroup.blocks;
+
+    assert.equal(fields?.type, "fields");
+
+    if (fields?.type === "fields") {
+      assert.deepEqual(fields.fields, [
+        "Energia 1-5",
+        "Umore",
+        "Sonno",
+        "Riscaldamento completato",
+      ]);
+    }
+  }
+});
+
+test("renders question-style progress notes as writable prompts", () => {
+  const model = buildImportedPrintRenderModel({
+    pages: [
+      {
+        content: {
+          punti: [
+            "Quali cambiamenti noto?",
+            "Cosa mi sembra piu facile rispetto all'inizio?",
+            "Cosa devo ancora migliorare?",
+            "Cosa posso correggere nel mio piano?",
+          ],
+        },
+        pageNumber: 14,
+        templateId: "template_progress_notes",
+      },
+    ],
+  });
+  const [block] = model.pages[0].blocks;
+
+  assert.equal(block.type, "prompts");
+
+  if (block.type === "prompts") {
+    assert.equal(block.prompts.length, 4);
+  }
+});
+
 test("plans extended writable lines for note-style imported PDF pages", () => {
   const defaultLines = getImportedTechnicalPdfWritableLineCount({
     availableHeight: 420,
@@ -1173,6 +1268,38 @@ test("renders days and habits as a compact print grid", () => {
   if (block.type === "tables") {
     assert.deepEqual(block.tables[0].columns, ["Elemento", "Lun", "Mar", "Mer"]);
     assert.equal(block.tables[0].rowCount, 2);
+  }
+});
+
+test("expands numeric habit tracker day counts into daily columns", () => {
+  const model = buildImportedPrintRenderModel({
+    pages: [
+      {
+        content: {
+          abitudini: [
+            "Allenamento",
+            "Acqua",
+            "Passi",
+            "Sonno",
+            "Stretching",
+            "Alimentazione",
+          ],
+          giorni: 31,
+        },
+        pageNumber: 18,
+        templateId: "template_habit_tracker",
+      },
+    ],
+  });
+  const [block] = model.pages[0].blocks;
+
+  assert.equal(block.type, "tables");
+
+  if (block.type === "tables") {
+    assert.equal(block.tables[0].columns.length, 32);
+    assert.equal(block.tables[0].columns[1], "1");
+    assert.equal(block.tables[0].columns[31], "31");
+    assert.equal(block.tables[0].rowCount, 6);
   }
 });
 
