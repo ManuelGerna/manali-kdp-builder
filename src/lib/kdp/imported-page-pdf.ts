@@ -361,9 +361,19 @@ function formatPdfLabel(value: string) {
   return cleanValue ? `${cleanValue[0].toUpperCase()}${cleanValue.slice(1)}` : "";
 }
 
-function getFieldColumnCount(fieldCount: number, isGrid: boolean) {
+function getFieldColumnCount(
+  fieldCount: number,
+  isGrid: boolean,
+  options?: {
+    sparse?: boolean;
+  },
+) {
   if (!isGrid) {
     return 1;
+  }
+
+  if (options?.sparse && fieldCount <= 8) {
+    return fieldCount <= 2 ? 1 : 2;
   }
 
   return Math.max(1, Math.min(fieldCount, 5));
@@ -377,13 +387,27 @@ function drawFields(
 ) {
   const fields = block.fields;
   const isGrid = block.layout === "grid" || fields.length >= 2;
-  const columns = Math.max(1, getFieldColumnCount(fields.length, isGrid));
+  const sparse = extraHeight >= 70 && fields.length <= 8;
+  const columns = Math.max(
+    1,
+    getFieldColumnCount(fields.length, isGrid, { sparse }),
+  );
   const gap = dense ? 4 : 6;
   const labelSize = dense ? 5.8 : 6.6;
   const valueSize = dense ? 6.2 : 7;
   const rowCount = Math.max(1, Math.ceil(fields.length / columns));
-  const baseBoxHeight = dense ? 17 : 21;
-  const maxBoxHeight = dense ? 42 : 58;
+  const baseBoxHeight = sparse ? (dense ? 30 : 36) : dense ? 17 : 21;
+  const maxBoxHeight = sparse
+    ? fields.length <= 4
+      ? dense
+        ? 112
+        : 150
+      : dense
+        ? 86
+        : 116
+    : dense
+      ? 42
+      : 58;
   const boxHeight = Math.min(
     maxBoxHeight,
     baseBoxHeight + Math.max(0, extraHeight) / rowCount,
@@ -1225,6 +1249,117 @@ function drawBlock(
   return true;
 }
 
+function collectShortTextCalloutLines(blocks: ImportedPrintBlock[]): string[] {
+  const lines: string[] = [];
+
+  for (const block of blocks) {
+    if (block.type === "text") {
+      lines.push(...block.text);
+      continue;
+    }
+
+    if (block.type === "list") {
+      lines.push(
+        ...block.items.map((item, index) =>
+          block.ordered ? `${index + 1}. ${item}` : `- ${item}`,
+        ),
+      );
+      continue;
+    }
+
+    if (block.type === "fallback") {
+      lines.push(...block.entries.map((entry) => `${entry.label}: ${entry.value}`));
+      continue;
+    }
+
+    if (block.type === "group") {
+      if (block.title) {
+        lines.push(block.title);
+      }
+
+      lines.push(...collectShortTextCalloutLines(block.blocks));
+    }
+  }
+
+  return lines.map((line) => line.trim()).filter(Boolean);
+}
+
+function isSparseTextOnlyPage(blocks: ImportedPrintBlock[]) {
+  if (blocks.length === 0) {
+    return false;
+  }
+
+  if (
+    hasBlockType(blocks, "fields") ||
+    hasBlockType(blocks, "tables") ||
+    hasBlockType(blocks, "prompts")
+  ) {
+    return false;
+  }
+
+  const lines = collectShortTextCalloutLines(blocks);
+  const totalCharacters = lines.join(" ").length;
+
+  return lines.length > 0 && lines.length <= 8 && totalCharacters <= 520;
+}
+
+function drawSparseTextCallout(
+  layout: PdfLayout,
+  blocks: ImportedPrintBlock[],
+  dense: boolean,
+) {
+  const sourceLines = collectShortTextCalloutLines(blocks);
+  const fontSize = dense ? 8.4 : 9.5;
+  const lineHeight = fontSize * 1.38;
+  const padding = dense ? 12 : 16;
+  const maxWidth = layout.contentWidth - padding * 2;
+  const wrappedLines = sourceLines.flatMap((line, index) => {
+    const lines = wrapText(line, layout.fonts.body, fontSize, maxWidth);
+
+    return index === 0 ? lines : ["", ...lines];
+  });
+  const contentHeight = Math.max(1, wrappedLines.length) * lineHeight;
+  const availableHeight = Math.max(0, layout.y - layout.bottomY - 10);
+  const targetHeight = Math.min(
+    availableHeight,
+    Math.max(contentHeight + padding * 2, Math.min(availableHeight * 0.56, 240)),
+  );
+  const boxY = layout.bottomY + Math.max(8, (availableHeight - targetHeight) / 2);
+  const boxTop = boxY + targetHeight;
+  let textY = boxTop - padding - fontSize;
+
+  if (!ensureRoom(layout, targetHeight)) {
+    return false;
+  }
+
+  layout.page.drawRectangle({
+    borderColor: LIGHT_GRAY,
+    borderWidth: 0.55,
+    color: rgb(1, 1, 1),
+    height: targetHeight,
+    width: layout.contentWidth,
+    x: layout.x,
+    y: boxY,
+  });
+
+  for (const line of wrappedLines) {
+    if (line) {
+      layout.page.drawText(sanitizePdfText(line), {
+        color: GRAY,
+        font: layout.fonts.body,
+        size: fontSize,
+        x: layout.x + padding,
+        y: textY,
+      });
+    }
+
+    textY -= lineHeight;
+  }
+
+  layout.y = boxY - 10;
+  return true;
+}
+
 function estimateParagraphHeight(
   layout: PdfLayout,
   value: string,
@@ -1549,21 +1684,36 @@ function createPageLayout({
 }
 
 function drawPageHeader(layout: PdfLayout, page: ImportedPrintPage) {
-  if (page.pageNumber === 1 && page.blocks.length === 0 && page.hasPrintableHeader) {
-    layout.y = layout.pageHeight * 0.64;
+  if (page.blocks.length === 0 && page.hasPrintableHeader) {
+    const isTitlePage = page.pageNumber === 1;
+
+    layout.y = layout.pageHeight * (isTitlePage ? 0.64 : 0.58);
     drawCenteredText(layout, page.title, {
       font: layout.fonts.headingBold,
       maxWidth: layout.contentWidth,
-      size: 28,
+      size: isTitlePage ? 28 : 22,
     });
 
     if (page.subtitle) {
-      layout.y -= 10;
+      layout.y -= isTitlePage ? 10 : 8;
       drawCenteredText(layout, page.subtitle, {
         font: layout.fonts.heading,
         maxWidth: layout.contentWidth,
-        size: 13,
+        size: isTitlePage ? 13 : 10.5,
       });
+    }
+
+    if (!isTitlePage) {
+      const ruleWidth = Math.min(110, layout.contentWidth * 0.34);
+      const ruleY = layout.y - 13;
+
+      layout.page.drawLine({
+        color: LIGHT_GRAY,
+        end: { x: layout.pageWidth / 2 + ruleWidth / 2, y: ruleY },
+        start: { x: layout.pageWidth / 2 - ruleWidth / 2, y: ruleY },
+        thickness: 0.45,
+      });
+      layout.y = ruleY - 12;
     }
 
     return;
@@ -1624,6 +1774,13 @@ function drawImportedPage({
   const fillPromptLines = shouldFillPromptLines(page);
 
   drawPageHeader(layout, page);
+
+  if (isSparseTextOnlyPage(page.blocks)) {
+    drawSparseTextCallout(layout, page.blocks, dense);
+    drawPageFooter(layout, page);
+    return;
+  }
+
   const fillAllocations = getFillPageAllocations(layout, page.blocks, dense);
 
   if (page.blocks.length === 0 && !page.hasPrintableHeader) {
