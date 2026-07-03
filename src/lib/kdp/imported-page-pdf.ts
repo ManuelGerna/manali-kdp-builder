@@ -365,15 +365,7 @@ function getFieldColumnCount(fieldCount: number, isGrid: boolean) {
     return 1;
   }
 
-  if (fieldCount >= 5) {
-    return 3;
-  }
-
-  if (fieldCount >= 3) {
-    return 2;
-  }
-
-  return fieldCount;
+  return Math.max(1, Math.min(fieldCount, 5));
 }
 
 function drawFields(
@@ -495,50 +487,78 @@ function drawPrompts(
 ) {
   const fontSize = dense ? 7.2 : 8;
   const lineHeight = dense ? 10 : 12;
+  const boxPadding = dense ? 5 : 6;
+  const boxGap = dense ? 4 : 6;
+  const writableWidth = layout.contentWidth - boxPadding * 2;
 
   for (const prompt of prompts) {
-    const promptLines = wrapText(prompt, layout.fonts.bodyItalic, fontSize, layout.contentWidth);
+    const promptLines = wrapText(
+      prompt,
+      layout.fonts.bodyItalic,
+      fontSize,
+      writableWidth,
+    );
     const noteLines = getImportedTechnicalPdfWritableLineCount({
-      availableHeight: layout.y - layout.bottomY,
+      availableHeight: layout.y - layout.bottomY - boxPadding * 2,
       dense,
       fillRemaining: options.fillRemaining,
       lineHeight,
       promptLineCount: promptLines.length,
     });
-    const height = promptLines.length * lineHeight + noteLines * lineHeight + 8;
+    const height =
+      boxPadding * 2 +
+      promptLines.length * lineHeight +
+      noteLines * lineHeight +
+      boxGap;
 
     if (!ensureRoom(layout, height)) {
       return false;
     }
 
+    const boxTop = layout.y;
+    const boxHeight = height - boxGap;
+    const boxBottom = boxTop - boxHeight;
+
+    layout.page.drawRectangle({
+      borderColor: LIGHT_GRAY,
+      borderWidth: 0.45,
+      color: rgb(1, 1, 1),
+      height: boxHeight,
+      width: layout.contentWidth,
+      x: layout.x,
+      y: boxBottom,
+    });
+
+    let lineY = boxTop - boxPadding - fontSize;
+
     for (const line of promptLines) {
-      layout.page.drawText(line, {
+      layout.page.drawText(sanitizePdfText(line), {
         color: MID_GRAY,
         font: layout.fonts.bodyItalic,
         size: fontSize,
-        x: layout.x,
-        y: layout.y,
+        x: layout.x + boxPadding,
+        y: lineY,
       });
-      layout.y -= lineHeight;
+      lineY -= lineHeight;
     }
 
     for (let index = 0; index < noteLines; index += 1) {
       layout.page.drawLine({
         color: LIGHT_GRAY,
         end: {
-          x: layout.x + layout.contentWidth,
-          y: layout.y,
+          x: layout.x + layout.contentWidth - boxPadding,
+          y: lineY,
         },
         start: {
-          x: layout.x,
-          y: layout.y,
+          x: layout.x + boxPadding,
+          y: lineY,
         },
         thickness: 0.35,
       });
-      layout.y -= lineHeight;
+      lineY -= lineHeight;
     }
 
-    layout.y -= 5;
+    layout.y = boxBottom - boxGap;
   }
 
   return true;
@@ -598,6 +618,188 @@ function getCellText(row: unknown, column: string, columnIndex: number) {
   }
 
   return "";
+}
+
+function normalizeTableColumn(value: string) {
+  return value.replace(/[\s_-]/g, "").toLowerCase();
+}
+
+function isHabitTrackerTable(
+  table: Extract<ImportedPrintBlock, { type: "tables" }>["tables"][number],
+) {
+  const [firstColumn, ...dayColumns] = table.columns;
+  const normalizedFirstColumn = normalizeTableColumn(firstColumn ?? "");
+
+  return (
+    ["abitudine", "elemento", "habit"].includes(normalizedFirstColumn) &&
+    dayColumns.length >= 28 &&
+    dayColumns.length <= 31 &&
+    table.rowCount >= 3
+  );
+}
+
+function drawCenteredCellText({
+  color = GRAY,
+  font,
+  page,
+  size,
+  text,
+  width,
+  x,
+  y,
+}: {
+  color?: ReturnType<typeof rgb>;
+  font: PDFFont;
+  page: PDFPage;
+  size: number;
+  text: string;
+  width: number;
+  x: number;
+  y: number;
+}) {
+  const cleanText = sanitizePdfText(text);
+  const textWidth = font.widthOfTextAtSize(cleanText, size);
+
+  page.drawText(cleanText, {
+    color,
+    font,
+    size,
+    x: x + Math.max(1, (width - textWidth) / 2),
+    y,
+  });
+}
+
+function drawHabitTrackerTable(
+  layout: PdfLayout,
+  table: Extract<ImportedPrintBlock, { type: "tables" }>["tables"][number],
+) {
+  const columns = table.columns;
+  const dayColumns = columns.slice(1);
+  const rows = Array.from({ length: Math.max(table.rowCount, table.rows.length) });
+  const titleSize = 6.2;
+  const titleHeight = table.title ? 12 : 0;
+  const headerHeight = 12;
+  const rowHeight = rows.length >= 8 ? 15 : 17;
+  const firstColumnWidth = Math.min(layout.contentWidth * 0.28, 86);
+  const dayWidth = (layout.contentWidth - firstColumnWidth) / dayColumns.length;
+  const tableHeight = titleHeight + headerHeight + rowHeight * rows.length + 8;
+
+  if (!ensureRoom(layout, tableHeight)) {
+    return false;
+  }
+
+  if (table.title) {
+    layout.page.drawText(sanitizePdfText(table.title), {
+      color: MID_GRAY,
+      font: layout.fonts.bodyBold,
+      size: titleSize,
+      x: layout.x,
+      y: layout.y,
+    });
+    layout.y -= titleHeight;
+  }
+
+  const tableTop = layout.y;
+  const tableBottom = tableTop - headerHeight - rowHeight * rows.length;
+
+  layout.page.drawRectangle({
+    borderColor: LIGHT_GRAY,
+    borderWidth: 0.5,
+    color: rgb(1, 1, 1),
+    height: headerHeight + rowHeight * rows.length,
+    width: layout.contentWidth,
+    x: layout.x,
+    y: tableBottom,
+  });
+  layout.page.drawRectangle({
+    borderColor: LIGHT_GRAY,
+    borderWidth: 0,
+    color: FILL_GRAY,
+    height: headerHeight,
+    width: layout.contentWidth,
+    x: layout.x,
+    y: tableTop - headerHeight,
+  });
+
+  layout.page.drawText("Abitudine", {
+    color: GRAY,
+    font: layout.fonts.bodyBold,
+    size: 5.2,
+    x: layout.x + 3,
+    y: tableTop - headerHeight + 3.2,
+  });
+
+  let dayX = layout.x + firstColumnWidth;
+  for (const day of dayColumns) {
+    drawCenteredCellText({
+      font: layout.fonts.bodyBold,
+      page: layout.page,
+      size: dayWidth < 9 ? 3.4 : 4,
+      text: day,
+      width: dayWidth,
+      x: dayX,
+      y: tableTop - headerHeight + 3.3,
+    });
+    dayX += dayWidth;
+  }
+
+  layout.page.drawLine({
+    color: LIGHT_GRAY,
+    end: { x: layout.x + layout.contentWidth, y: tableTop - headerHeight },
+    start: { x: layout.x, y: tableTop - headerHeight },
+    thickness: 0.35,
+  });
+  layout.page.drawLine({
+    color: LIGHT_GRAY,
+    end: { x: layout.x + firstColumnWidth, y: tableBottom },
+    start: { x: layout.x + firstColumnWidth, y: tableTop },
+    thickness: 0.35,
+  });
+
+  for (let rowIndex = 0; rowIndex < rows.length; rowIndex += 1) {
+    const rowTop = tableTop - headerHeight - rowHeight * rowIndex;
+    const rowBottom = rowTop - rowHeight;
+    const habitLabel =
+      getCellText(table.rows[rowIndex], columns[0] ?? "Elemento", 0) ||
+      `Abitudine ${rowIndex + 1}`;
+    const labelLines = wrapText(
+      habitLabel,
+      layout.fonts.body,
+      5.7,
+      firstColumnWidth - 6,
+    );
+
+    layout.page.drawLine({
+      color: LIGHT_GRAY,
+      end: { x: layout.x + layout.contentWidth, y: rowBottom },
+      start: { x: layout.x, y: rowBottom },
+      thickness: 0.35,
+    });
+
+    for (const [lineIndex, line] of labelLines.slice(0, 2).entries()) {
+      layout.page.drawText(sanitizePdfText(line), {
+        color: GRAY,
+        font: layout.fonts.body,
+        size: 5.7,
+        x: layout.x + 3,
+        y: rowTop - 7 - lineIndex * 6,
+      });
+    }
+  }
+
+  dayX = layout.x + firstColumnWidth;
+  for (let dayIndex = 0; dayIndex <= dayColumns.length; dayIndex += 1) {
+    layout.page.drawLine({
+      color: LIGHT_GRAY,
+      end: { x: dayX, y: tableBottom },
+      start: { x: dayX, y: tableTop },
+      thickness: dayIndex === 0 ? 0.35 : 0.25,
+    });
+    dayX += dayWidth;
+  }
+
+  layout.y = tableBottom - 8;
+  return true;
 }
 
 function getTableColumnWidths(columns: string[], contentWidth: number) {
@@ -666,6 +868,10 @@ function getTableDrawingMetrics({
 }
 
 function drawTable(layout: PdfLayout, table: Extract<ImportedPrintBlock, { type: "tables" }>["tables"][number]) {
+  if (isHabitTrackerTable(table)) {
+    return drawHabitTrackerTable(layout, table);
+  }
+
   const columns = table.columns.length > 0 ? table.columns : ["Spazio", "Contenuto", "Note"];
   const requestedRows = Math.max(table.rowCount, table.rows.length, 4);
   const titleSize = columns.length >= 5 ? TABLE_DENSE_SIZE + 0.6 : TABLE_SIZE + 0.6;
