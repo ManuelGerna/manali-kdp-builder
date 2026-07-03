@@ -1475,7 +1475,12 @@ test("generates imported technical PDF for sparse workbook pages", async () => {
     pages: [
       {
         content: {
-          campi: ["Nome", "Contatto", "Data inizio", "Obiettivo principale"],
+          campi: [
+            "Nome",
+            "Data di inizio",
+            "Obiettivo principale",
+            "Ricompensa al completamento",
+          ],
           titolo: "Questo diario appartiene a",
         },
         pageNumber: 2,
@@ -1523,6 +1528,14 @@ test("generates imported technical PDF for sparse workbook pages", async () => {
       },
       {
         content: {
+          campi: ["Mesi", "Giorni per mese"],
+          titolo: "Calendario del percorso",
+        },
+        pageNumber: 17,
+        templateId: "template_short_numeric_fields",
+      },
+      {
+        content: {
           abitudini: [
             "Allenamento",
             "Acqua",
@@ -1567,7 +1580,7 @@ test("generates imported technical PDF for sparse workbook pages", async () => {
   });
   const doc = await PDFDocument.load(bytes);
 
-  assert.equal(doc.getPageCount(), 7);
+  assert.equal(doc.getPageCount(), 8);
 
   for (const page of doc.getPages()) {
     assert.equal(page.getWidth(), 7 * 72);
