@@ -1470,6 +1470,111 @@ test("generates imported technical PDF for fill-page workbook layouts", async ()
   }
 });
 
+test("generates imported technical PDF for sparse workbook pages", async () => {
+  const model = buildImportedPrintRenderModel({
+    pages: [
+      {
+        content: {
+          campi: ["Nome", "Contatto", "Data inizio", "Obiettivo principale"],
+          titolo: "Questo diario appartiene a",
+        },
+        pageNumber: 2,
+        templateId: "template_owner",
+      },
+      {
+        content: {
+          campi: ["Obiettivo 1", "Obiettivo 2", "Obiettivo 3"],
+          prompt: "Perche questi obiettivi sono importanti?",
+          titolo: "Obiettivi fitness",
+        },
+        pageNumber: 6,
+        templateId: "template_goals",
+      },
+      {
+        content: {
+          campi: [
+            "Obiettivo principale",
+            "Azioni chiave",
+            "Ostacoli",
+            "Ricompensa",
+            "Controllo a 30 giorni",
+            "Controllo a 60 giorni",
+          ],
+          titolo: "Obiettivo principale 90 giorni",
+        },
+        pageNumber: 7,
+        templateId: "template_quarter_goal",
+      },
+      {
+        content: {
+          testo:
+            "Usa questa pagina come promemoria: il diario funziona se resta semplice, compilabile e costante.",
+          titolo: "Nota prima di iniziare",
+        },
+        pageNumber: 9,
+        templateId: "template_short_text",
+      },
+      {
+        content: {
+          titolo: "Note sui progressi",
+        },
+        pageNumber: 14,
+        templateId: "template_divider",
+      },
+      {
+        content: {
+          abitudini: [
+            "Allenamento",
+            "Acqua",
+            "Passi",
+            "Sonno",
+            "Stretching",
+            "Alimentazione",
+          ],
+          giorni: 31,
+        },
+        pageNumber: 18,
+        templateId: "template_habit_tracker",
+      },
+      {
+        content: {
+          campi_iniziali: [
+            "Data",
+            "Giorno",
+            "Focus allenamento",
+            "Ora inizio",
+            "Durata",
+          ],
+          tabella_principale: {
+            colonne_tabella: [
+              "Esercizio",
+              "Serie",
+              "Ripetizioni",
+              "Carico",
+              "Recupero",
+              "Note",
+            ],
+            numero_righe: 8,
+          },
+        },
+        pageNumber: 21,
+        templateId: "template_workout",
+      },
+    ],
+  });
+  const bytes = await generateImportedPagesTechnicalPdf(model, {
+    title: "Sparse workbook pages",
+  });
+  const doc = await PDFDocument.load(bytes);
+
+  assert.equal(doc.getPageCount(), 7);
+
+  for (const page of doc.getPages()) {
+    assert.equal(page.getWidth(), 7 * 72);
+    assert.equal(page.getHeight(), 10 * 72);
+  }
+});
+
 test("generates imported technical PDF for 110 simulated imported pages", async () => {
   const model = buildImportedPrintRenderModel({
     pages: Array.from({ length: 110 }, (_, index) => {
