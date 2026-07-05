@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
 import { PDFDocument } from "pdf-lib";
+import "./kdp-draft-v1.test.ts";
 import {
   buildGenericDraftImportRunInsert,
   buildGenericDraftPageInserts,
