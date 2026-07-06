@@ -1,6 +1,8 @@
 export {
   detectDraftVersion,
+  detectKdpDraftFormat,
   importKdpBuilderDraft,
+  KDP_DRAFT_V1_IMPORTER_VERSION,
   normalizeRawText,
   parseDraftBlocks,
   PARSER_VERSION,
