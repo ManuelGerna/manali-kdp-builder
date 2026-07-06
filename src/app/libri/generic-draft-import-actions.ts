@@ -60,7 +60,7 @@ function validateGenericDraftText(draftText: string) {
   }
 
   if (draftText.length > MAX_DRAFT_LENGTH) {
-    return "La bozza e' troppo lunga per il Parser V0. Dividila in piu' parti.";
+    return "La bozza e' troppo lunga per l'importer. Dividila in piu' parti.";
   }
 
   return null;
@@ -179,7 +179,7 @@ export async function analyzeGenericDraftAction(
     return {
       fields,
       message:
-        "Non riesco ad analizzare questa bozza con il Parser V0. Controlla il formato e riprova.",
+        "Non riesco ad analizzare questa bozza. Controlla il formato e riprova.",
       preview: null,
     };
   }

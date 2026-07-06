@@ -15,6 +15,11 @@ export {
   resolveTemplates,
   validateImportedProject,
 } from "./validation.ts";
+export {
+  buildImportedDraftPreviewSummary,
+  canCreateBookFromImportedDraftPreview,
+  getImportedDraftFormatLabel,
+} from "./import-preview-summary.ts";
 export type {
   BookPage,
   BookSection,
