@@ -5,6 +5,7 @@ import test from "node:test";
 import { PDFDocument } from "pdf-lib";
 import "./kdp-draft-v1-adapter.test.ts";
 import "./kdp-draft-v1-fitness-fixture.test.ts";
+import "./kdp-draft-v1-import-ui.test.ts";
 import "./kdp-draft-v1-importer-integration.test.ts";
 import "./kdp-draft-v1-pipeline.test.ts";
 import "./kdp-draft-v1.test.ts";

@@ -2,11 +2,15 @@
 
 import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
-import type {
-  BookPage,
-  BookSection,
-  ImportIssue,
-  NormalizedKdpProject,
+import {
+  buildImportedDraftPreviewSummary,
+  canCreateBookFromImportedDraftPreview,
+} from "@/lib/kdp/importer/import-preview-summary";
+import {
+  type BookPage,
+  type BookSection,
+  type ImportIssue,
+  type NormalizedKdpProject,
 } from "@/lib/kdp/importer";
 import {
   analyzeGenericDraftAction,
@@ -43,14 +47,6 @@ function CreateBookButton() {
     <button className="button" disabled={pending} type="submit">
       {pending ? "Creazione..." : "Crea libretto da questa bozza"}
     </button>
-  );
-}
-
-function canCreateBookFromPreview(project: NormalizedKdpProject) {
-  return (
-    project.importReport.status !== "failed" &&
-    project.importReport.errors.length === 0 &&
-    project.pages.length > 0
   );
 }
 
@@ -153,10 +149,10 @@ function IssueList({
 }
 
 function ReportSummary({ project }: { project: NormalizedKdpProject }) {
-  const summary = project.importReport.summary;
+  const summary = buildImportedDraftPreviewSummary(project);
 
   return (
-    <section className="draft-preview" aria-label="Report importazione V0">
+    <section className="draft-preview" aria-label="Report importazione bozza">
       <div className="draft-preview-header">
         <div>
           <p className="eyebrow">Anteprima generata</p>
@@ -182,16 +178,12 @@ function ReportSummary({ project }: { project: NormalizedKdpProject }) {
 
       <dl className="draft-stat-grid">
         <div>
+          <dt>Formato rilevato</dt>
+          <dd>{summary.formatLabel}</dd>
+        </div>
+        <div>
           <dt>Pagine generate</dt>
           <dd>{summary.generatedPageCount}</dd>
-        </div>
-        <div>
-          <dt>Sezioni</dt>
-          <dd>{summary.sectionCount}</dd>
-        </div>
-        <div>
-          <dt>Template</dt>
-          <dd>{summary.requestedTemplateCount}</dd>
         </div>
         <div>
           <dt>Warning</dt>
@@ -204,6 +196,10 @@ function ReportSummary({ project }: { project: NormalizedKdpProject }) {
         <div>
           <dt>Target pagine</dt>
           <dd>{summary.targetPageCount ?? "n/d"}</dd>
+        </div>
+        <div>
+          <dt>Parser</dt>
+          <dd>{summary.parserVersion}</dd>
         </div>
       </dl>
     </section>
@@ -218,6 +214,10 @@ function ProjectPanel({ project }: { project: NormalizedKdpProject }) {
         <h3>{project.project.title ?? "Titolo non rilevato"}</h3>
       </div>
       <ul className="panel-list">
+        <FieldItem
+          label="Formato rilevato"
+          value={buildImportedDraftPreviewSummary(project).formatLabel}
+        />
         <FieldItem label="Sottotitolo" value={project.project.subtitle} />
         <FieldItem label="Lingua" value={project.project.language} />
         <FieldItem label="Tipo progetto" value={project.project.projectType} />
@@ -409,7 +409,7 @@ function SeparatedBlocksPanel({ project }: { project: NormalizedKdpProject }) {
 
 function GenericDraftPreview({ project }: { project: NormalizedKdpProject }) {
   return (
-    <section className="draft-preview" aria-label="Anteprima Parser V0">
+    <section className="draft-preview" aria-label="Anteprima import bozza">
       <ReportSummary project={project} />
       <IssueList
         emptyLabel="Nessun errore bloccante rilevato."
@@ -445,7 +445,7 @@ function CreateBookFromDraftPanel({
     initialCreateState,
   );
 
-  if (!canCreateBookFromPreview(project)) {
+  if (!canCreateBookFromImportedDraftPreview(project)) {
     return (
       <section className="draft-section-preview" aria-label="Crea libretto">
         <div>
@@ -507,8 +507,8 @@ export function GenericDraftImportForm({
 
         <p className="form-note form-note-warning" role="status">
           {enableCreateBook
-            ? "Prima viene generata una anteprima. Il libretto viene salvato solo quando premi il pulsante di creazione dopo una preview valida; nessun PDF viene generato."
-            : "Anteprima preview-only: nessun dato viene salvato, nessuna RPC viene chiamata e nessun PDF viene generato."}
+            ? "Prima viene generata una anteprima. Sono supportati KDP_DRAFT_V1 e il formato legacy; il libretto viene salvato solo dopo una preview valida e nessun PDF viene generato."
+            : "Anteprima preview-only: sono supportati KDP_DRAFT_V1 e il formato legacy; nessun dato viene salvato, nessuna RPC viene chiamata e nessun PDF viene generato."}
         </p>
 
         <div className="field">
@@ -518,7 +518,7 @@ export function GenericDraftImportForm({
             defaultValue={draftText}
             id="generic_draft_text"
             name="draft_text"
-            placeholder="Incolla qui una bozza KDP Builder strutturata"
+            placeholder="Incolla qui una bozza KDP_DRAFT_V1 o legacy"
           />
         </div>
 

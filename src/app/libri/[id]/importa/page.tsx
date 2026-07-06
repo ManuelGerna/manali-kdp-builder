@@ -196,7 +196,7 @@ export default async function DraftImportPage({
     <AppShell
       title="Importa bozza"
       eyebrow={book.title}
-      description="Incolla una bozza KDP Builder per analizzarla, generare la struttura normalizzata e controllare pagine, sezioni, template e avvisi prima del salvataggio definitivo."
+      description="Incolla una bozza KDP_DRAFT_V1 o legacy per analizzarla, generare la struttura normalizzata e controllare pagine, sezioni, template e avvisi."
       actions={
         <>
           <Link className="secondary-button" href={`/libri/${book.id}/contenuti`}>
@@ -223,38 +223,38 @@ export default async function DraftImportPage({
         <div className="grid two">
           <Card title="Importa bozza strutturata">
             <p className="page-copy">
-              Incolla una bozza KDP Builder per analizzarla, generare la
-              struttura normalizzata e controllare pagine, sezioni, template e
-              avvisi prima del salvataggio definitivo.
+              Incolla una bozza KDP_DRAFT_V1 o legacy per analizzarla,
+              generare la struttura normalizzata e controllare pagine, sezioni,
+              template e avvisi.
             </p>
             <GenericDraftImportForm />
           </Card>
 
-          <Card title="Formato supportato V0">
+          <Card title="Formati supportati">
             <ul className="panel-list panel-list-long">
               <FieldRow
-                label="Versione"
-                value="KDP_BUILDER_DRAFT_VERSION: 0.1 consigliata; se manca, il parser genera un warning."
+                label="KDP_DRAFT_V1"
+                value="Bozza standard con BOOK, PAGE e blocchi strutturati. Se malformata, il parser mostra errori diagnostici e non usa fallback legacy."
+              />
+              <FieldRow
+                label="Legacy"
+                value="KDP_BUILDER_DRAFT_VERSION: 0.1 resta supportato per le bozze precedenti."
               />
               <FieldRow
                 label="Blocchi"
-                value="IDEA_LIBRO, SPECIFICHE_TECNICHE, PIANO_PAGINE, SEQUENZA_PAGINE, TEMPLATE_PAGINA, BRIEF_COPERTINA, METADATI_KDP_DRAFT e CHECKLIST."
+                value="Il report mostra formato rilevato, titolo, trim size, pagine generate, warning ed errori."
               />
               <FieldRow
                 label="Pagine"
-                value="Usa numero_pagina per pagine singole oppure intervallo_pagine con ripeti per sequenze ripetute."
+                value="KDP_DRAFT_V1 genera pagine importate compatibili con preview e render tecnico esistenti."
               />
               <FieldRow
                 label="Template"
-                value="Ogni pagina dovrebbe avere un template_id; template mancanti o non riconosciuti finiscono nel report."
-              />
-              <FieldRow
-                label="Separazione"
-                value="Interno, brief copertina, metadati KDP e checklist vengono mostrati come blocchi distinti."
+                value="Il formato legacy continua a riportare template mancanti o non riconosciuti nel report."
               />
               <FieldRow
                 label="Salvataggio"
-                value="Preview-only: in questo task non viene salvato nulla su Supabase e non viene generato alcun PDF."
+                value="Preview-only da questa schermata: non viene salvato nulla su Supabase e non viene generato alcun PDF."
               />
               <FieldRow
                 label="Prossimo passo"
