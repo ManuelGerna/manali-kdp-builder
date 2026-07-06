@@ -1,11 +1,23 @@
+import {
+  adaptKdpDraftV1ToImportedPages,
+  type KdpDraftV1AdapterError,
+} from "./kdp-draft-v1-adapter.ts";
+import {
+  KDP_DRAFT_V1_HEADER,
+  parseKdpDraftV1,
+  type KdpDraftV1Book,
+  type KdpDraftV1Error,
+} from "./kdp-draft-v1.ts";
 import { generatePages } from "./page-generation.ts";
 import type {
+  BookPage,
   BookSection,
   CoverBrief,
   ImportIssue,
   ImportOptions,
   KdpMetadataDraft,
   NormalizedKdpProject,
+  PageContent,
   ParsedDraft,
   ProjectInfo,
   QualityChecklist,
@@ -35,8 +47,11 @@ import {
 } from "./utils.ts";
 
 export const PARSER_VERSION = "0.1.0";
+export const KDP_DRAFT_V1_IMPORTER_VERSION = "kdp_draft_v1";
 
 const DEFAULT_SUPPORTED_DRAFT_VERSIONS = ["0.1"] as const;
+
+export type ImportedDraftFormat = "kdp_draft_v1" | "legacy";
 
 const TOP_LEVEL_KEYS = new Set(
   [
@@ -568,6 +583,19 @@ export function detectDraftVersion(rawText: string) {
   return version || undefined;
 }
 
+export function detectKdpDraftFormat(rawText: string): ImportedDraftFormat {
+  const firstLine = String(rawText ?? "")
+    .replace(/^\uFEFF/, "")
+    .replace(/\r\n?/g, "\n")
+    .trimStart()
+    .split("\n", 1)[0]
+    ?.trim();
+
+  return firstLine === KDP_DRAFT_V1_HEADER
+    ? "kdp_draft_v1"
+    : "legacy";
+}
+
 export function splitTopLevelBlocks(rawText: string): TopLevelBlocks {
   const rootFields: Record<string, unknown> = {};
   const rawBlocks: Record<string, string> = {};
@@ -1035,6 +1063,204 @@ function createBaseProject(input: {
   return project;
 }
 
+function kdpDraftV1ParseErrorToIssue(error: KdpDraftV1Error): ImportIssue {
+  return issue({
+    code: `KDP_DRAFT_V1_${error.code}`,
+    message: error.message,
+    path: `line:${error.line}`,
+    severity: "error",
+  });
+}
+
+function kdpDraftV1AdapterErrorToIssue(
+  error: KdpDraftV1AdapterError,
+): ImportIssue {
+  return issue({
+    code: `KDP_DRAFT_V1_ADAPTER_${error.code}`,
+    message: error.message,
+    pageNumber: undefined,
+    path: error.path,
+    rawSnippet: error.pageId,
+    severity: "error",
+  });
+}
+
+function buildKdpDraftV1ProjectInfo(book: KdpDraftV1Book): ProjectInfo {
+  return compactRecord<ProjectInfo>({
+    bookType: "kdp_draft_v1",
+    language: book.language,
+    subtitle: book.subtitle,
+    title: book.title,
+  }) as ProjectInfo;
+}
+
+function buildKdpDraftV1TechnicalSpecs(book: KdpDraftV1Book): TechnicalSpecs {
+  return compactRecord<TechnicalSpecs>({
+    interiorColor: book.interior,
+    targetPageCount: book.targetPages,
+    trimSize: book.trimSize,
+  }) as TechnicalSpecs;
+}
+
+function buildKdpDraftV1Templates(pages: BookPage[]) {
+  const usageByTemplateId: Record<string, number> = {};
+
+  for (const page of pages) {
+    if (!page.templateId) {
+      continue;
+    }
+
+    usageByTemplateId[page.templateId] =
+      (usageByTemplateId[page.templateId] ?? 0) + 1;
+  }
+
+  const requestedTemplateIds = Object.keys(usageByTemplateId).sort((first, second) =>
+    first.localeCompare(second),
+  );
+
+  return {
+    requestedTemplateIds,
+    usageByTemplateId,
+  };
+}
+
+function importedPageContentToPageContent(content: unknown): PageContent {
+  return isRecord(content) && !Array.isArray(content)
+    ? (content as PageContent)
+    : { text: String(content ?? "") };
+}
+
+function importKdpDraftV1(
+  rawText: string,
+  effectiveText: string,
+  importedAt: string,
+): NormalizedKdpProject {
+  const source = {
+    draftVersion: KDP_DRAFT_V1_HEADER,
+    importedAt,
+    parserVersion: KDP_DRAFT_V1_IMPORTER_VERSION,
+    rawText,
+  };
+  const parseResult = parseKdpDraftV1(effectiveText);
+  const issues = parseResult.errors.map(kdpDraftV1ParseErrorToIssue);
+
+  if (!parseResult.ok || !parseResult.document) {
+    const baseProject = {
+      importReport: {
+        errors: [],
+        status: "success",
+        summary: {
+          errorCount: 0,
+          expandedPageCount: 0,
+          fixedPageCount: 0,
+          generatedPageCount: 0,
+          parserVersion: KDP_DRAFT_V1_IMPORTER_VERSION,
+          requestedTemplateCount: 0,
+          sectionCount: 0,
+          warningCount: 0,
+        },
+        warnings: [],
+      },
+      pages: [],
+      project: parseResult.document
+        ? buildKdpDraftV1ProjectInfo(parseResult.document.book)
+        : {},
+      sections: [],
+      source,
+      technicalSpecs: parseResult.document
+        ? buildKdpDraftV1TechnicalSpecs(parseResult.document.book)
+        : {},
+      templates: {
+        requestedTemplateIds: [],
+        usageByTemplateId: {},
+      },
+    } satisfies NormalizedKdpProject;
+
+    return {
+      ...baseProject,
+      importReport: buildImportReport({
+        issues,
+        project: baseProject,
+        source,
+      }),
+    };
+  }
+
+  const adapterResult = adaptKdpDraftV1ToImportedPages(parseResult.document);
+  issues.push(...adapterResult.errors.map(kdpDraftV1AdapterErrorToIssue));
+
+  const pages = adapterResult.model.pages.map((page): BookPage => {
+    const content = importedPageContentToPageContent(page.content);
+
+    return {
+      content,
+      pageNumber: page.pageNumber,
+      sourceRef: `kdp_draft_v1:${page.pageNumber}`,
+      sourceType: "single",
+      status: page.status === "ready" ? "ready" : "needs_review",
+      templateId: page.templateId ?? undefined,
+      title: page.title ?? undefined,
+    };
+  });
+  const sections: BookSection[] = [];
+  const technicalSpecs = buildKdpDraftV1TechnicalSpecs(parseResult.document.book);
+  const validation = validateImportedProject({
+    pages,
+    sections,
+    targetPageCount: technicalSpecs.targetPageCount,
+  });
+  issues.push(...validation.issues);
+
+  const projectBeforeReport = {
+    ...(parseResult.document.book.theme
+      ? {
+          visualSystem: {
+            colorMode: parseResult.document.book.theme,
+            styleName: parseResult.document.book.theme,
+          },
+        }
+      : {}),
+    extras: {
+      kdpDraftV1: {
+        adapterPageCount: adapterResult.model.pages.length,
+        book: parseResult.document.book,
+        format: KDP_DRAFT_V1_HEADER,
+        normalizedPageCount: validation.pages.length,
+      },
+    },
+    importReport: {
+      errors: [],
+      status: "success",
+      summary: {
+        errorCount: 0,
+        expandedPageCount: 0,
+        fixedPageCount: 0,
+        generatedPageCount: 0,
+        parserVersion: KDP_DRAFT_V1_IMPORTER_VERSION,
+        requestedTemplateCount: 0,
+        sectionCount: 0,
+        warningCount: 0,
+      },
+      warnings: [],
+    },
+    pages: validation.pages,
+    project: buildKdpDraftV1ProjectInfo(parseResult.document.book),
+    sections: validation.sections,
+    source,
+    technicalSpecs,
+    templates: buildKdpDraftV1Templates(validation.pages),
+  } satisfies NormalizedKdpProject;
+
+  return {
+    ...projectBeforeReport,
+    importReport: buildImportReport({
+      issues,
+      project: projectBeforeReport,
+      source,
+    }),
+  };
+}
+
 export function importKdpBuilderDraft(
   rawText: string,
   options: ImportOptions = {},
@@ -1058,6 +1284,14 @@ export function importKdpBuilderDraft(
       issues,
       rawText: received.rawText,
     });
+  }
+
+  if (detectKdpDraftFormat(received.effectiveText) === "kdp_draft_v1") {
+    return importKdpDraftV1(
+      received.rawText,
+      received.effectiveText,
+      importedAt,
+    );
   }
 
   const draftVersion = detectDraftVersion(received.effectiveText);
