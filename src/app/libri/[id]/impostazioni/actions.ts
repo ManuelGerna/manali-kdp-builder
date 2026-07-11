@@ -18,11 +18,12 @@ import {
   type PaperType,
   type TrimSize,
 } from "@/lib/kdp/constants";
-import { updateBookSettings } from "@/lib/kdp/books";
 import {
-  createOwnershipActor,
-  type OwnershipActor,
-} from "@/lib/kdp/ownership";
+  getBookVisibilityFromFormData,
+  isBookVisibility,
+} from "@/lib/kdp/book-visibility";
+import { updateBookSettings } from "@/lib/kdp/books";
+import { createOwnershipActor } from "@/lib/kdp/ownership";
 import {
   createClient,
   hasSupabaseServerConfig,
@@ -43,6 +44,7 @@ type SettingsFormFields = {
   margin_bottom?: string;
   margin_inner?: string;
   margin_outer?: string;
+  visibility?: string;
 };
 
 export type SettingsFormState = {
@@ -96,6 +98,7 @@ function getFields(formData: FormData): SettingsFormFields {
     margin_bottom: getString(formData, "margin_bottom"),
     margin_inner: getString(formData, "margin_inner"),
     margin_outer: getString(formData, "margin_outer"),
+    visibility: getBookVisibilityFromFormData(formData),
   };
 }
 
@@ -156,6 +159,7 @@ function getSettingsPath(
 }
 
 function revalidateBookSettings(bookId: string) {
+  revalidatePath("/libri");
   revalidatePath(`/libri/${bookId}`);
   revalidatePath(`/libri/${bookId}/impostazioni`);
   revalidatePath(`/libri/${bookId}/kdp`);
@@ -221,13 +225,11 @@ async function getAuthenticatedSupabase(actionName: string) {
 async function getBookAccessError(
   supabase: KdpSupabaseClient,
   bookId: string,
-  actor: OwnershipActor,
 ) {
   const { data, error } = await supabase
     .from("kdp_books")
     .select("id")
     .eq("id", bookId)
-    .eq("created_by", actor.userId)
     .maybeSingle();
 
   if (error) {
@@ -253,6 +255,7 @@ export async function updateSettingsAction(
 ): Promise<SettingsFormState> {
   const bookId = getString(formData, "book_id");
   const fields = getFields(formData);
+  const visibility = getBookVisibilityFromFormData(formData);
   const bodyFontSize = parseClosedNumber(
     fields.body_font_size ?? "",
     BODY_FONT_SIZE_VALUES,
@@ -341,6 +344,13 @@ export async function updateSettingsAction(
     };
   }
 
+  if (!isBookVisibility(visibility)) {
+    return {
+      message: "Visibilita libretto non valida.",
+      fields,
+    };
+  }
+
   const { supabase, actor, error } =
     await getAuthenticatedSupabase("update-settings");
 
@@ -351,7 +361,7 @@ export async function updateSettingsAction(
     };
   }
 
-  const bookAccessError = await getBookAccessError(supabase, bookId, actor);
+  const bookAccessError = await getBookAccessError(supabase, bookId);
 
   if (bookAccessError) {
     return {
@@ -363,6 +373,7 @@ export async function updateSettingsAction(
   const result = await updateBookSettings(supabase, {
     bookId,
     actor,
+    visibility,
     trimSize: fields.trim_size as TrimSize,
     bleed: fields.bleed === "true",
     interiorType: fields.interior_type as InteriorType,

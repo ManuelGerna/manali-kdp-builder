@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import type { PostgrestError } from "@supabase/supabase-js";
+import { getBookVisibilityFromFormData } from "@/lib/kdp/book-visibility";
 import {
   createBookWithDefaultSettings,
   type RepositoryResult,
@@ -37,6 +38,7 @@ export type GenericDraftImportFormState = {
 export type CreateBookFromGenericDraftState = {
   fields?: {
     draft_text?: string;
+    visibility?: string;
   };
   message: string | null;
 };
@@ -190,8 +192,10 @@ export async function createBookFromGenericDraftAction(
   formData: FormData,
 ): Promise<CreateBookFromGenericDraftState> {
   const draftText = getString(formData, "draft_text");
+  const visibility = getBookVisibilityFromFormData(formData);
   const fields = {
     draft_text: draftText,
+    visibility,
   };
   const validationError = validateGenericDraftText(draftText);
 
@@ -279,6 +283,7 @@ export async function createBookFromGenericDraftAction(
     language: bookDetails.language,
     aiUsageType: bookDetails.aiUsageType,
     bookType: bookDetails.bookType,
+    visibility,
     actor,
   });
 

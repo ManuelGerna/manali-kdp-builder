@@ -145,7 +145,11 @@ export default async function BookSettingsPage({
           ) : null}
 
           {settings ? (
-            <SettingsForm bookId={book.id} settings={settings} />
+            <SettingsForm
+              bookId={book.id}
+              bookVisibility={book.visibility}
+              settings={settings}
+            />
           ) : (
             <EmptyState
               title="Impostazioni KDP mancanti"

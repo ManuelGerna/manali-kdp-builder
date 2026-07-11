@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
+import { BookVisibilityBadge } from "@/components/kdp/book-visibility-badge";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { FieldRow } from "@/components/ui/field-row";
@@ -291,7 +292,10 @@ export default async function BookDetailPage({ params }: BookDetailPageProps) {
 
       <div className="grid two">
         <Card>
-          <StatusPill status={toBookStatus(book)} />
+          <div className="book-card-badges">
+            <StatusPill status={toBookStatus(book)} />
+            <BookVisibilityBadge visibility={book.visibility} />
+          </div>
           <h2>Dati principali</h2>
           <ul className="panel-list">
             <FieldRow label="Autore" value={book.author_name} />

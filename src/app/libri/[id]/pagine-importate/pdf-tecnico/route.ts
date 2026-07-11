@@ -4,6 +4,7 @@ import {
   generateImportedPagesTechnicalPdf,
   getImportedPagesTechnicalPdfFileName,
 } from "@/lib/kdp/imported-page-pdf";
+import { isBookVisibleToUser } from "@/lib/kdp/book-visibility";
 import { buildImportedPrintRenderModel } from "@/lib/kdp/imported-page-print-renderer";
 import { getImportedPagesReadModel } from "@/lib/kdp/imported-pages";
 import {
@@ -90,7 +91,7 @@ export async function GET(
 
   const { book, sections, settings } = detailResult.data;
 
-  if (book.created_by !== user.id) {
+  if (!isBookVisibleToUser(book, user.id)) {
     return jsonError("Libretto non trovato o non accessibile.", 404);
   }
 

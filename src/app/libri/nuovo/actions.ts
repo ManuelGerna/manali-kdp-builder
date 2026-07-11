@@ -7,6 +7,7 @@ import {
   LANGUAGE_OPTIONS,
   type AiUsageType,
 } from "@/lib/kdp/constants";
+import { getBookVisibilityFromFormData } from "@/lib/kdp/book-visibility";
 import { createBookWithDefaultSettings } from "@/lib/kdp/books";
 import { createOwnershipActor } from "@/lib/kdp/ownership";
 import {
@@ -22,6 +23,7 @@ export type CreateBookFormState = {
     author_name?: string;
     language?: string;
     ai_usage_type?: string;
+    visibility?: string;
   };
 };
 
@@ -60,6 +62,7 @@ export async function createBook(
   const authorName = getString(formData, "author_name");
   const language = getString(formData, "language") || "it";
   const aiUsageType = getString(formData, "ai_usage_type") || "none";
+  const visibility = getBookVisibilityFromFormData(formData);
 
   const fields = {
     title,
@@ -67,6 +70,7 @@ export async function createBook(
     author_name: authorName,
     language,
     ai_usage_type: aiUsageType,
+    visibility,
   };
 
   if (!title || !authorName) {
@@ -136,6 +140,7 @@ export async function createBook(
     authorName,
     language,
     aiUsageType,
+    visibility,
     actor: createOwnershipActor({
       email: user.email,
       userId: user.id,

@@ -2,6 +2,7 @@
 
 import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
+import { BookVisibilityFieldset } from "@/components/kdp/book-visibility-fieldset";
 import {
   buildImportedDraftPreviewSummary,
   canCreateBookFromImportedDraftPreview,
@@ -479,6 +480,7 @@ function CreateBookFromDraftPanel({
         ) : null}
 
         <input name="draft_text" type="hidden" value={draftText} />
+        <BookVisibilityFieldset defaultValue={state.fields?.visibility} />
         <CreateBookButton />
       </form>
     </section>

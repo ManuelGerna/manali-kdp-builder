@@ -2,6 +2,11 @@ import { randomUUID } from "node:crypto";
 import type { PostgrestError } from "@supabase/supabase-js";
 import { DEFAULT_BOOK_SETTINGS } from "@/lib/kdp/constants";
 import {
+  DEFAULT_BOOK_VISIBILITY,
+  getBookVisibilityPersistenceFields,
+  type BookVisibility,
+} from "@/lib/kdp/book-visibility";
+import {
   getCreateOwnershipFields,
   getUpdateOwnershipFields,
   type OwnershipActor,
@@ -21,6 +26,7 @@ export type CreateBookInput = {
   authorName: string;
   language: string;
   aiUsageType: string;
+  visibility?: BookVisibility;
   bookType?: string;
   actor: OwnershipActor;
 };
@@ -28,6 +34,7 @@ export type CreateBookInput = {
 export type UpdateBookSettingsInput = {
   bookId: string;
   actor: OwnershipActor;
+  visibility: BookVisibility;
   trimSize: string;
   bleed: boolean;
   interiorType: string;
@@ -96,7 +103,7 @@ const DEFAULT_SETTINGS_INSERT = {
 } satisfies Omit<TablesInsert<"kdp_book_settings">, "book_id">;
 
 const BOOK_LIST_SELECT =
-  "id,title,subtitle,author_name,language,book_type,status,ai_usage_type,internal_description,created_by,created_by_user_id,created_by_email,updated_by_user_id,updated_by_email,archived_at,archived_by_user_id,archived_by_email,created_at,updated_at";
+  "id,title,subtitle,author_name,language,book_type,status,ai_usage_type,internal_description,visibility,created_by,created_by_user_id,created_by_email,updated_by_user_id,updated_by_email,archived_at,archived_by_user_id,archived_by_email,created_at,updated_at";
 
 function redactLogText(value: string | null | undefined) {
   if (!value) {
@@ -432,6 +439,9 @@ export async function createBookWithDefaultSettings(
     language: input.language,
     status: "draft",
     ai_usage_type: input.aiUsageType,
+    ...getBookVisibilityPersistenceFields(
+      input.visibility ?? DEFAULT_BOOK_VISIBILITY,
+    ),
     created_by: input.actor.userId,
     ...getCreateOwnershipFields(input.actor),
   };
@@ -548,6 +558,7 @@ export async function updateBookSettings(
   const ownershipResult = await touchBookOwnership(supabase, {
     actor: input.actor,
     bookId: input.bookId,
+    visibility: input.visibility,
   });
 
   if (ownershipResult.data === null) {
@@ -567,9 +578,13 @@ export async function touchBookOwnership(
   input: {
     actor: OwnershipActor;
     bookId: string;
+    visibility?: BookVisibility;
   },
 ): Promise<RepositoryResult<{ bookId: string }>> {
   const bookUpdate = {
+    ...(input.visibility
+      ? getBookVisibilityPersistenceFields(input.visibility)
+      : {}),
     ...getUpdateOwnershipFields(input.actor),
   } satisfies TablesUpdate<"kdp_books">;
   const { error } = await supabase

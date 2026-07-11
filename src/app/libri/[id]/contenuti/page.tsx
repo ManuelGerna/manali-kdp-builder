@@ -84,10 +84,16 @@ type BookResult =
 const STATUS_MESSAGES: Record<string, string> = {
   block_created: "Placeholder immagine creato.",
   block_deleted: "Blocco contenuto eliminato.",
+  block_deleted_asset_cleanup_warning:
+    "Blocco eliminato. L'asset collegato non e' stato ripulito completamente.",
+  block_deleted_storage_cleanup_warning:
+    "Blocco e asset eliminati. Il file Storage collegato non e' stato rimosso.",
   block_reordered: "Ordine blocchi aggiornato.",
   block_updated: "Blocco testo aggiornato.",
   block_visibility_updated: "Visibilita blocco aggiornata.",
   image_uploaded: "Immagine caricata.",
+  image_uploaded_storage_cleanup_warning:
+    "Immagine caricata. Il vecchio file Storage non e' stato rimosso.",
   created: "Sezione creata.",
   deleted: "Sezione eliminata.",
   imported: "Import completato.",

@@ -20,6 +20,7 @@ export type Database = {
           status: string;
           ai_usage_type: string;
           internal_description: string | null;
+          visibility: string;
           created_by: string | null;
           created_by_user_id: string | null;
           created_by_email: string | null;
@@ -41,6 +42,7 @@ export type Database = {
           status?: string;
           ai_usage_type?: string;
           internal_description?: string | null;
+          visibility?: string;
           created_by?: string | null;
           created_by_user_id?: string | null;
           created_by_email?: string | null;
@@ -62,6 +64,7 @@ export type Database = {
           status?: string;
           ai_usage_type?: string;
           internal_description?: string | null;
+          visibility?: string;
           created_by?: string | null;
           created_by_user_id?: string | null;
           created_by_email?: string | null;

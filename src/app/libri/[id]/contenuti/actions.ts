@@ -41,6 +41,12 @@ import {
   type OwnershipActor,
 } from "@/lib/kdp/ownership";
 import {
+  cleanupAssetAfterImageBlockDelete,
+  persistUploadedAssetFile,
+  type StorageCleanupWarning,
+  type StorageRemoveResult,
+} from "@/lib/kdp/storage-cleanup";
+import {
   createClient,
   hasSupabaseServerConfig,
 } from "@/lib/supabase/server";
@@ -99,6 +105,23 @@ function logImageUploadAction(
   console.error("[kdp-image-upload:action]", {
     event,
     context,
+  });
+}
+
+function logStorageCleanupWarning(
+  event: string,
+  warning: StorageCleanupWarning,
+  context: Record<string, boolean | number | string | null | undefined> = {},
+) {
+  console.warn("[kdp-storage-cleanup:action]", {
+    event,
+    context: {
+      ...context,
+      errorName: warning.errorName,
+      filePathTail: warning.filePath.slice(-48),
+      operation: warning.operation,
+    },
+    message: warning.message,
   });
 }
 
@@ -187,6 +210,46 @@ function getSafeImageFileName(fileName: string, extension: string) {
     .slice(0, 64);
 
   return `${safeBaseName || "image"}.${extension}`;
+}
+
+async function removeKdpAssetStorageFile(
+  supabase: KdpSupabaseClient,
+  filePath: string,
+): Promise<StorageRemoveResult> {
+  try {
+    const result = await supabase.storage
+      .from(KDP_ASSETS_BUCKET)
+      .remove([filePath]);
+
+    return {
+      error: result.error
+        ? {
+            message: result.error.message,
+            name: result.error.name,
+          }
+        : null,
+    };
+  } catch (error: unknown) {
+    return {
+      error: {
+        name: getErrorName(error),
+      },
+    };
+  }
+}
+
+function getImageUploadStatus(warning: StorageCleanupWarning | null) {
+  return warning ? "image_uploaded_storage_cleanup_warning" : "image_uploaded";
+}
+
+function getBlockDeleteStatus(warning: StorageCleanupWarning | null) {
+  if (!warning) {
+    return "block_deleted";
+  }
+
+  return warning.message.includes("file Storage")
+    ? "block_deleted_storage_cleanup_warning"
+    : "block_deleted_asset_cleanup_warning";
 }
 
 function getTitleFromFileName(fileName: string) {
@@ -1191,6 +1254,69 @@ export async function deleteSectionBlockAction(formData: FormData) {
     );
   }
 
+  const { data: blockForCleanup, error: blockCleanupError } = await supabase
+    .from("kdp_section_blocks")
+    .select("id,asset_id,block_type")
+    .eq("book_id", bookId)
+    .eq("section_id", sectionId)
+    .eq("id", blockId)
+    .maybeSingle();
+
+  if (blockCleanupError) {
+    logSectionAction("delete_block_cleanup_query_failed", {
+      blockIdTail: idTail(blockId),
+      bookIdTail: idTail(bookId),
+      errorCode: blockCleanupError.code,
+      errorName: blockCleanupError.name,
+    });
+
+    redirect(
+      getContentPath(bookId, {
+        anchor: returnAnchor,
+        error: "Non riesco a leggere il blocco da eliminare.",
+      }),
+    );
+  }
+
+  let deletedBlockAsset: { assetId: string; filePath: string | null } | null =
+    null;
+
+  if (
+    blockForCleanup?.asset_id &&
+    blockForCleanup.block_type === "image_prompt"
+  ) {
+    const { data: assetForCleanup, error: assetCleanupError } = await supabase
+      .from("kdp_assets")
+      .select("id,file_path")
+      .eq("book_id", bookId)
+      .eq("id", blockForCleanup.asset_id)
+      .maybeSingle();
+
+    if (assetCleanupError) {
+      logSectionAction("delete_block_asset_cleanup_query_failed", {
+        assetIdTail: idTail(blockForCleanup.asset_id),
+        blockIdTail: idTail(blockId),
+        bookIdTail: idTail(bookId),
+        errorCode: assetCleanupError.code,
+        errorName: assetCleanupError.name,
+      });
+
+      redirect(
+        getContentPath(bookId, {
+          anchor: returnAnchor,
+          error: "Non riesco a leggere l'asset collegato al blocco.",
+        }),
+      );
+    }
+
+    if (assetForCleanup) {
+      deletedBlockAsset = {
+        assetId: assetForCleanup.id,
+        filePath: assetForCleanup.file_path,
+      };
+    }
+  }
+
   const pageBreakResult = await removePageBreakAfterBlock(supabase, {
     actor,
     blockId,
@@ -1219,6 +1345,52 @@ export async function deleteSectionBlockAction(formData: FormData) {
     );
   }
 
+  const cleanupResult = await cleanupAssetAfterImageBlockDelete({
+    assetId: deletedBlockAsset?.assetId ?? null,
+    countAssetReferences: async (assetId) => {
+      const { count, error } = await supabase
+        .from("kdp_section_blocks")
+        .select("id", { count: "exact", head: true })
+        .eq("book_id", bookId)
+        .eq("asset_id", assetId);
+
+      if (error) {
+        logSectionAction("delete_block_asset_reference_count_failed", {
+          assetIdTail: idTail(assetId),
+          blockIdTail: idTail(blockId),
+          bookIdTail: idTail(bookId),
+          errorCode: error.code,
+          errorName: error.name,
+        });
+
+        return {
+          data: null,
+          error: "Non riesco a verificare se l'asset immagine e' ancora usato.",
+        };
+      }
+
+      return {
+        data: {
+          count: count ?? 0,
+        },
+        error: null,
+      };
+    },
+    deleteAssetRecord: (assetId) => deleteAsset(supabase, bookId, assetId),
+    filePath: deletedBlockAsset?.filePath ?? null,
+    removeStoredFile: (filePath) => removeKdpAssetStorageFile(supabase, filePath),
+  });
+
+  if (cleanupResult.warning) {
+    logStorageCleanupWarning("delete_block_cleanup_warning", cleanupResult.warning, {
+      assetIdTail: deletedBlockAsset?.assetId
+        ? idTail(deletedBlockAsset.assetId)
+        : null,
+      blockIdTail: idTail(blockId),
+      bookIdTail: idTail(bookId),
+    });
+  }
+
   const ownershipError = await touchBookAfterContentChange(
     supabase,
     bookId,
@@ -1233,7 +1405,10 @@ export async function deleteSectionBlockAction(formData: FormData) {
 
   revalidateBookContent(bookId);
   redirect(
-    getContentPath(bookId, { anchor: returnAnchor, status: "block_deleted" }),
+    getContentPath(bookId, {
+      anchor: returnAnchor,
+      status: getBlockDeleteStatus(cleanupResult.warning),
+    }),
   );
 }
 
@@ -1827,7 +2002,7 @@ export async function uploadImageForBlockAction(formData: FormData) {
 
   const { data: asset, error: assetError } = await supabase
     .from("kdp_assets")
-    .select("id,title,alt_text")
+    .select("id,title,alt_text,file_path")
     .eq("book_id", bookId)
     .eq("id", assetId)
     .maybeSingle();
@@ -1906,18 +2081,48 @@ export async function uploadImageForBlockAction(formData: FormData) {
     getTitleFromFileName(file.name) ||
     "Immagine caricata";
   const altText = requestedAltText || asset.alt_text || title;
-  const updateResult = await updateAssetUpload(supabase, {
-    actor,
-    altText,
-    assetId,
-    bookId,
-    filePath: storagePath,
-    title,
+  const updateResult = await persistUploadedAssetFile({
+    previousFilePath: asset.file_path,
+    removeStoredFile: (filePath) => removeKdpAssetStorageFile(supabase, filePath),
+    uploadedFilePath: storagePath,
+    updateAsset: () =>
+      updateAssetUpload(supabase, {
+        actor,
+        altText,
+        assetId,
+        bookId,
+        filePath: storagePath,
+        title,
+      }),
   });
 
   if (updateResult.data === null) {
+    if (updateResult.warning) {
+      logStorageCleanupWarning(
+        "upload_image_update_failed_cleanup_warning",
+        updateResult.warning,
+        {
+          assetIdTail: idTail(assetId),
+          blockIdTail: idTail(blockId),
+          bookIdTail: idTail(bookId),
+        },
+      );
+    }
+
     redirect(
       getContentPath(bookId, { anchor: returnAnchor, error: updateResult.error }),
+    );
+  }
+
+  if (updateResult.warning) {
+    logStorageCleanupWarning(
+      "upload_image_previous_file_cleanup_warning",
+      updateResult.warning,
+      {
+        assetIdTail: idTail(assetId),
+        blockIdTail: idTail(blockId),
+        bookIdTail: idTail(bookId),
+      },
     );
   }
 
@@ -1935,6 +2140,9 @@ export async function uploadImageForBlockAction(formData: FormData) {
 
   revalidateBookContent(bookId);
   redirect(
-    getContentPath(bookId, { anchor: returnAnchor, status: "image_uploaded" }),
+    getContentPath(bookId, {
+      anchor: returnAnchor,
+      status: getImageUploadStatus(updateResult.warning),
+    }),
   );
 }

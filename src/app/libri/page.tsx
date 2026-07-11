@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { EmptyState } from "@/components/ui/empty-state";
+import { BookVisibilityBadge } from "@/components/kdp/book-visibility-badge";
 import { StatusPill } from "@/components/ui/status-pill";
 import {
   AI_USAGE_LABELS,
@@ -211,7 +212,10 @@ export default async function BooksPage({ searchParams }: BooksPageProps) {
               key={book.id}
             >
               <div className="book-card-main">
-                <StatusPill status={toBookStatus(book)} />
+                <div className="book-card-badges">
+                  <StatusPill status={toBookStatus(book)} />
+                  <BookVisibilityBadge visibility={book.visibility} />
+                </div>
                 <div>
                   <h2>{book.title}</h2>
                   <p className="book-subtitle">

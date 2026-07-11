@@ -3,6 +3,7 @@
 import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
 import { createBook, type CreateBookFormState } from "@/app/libri/nuovo/actions";
+import { BookVisibilityFieldset } from "@/components/kdp/book-visibility-fieldset";
 import { AI_USAGE_OPTIONS, LANGUAGE_OPTIONS } from "@/lib/kdp/constants";
 
 const initialState: CreateBookFormState = {
@@ -93,6 +94,8 @@ export function CreateBookForm() {
           </select>
         </div>
       </div>
+
+      <BookVisibilityFieldset defaultValue={state.fields?.visibility} />
 
       <SubmitButton />
     </form>

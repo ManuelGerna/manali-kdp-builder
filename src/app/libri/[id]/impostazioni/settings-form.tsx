@@ -2,6 +2,7 @@
 
 import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
+import { BookVisibilityFieldset } from "@/components/kdp/book-visibility-fieldset";
 import {
   BLEED_OPTIONS,
   BODY_FONT_OPTIONS,
@@ -121,12 +122,17 @@ function getInitialFields(settings: KdpBookSettings) {
 
 export function SettingsForm({
   bookId,
+  bookVisibility,
   settings,
 }: {
   bookId: string;
+  bookVisibility?: string | null;
   settings: KdpBookSettings;
 }) {
-  const initialFields = getInitialFields(settings);
+  const initialFields = {
+    ...getInitialFields(settings),
+    visibility: bookVisibility ?? "private",
+  };
   const initialState: SettingsFormState = {
     message: null,
     fields: initialFields,
@@ -328,6 +334,8 @@ export function SettingsForm({
           />
         </div>
       </div>
+
+      <BookVisibilityFieldset defaultValue={fields.visibility} />
 
       <div className="settings-form-actions">
         <SubmitButton />

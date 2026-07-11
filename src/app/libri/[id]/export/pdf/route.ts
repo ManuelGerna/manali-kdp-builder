@@ -10,6 +10,7 @@ import {
   buildPreExportValidation,
   getExportReadiness,
 } from "@/lib/kdp/validation";
+import { isBookVisibleToUser } from "@/lib/kdp/book-visibility";
 import {
   createClient,
   hasSupabaseServerConfig,
@@ -105,7 +106,7 @@ export async function GET(_request: Request, { params }: PdfExportRouteProps) {
 
   const { book, sections, settings } = detailResult.data;
 
-  if (book.created_by !== user.id) {
+  if (!isBookVisibleToUser(book, user.id)) {
     return jsonError("Libretto non trovato o non accessibile.", 404);
   }
 
