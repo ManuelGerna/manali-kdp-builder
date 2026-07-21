@@ -9,7 +9,7 @@ export default function NewBookDraftImportPage() {
     <AppShell
       title="Anteprima bozza"
       eyebrow="Nuovo libretto"
-      description="Analizza una bozza KDP_DRAFT_V1 o legacy e crea un libretto salvato dopo una preview valida."
+      description="Analizza un manoscritto editoriale, una bozza KDP_DRAFT_V1 o legacy e crea un libro dopo una preview valida."
       actions={
         <Link className="secondary-button" href="/libri/nuovo">
           Torna a Nuovo libretto
@@ -20,10 +20,9 @@ export default function NewBookDraftImportPage() {
         <div className="grid two">
           <Card title="Importa bozza strutturata">
             <p className="page-copy">
-              Incolla una bozza KDP_DRAFT_V1 o legacy per generare una
-              anteprima normalizzata con progetto, sezioni, pagine, template e
-              avvisi. Se il report non contiene errori bloccanti, potrai
-              creare il libretto da questa bozza.
+              Seleziona Libro editoriale per incollare un manoscritto naturale
+              senza intestazioni tecniche. La modalità editoriale crea sezioni
+              e blocchi modificabili senza decidere le pagine.
             </p>
             <GenericDraftImportForm enableCreateBook />
           </Card>

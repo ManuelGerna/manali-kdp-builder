@@ -9,6 +9,7 @@ import "./kdp-draft-v1-import-ui.test.ts";
 import "./kdp-draft-v1-importer-integration.test.ts";
 import "./kdp-draft-v1-pipeline.test.ts";
 import "./kdp-draft-v1.test.ts";
+import "./kdp-editorial-draft-v1.test.ts";
 import {
   buildGenericDraftImportRunInsert,
   buildGenericDraftPageInserts,

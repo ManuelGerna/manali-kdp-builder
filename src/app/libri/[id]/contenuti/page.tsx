@@ -378,14 +378,38 @@ function ImportReportSummary({ report }: { report: DraftImportReport }) {
   return (
     <Card className="import-report-card" title="Report import">
       <dl className="draft-stat-grid import-report-grid">
+        {report.format ? (
+          <div>
+            <dt>Formato</dt>
+            <dd>{report.format}</dd>
+          </div>
+        ) : null}
         <div>
           <dt>Sezioni create</dt>
           <dd>{report.sectionCount}</dd>
         </div>
+        {report.chapterCount > 0 ? (
+          <div>
+            <dt>Capitoli</dt>
+            <dd>{report.chapterCount}</dd>
+          </div>
+        ) : null}
+        {report.subsectionCount > 0 ? (
+          <div>
+            <dt>Sottosezioni</dt>
+            <dd>{report.subsectionCount}</dd>
+          </div>
+        ) : null}
         <div>
           <dt>Blocchi creati</dt>
           <dd>{report.blockCount}</dd>
         </div>
+        {report.annotationCount > 0 ? (
+          <div>
+            <dt>Annotazioni ignorate</dt>
+            <dd>{report.annotationCount}</dd>
+          </div>
+        ) : null}
         <div>
           <dt>Immagini placeholder</dt>
           <dd>{report.imagePlaceholderCount}</dd>
@@ -394,6 +418,12 @@ function ImportReportSummary({ report }: { report: DraftImportReport }) {
           <dt>Warning</dt>
           <dd>{report.warningCount}</dd>
         </div>
+        {report.errorCount > 0 ? (
+          <div>
+            <dt>Errori</dt>
+            <dd>{report.errorCount}</dd>
+          </div>
+        ) : null}
       </dl>
 
       {report.duplicate ? (
@@ -413,6 +443,14 @@ function ImportReportSummary({ report }: { report: DraftImportReport }) {
           Import completato senza warning.
         </p>
       )}
+
+      {report.errors.length > 0 ? (
+        <ul className="import-warning-list">
+          {report.errors.map((error) => (
+            <li key={error}>{error}</li>
+          ))}
+        </ul>
+      ) : null}
     </Card>
   );
 }

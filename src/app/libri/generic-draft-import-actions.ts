@@ -5,6 +5,14 @@ import { redirect } from "next/navigation";
 import type { PostgrestError } from "@supabase/supabase-js";
 import { getBookVisibilityFromFormData } from "@/lib/kdp/book-visibility";
 import {
+  buildEditorialBlockInserts,
+  buildEditorialBookDetails,
+  buildEditorialImportRunInsert,
+  buildEditorialSectionInserts,
+  canPersistEditorialDraft,
+  resolveEditorialPersistenceFailure,
+} from "@/lib/kdp/editorial-draft-persistence";
+import {
   createBookWithDefaultSettings,
   type RepositoryResult,
 } from "@/lib/kdp/books";
@@ -18,7 +26,10 @@ import {
   hashGenericDraftText,
 } from "@/lib/kdp/generic-draft-persistence";
 import {
-  importKdpBuilderDraft,
+  normalizeDraftParserMode,
+  parseDraftWithSelectedParser,
+  type DraftParserMode,
+  type EditorialDraftProject,
   type NormalizedKdpProject,
 } from "@/lib/kdp/importer";
 import { createOwnershipActor } from "@/lib/kdp/ownership";
@@ -29,14 +40,16 @@ import {
 
 export type GenericDraftImportFormState = {
   fields?: {
+    draft_type?: DraftParserMode;
     draft_text?: string;
   };
   message: string | null;
-  preview: NormalizedKdpProject | null;
+  preview: EditorialDraftProject | NormalizedKdpProject | null;
 };
 
 export type CreateBookFromGenericDraftState = {
   fields?: {
+    draft_type?: DraftParserMode;
     draft_text?: string;
     visibility?: string;
   };
@@ -52,12 +65,24 @@ function getErrorName(error: unknown) {
   return error instanceof Error ? error.name : typeof error;
 }
 
-function getString(formData: FormData, name: string) {
-  return String(formData.get(name) ?? "").trim();
+function getDraftText(formData: FormData) {
+  return String(formData.get("draft_text") ?? "");
+}
+
+function getDraftParserMode(formData: FormData) {
+  return normalizeDraftParserMode(
+    String(formData.get("draft_type") ?? ""),
+  );
+}
+
+function isEditorialProject(
+  project: EditorialDraftProject | NormalizedKdpProject,
+): project is EditorialDraftProject {
+  return "kind" in project && project.kind === "editorial";
 }
 
 function validateGenericDraftText(draftText: string) {
-  if (!draftText) {
+  if (!draftText.trim()) {
     return "Incolla una bozza prima di analizzarla.";
   }
 
@@ -152,8 +177,10 @@ export async function analyzeGenericDraftAction(
   _previousState: GenericDraftImportFormState,
   formData: FormData,
 ): Promise<GenericDraftImportFormState> {
-  const draftText = getString(formData, "draft_text");
+  const draftText = getDraftText(formData);
+  const draftType = getDraftParserMode(formData);
   const fields = {
+    draft_type: draftType,
     draft_text: draftText,
   };
   const validationError = validateGenericDraftText(draftText);
@@ -170,7 +197,7 @@ export async function analyzeGenericDraftAction(
     return {
       fields,
       message: null,
-      preview: importKdpBuilderDraft(draftText),
+      preview: parseDraftWithSelectedParser(draftText, draftType),
     };
   } catch (error: unknown) {
     console.error("[kdp-generic-draft-import:action]", {
@@ -191,9 +218,11 @@ export async function createBookFromGenericDraftAction(
   _previousState: CreateBookFromGenericDraftState,
   formData: FormData,
 ): Promise<CreateBookFromGenericDraftState> {
-  const draftText = getString(formData, "draft_text");
+  const draftText = getDraftText(formData);
+  const draftType = getDraftParserMode(formData);
   const visibility = getBookVisibilityFromFormData(formData);
   const fields = {
+    draft_type: draftType,
     draft_text: draftText,
     visibility,
   };
@@ -206,10 +235,10 @@ export async function createBookFromGenericDraftAction(
     };
   }
 
-  let project: NormalizedKdpProject;
+  let project: EditorialDraftProject | NormalizedKdpProject;
 
   try {
-    project = importKdpBuilderDraft(draftText);
+    project = parseDraftWithSelectedParser(draftText, draftType);
   } catch (error: unknown) {
     logGenericDraftCreateAction("generic_importer_failed", {
       errorName: getErrorName(error),
@@ -222,7 +251,10 @@ export async function createBookFromGenericDraftAction(
     };
   }
 
-  const persistenceValidation = canPersistGenericDraftProject(project);
+  const persistenceValidation =
+    isEditorialProject(project)
+      ? canPersistEditorialDraft(project)
+      : canPersistGenericDraftProject(project);
 
   if (!persistenceValidation.ok) {
     return {
@@ -275,6 +307,107 @@ export async function createBookFromGenericDraftAction(
     email: user.email,
     userId: user.id,
   });
+
+  if (isEditorialProject(project)) {
+    const bookDetails = buildEditorialBookDetails(project, visibility);
+    const bookResult = await createBookWithDefaultSettings(supabase, {
+      ...bookDetails,
+      title: bookDetails.title as string,
+      actor,
+    });
+
+    if (bookResult.data === null) {
+      return { fields, message: bookResult.error };
+    }
+
+    const bookId = bookResult.data.bookId;
+    const sectionPlans = buildEditorialSectionInserts(project, {
+      actor,
+      bookId,
+    });
+    const sectionIdBySourceId = new Map(
+      sectionPlans.map((section) => [
+        section.sourceSectionId,
+        section.insert.id as string,
+      ]),
+    );
+    const { importRunId, importToken } = createGenericDraftImportIds();
+    const importRun = buildEditorialImportRunInsert(project, {
+      actor,
+      bookId,
+      draftHash: hashGenericDraftText(draftText),
+      importRunId,
+      importToken,
+    });
+    const blockPlans = buildEditorialBlockInserts(project, {
+      actor,
+      bookId,
+      sectionIdBySourceId,
+    });
+    const { error: sectionError } = await supabase
+      .from("kdp_sections")
+      .insert(sectionPlans.map((plan) => plan.insert));
+
+    if (sectionError) {
+      const failureMessage = getPersistenceMessage(
+        sectionError,
+        "Creazione interrotta: non sono riuscito a salvare la struttura editoriale.",
+      );
+
+      return {
+        fields,
+        message: await resolveEditorialPersistenceFailure(
+          () => cleanupCreatedBook(supabase, bookId),
+          failureMessage,
+        ),
+      };
+    }
+
+    const { error: importRunError } = await supabase
+      .from("kdp_import_runs")
+      .insert(importRun);
+
+    if (importRunError) {
+      const failureMessage = getPersistenceMessage(
+        importRunError,
+        "Creazione interrotta: non sono riuscito a salvare il report editoriale.",
+      );
+
+      return {
+        fields,
+        message: await resolveEditorialPersistenceFailure(
+          () => cleanupCreatedBook(supabase, bookId),
+          failureMessage,
+        ),
+      };
+    }
+
+    if (blockPlans.length > 0) {
+      const { error: blockError } = await supabase
+        .from("kdp_section_blocks")
+        .insert(blockPlans.map((plan) => plan.insert));
+
+      if (blockError) {
+        const failureMessage = getPersistenceMessage(
+          blockError,
+          "Creazione interrotta: non sono riuscito a salvare i blocchi editoriali.",
+        );
+
+        return {
+          fields,
+          message: await resolveEditorialPersistenceFailure(
+            () => cleanupCreatedBook(supabase, bookId),
+            failureMessage,
+          ),
+        };
+      }
+    }
+
+    revalidatePath("/libri");
+    revalidatePath(`/libri/${bookId}`);
+    redirect(`/libri/${bookId}/contenuti?run=${importToken}`);
+  }
+
   const bookDetails = getGenericDraftBookDetails(project);
   const bookResult = await createBookWithDefaultSettings(supabase, {
     title: bookDetails.title,

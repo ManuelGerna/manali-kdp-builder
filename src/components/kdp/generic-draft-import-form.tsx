@@ -10,6 +10,8 @@ import {
 import {
   type BookPage,
   type BookSection,
+  type EditorialDraftProject,
+  type DraftParserMode,
   type ImportIssue,
   type NormalizedKdpProject,
 } from "@/lib/kdp/importer";
@@ -30,6 +32,12 @@ const initialCreateState: CreateBookFromGenericDraftState = {
 };
 
 const PAGE_PREVIEW_LIMIT = 120;
+
+function isEditorialProject(
+  project: EditorialDraftProject | NormalizedKdpProject,
+): project is EditorialDraftProject {
+  return "kind" in project && project.kind === "editorial";
+}
 
 function AnalyzeButton() {
   const { pending } = useFormStatus();
@@ -434,19 +442,112 @@ function GenericDraftPreview({ project }: { project: NormalizedKdpProject }) {
   );
 }
 
+function EditorialDraftPreview({ project }: { project: EditorialDraftProject }) {
+  return (
+    <section className="draft-preview" aria-label="Anteprima manoscritto editoriale">
+      <section className="draft-preview" aria-label="Report importazione editoriale">
+        <div className="draft-preview-header">
+          <div>
+            <p className="eyebrow">Anteprima generata</p>
+            <h2>Struttura editoriale</h2>
+          </div>
+          <span
+            className={`section-chip ${
+              project.errors.length > 0
+                ? "section-chip-error"
+                : project.warnings.length > 0
+                  ? "section-chip-warning"
+                  : "section-chip-success"
+            }`}
+          >
+            {project.errors.length > 0 ? "failed" : "ready"}
+          </span>
+        </div>
+
+        <p className="form-note form-note-success">
+          Il parser ha creato soltanto struttura modificabile. Nessuna pagina e
+          nessuna impaginazione sono state generate.
+        </p>
+
+        <dl className="draft-stat-grid">
+          <div><dt>Formato rilevato</dt><dd>{project.format}</dd></div>
+          <div><dt>Titolo</dt><dd>{project.title ?? "Non rilevato"}</dd></div>
+          <div><dt>Sottotitolo</dt><dd>{project.subtitle ?? "Non rilevato"}</dd></div>
+          <div><dt>Capitoli</dt><dd>{project.summary.chapterCount}</dd></div>
+          <div><dt>Sottosezioni</dt><dd>{project.summary.subsectionCount}</dd></div>
+          <div><dt>Blocchi</dt><dd>{project.summary.blockCount}</dd></div>
+          <div><dt>Annotazioni pagina ignorate</dt><dd>{project.summary.annotationCount}</dd></div>
+          <div><dt>Parser</dt><dd>{project.parserVersion}</dd></div>
+        </dl>
+      </section>
+
+      <section className="form-note form-note-error" aria-label="Errori">
+        <strong>Errori</strong>
+        {project.errors.length > 0 ? (
+          <ul className="import-warning-list">
+            {project.errors.map((issue) => <li key={issue.code}><strong>{issue.code}</strong>: {issue.message}</li>)}
+          </ul>
+        ) : <p className="section-empty-body">Nessun errore bloccante rilevato.</p>}
+      </section>
+
+      <section className="form-note form-note-warning" aria-label="Warning">
+        <strong>Warning</strong>
+        {project.warnings.length > 0 ? (
+          <ul className="import-warning-list">
+            {project.warnings.map((issue) => <li key={issue.code}><strong>{issue.code}</strong>: {issue.message}</li>)}
+          </ul>
+        ) : <p className="section-empty-body">Nessun warning rilevato.</p>}
+      </section>
+
+      {project.sections.map((section) => (
+        <section className="draft-section-preview" key={section.id}>
+          <div>
+            <p className="section-meta">{section.kind}</p>
+            <h3>{section.title ?? "Introduzione senza intestazione"}</h3>
+          </div>
+          {section.blocks.map((block) => (
+            <div className="draft-block-preview" key={block.id}>
+              <span className="section-chip">{block.type}</span>
+              <p className="section-body-preview">{block.text}</p>
+            </div>
+          ))}
+          {section.subsections.map((subsection) => (
+            <div className="draft-block-preview" key={subsection.id}>
+              <p className="section-meta">Sottosezione</p>
+              <h4>{subsection.title}</h4>
+              {subsection.blocks.map((block) => (
+                <div key={block.id}>
+                  <span className="section-chip">{block.type}</span>
+                  <p className="section-body-preview">{block.text}</p>
+                </div>
+              ))}
+            </div>
+          ))}
+        </section>
+      ))}
+    </section>
+  );
+}
+
 function CreateBookFromDraftPanel({
+  draftType,
   draftText,
   project,
 }: {
+  draftType: DraftParserMode;
   draftText: string;
-  project: NormalizedKdpProject;
+  project: EditorialDraftProject | NormalizedKdpProject;
 }) {
   const [state, formAction] = useActionState(
     createBookFromGenericDraftAction,
     initialCreateState,
   );
 
-  if (!canCreateBookFromImportedDraftPreview(project)) {
+  const canCreate = isEditorialProject(project)
+    ? project.errors.length === 0 && Boolean(project.title) && project.sections.length > 0
+    : canCreateBookFromImportedDraftPreview(project);
+
+  if (!canCreate) {
     return (
       <section className="draft-section-preview" aria-label="Crea libretto">
         <div>
@@ -455,7 +556,7 @@ function CreateBookFromDraftPanel({
         </div>
         <p className="form-note form-note-error" role="status">
           Il salvataggio viene abilitato solo quando la preview non contiene
-          errori bloccanti e genera almeno una pagina.
+          errori bloccanti e contiene una struttura salvabile.
         </p>
       </section>
     );
@@ -469,8 +570,9 @@ function CreateBookFromDraftPanel({
       </div>
       <p className="form-note form-note-success" role="status">
         La bozza verra riparsata lato server. Verranno creati libro,
-        impostazioni, sezioni, report import e pagine normalizzate. Nessun PDF
-        verra generato.
+        impostazioni, sezioni, blocchi modificabili e report import. Le pagine
+        vengono salvate soltanto per i formati strutturati che le dichiarano.
+        Nessun PDF verra generato.
       </p>
       <form action={formAction} className="form-grid">
         {state.message ? (
@@ -480,6 +582,7 @@ function CreateBookFromDraftPanel({
         ) : null}
 
         <input name="draft_text" type="hidden" value={draftText} />
+        <input name="draft_type" type="hidden" value={draftType} />
         <BookVisibilityFieldset defaultValue={state.fields?.visibility} />
         <CreateBookButton />
       </form>
@@ -497,6 +600,7 @@ export function GenericDraftImportForm({
     initialState,
   );
   const draftText = state.fields?.draft_text ?? "";
+  const draftType = state.fields?.draft_type ?? "structured";
 
   return (
     <div className="draft-import-workspace">
@@ -509,18 +613,48 @@ export function GenericDraftImportForm({
 
         <p className="form-note form-note-warning" role="status">
           {enableCreateBook
-            ? "Prima viene generata una anteprima. Sono supportati KDP_DRAFT_V1 e il formato legacy; il libretto viene salvato solo dopo una preview valida e nessun PDF viene generato."
-            : "Anteprima preview-only: sono supportati KDP_DRAFT_V1 e il formato legacy; nessun dato viene salvato, nessuna RPC viene chiamata e nessun PDF viene generato."}
+            ? "Scegli il tipo di importazione e genera prima l'anteprima. Libro editoriale accetta testo naturale senza header; il libro viene salvato solo dopo una preview valida."
+            : "Scegli esplicitamente il parser. Libro editoriale accetta testo naturale senza header; questa schermata non salva dati e non genera PDF."}
         </p>
 
+        <fieldset className="visibility-fieldset">
+          <legend>Tipo di importazione</legend>
+          <div className="visibility-options">
+            <label className="radio-field">
+              <input
+                defaultChecked={draftType === "structured"}
+                name="draft_type"
+                type="radio"
+                value="structured"
+              />
+              <span className="radio-field-main">
+                <span>Bozza strutturata</span>
+                <small>KDP_DRAFT_V1 o formato legacy con pagine dichiarate.</small>
+              </span>
+            </label>
+            <label className="radio-field">
+              <input
+                defaultChecked={draftType === "editorial"}
+                name="draft_type"
+                type="radio"
+                value="editorial"
+              />
+              <span className="radio-field-main">
+                <span>Libro editoriale</span>
+                <small>Manoscritto naturale senza header tecnico obbligatorio.</small>
+              </span>
+            </label>
+          </div>
+        </fieldset>
+
         <div className="field">
-          <label htmlFor="generic_draft_text">Bozza strutturata</label>
+          <label htmlFor="generic_draft_text">Manoscritto o bozza strutturata</label>
           <textarea
             className="draft-import-textarea"
             defaultValue={draftText}
             id="generic_draft_text"
             name="draft_text"
-            placeholder="Incolla qui una bozza KDP_DRAFT_V1 o legacy"
+            placeholder="Incolla qui il manoscritto naturale o la bozza strutturata"
           />
         </div>
 
@@ -529,9 +663,14 @@ export function GenericDraftImportForm({
 
       {state.preview ? (
         <>
-          <GenericDraftPreview project={state.preview} />
+          {isEditorialProject(state.preview) ? (
+            <EditorialDraftPreview project={state.preview} />
+          ) : (
+            <GenericDraftPreview project={state.preview} />
+          )}
           {enableCreateBook ? (
             <CreateBookFromDraftPanel
+              draftType={draftType}
               draftText={draftText}
               project={state.preview}
             />

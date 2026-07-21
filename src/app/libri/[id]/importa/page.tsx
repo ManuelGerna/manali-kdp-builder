@@ -196,7 +196,7 @@ export default async function DraftImportPage({
     <AppShell
       title="Importa bozza"
       eyebrow={book.title}
-      description="Incolla una bozza KDP_DRAFT_V1 o legacy per analizzarla, generare la struttura normalizzata e controllare pagine, sezioni, template e avvisi."
+      description="Analizza KDP_EDITORIAL_DRAFT_V1, KDP_DRAFT_V1 o una bozza legacy prima del salvataggio."
       actions={
         <>
           <Link className="secondary-button" href={`/libri/${book.id}/contenuti`}>
@@ -223,15 +223,18 @@ export default async function DraftImportPage({
         <div className="grid two">
           <Card title="Importa bozza strutturata">
             <p className="page-copy">
-              Incolla una bozza KDP_DRAFT_V1 o legacy per analizzarla,
-              generare la struttura normalizzata e controllare pagine, sezioni,
-              template e avvisi.
+              Incolla un manoscritto editoriale o una bozza strutturata per
+              controllare struttura, contenuti e avvisi.
             </p>
             <GenericDraftImportForm />
           </Card>
 
           <Card title="Formati supportati">
             <ul className="panel-list panel-list-long">
+              <FieldRow
+                label="KDP_EDITORIAL_DRAFT_V1"
+                value="Seleziona Libro editoriale per trasformare un manoscritto naturale in introduzione, capitoli, sottosezioni e blocchi. L'header tecnico è opzionale e non genera pagine."
+              />
               <FieldRow
                 label="KDP_DRAFT_V1"
                 value="Bozza standard con BOOK, PAGE e blocchi strutturati. Se malformata, il parser mostra errori diagnostici e non usa fallback legacy."
