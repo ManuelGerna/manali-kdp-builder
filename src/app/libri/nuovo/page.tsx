@@ -15,7 +15,7 @@ export default function NewBookPage() {
           <CreateBookForm />
         </Card>
 
-        <Card title="Importa bozza strutturata">
+        <Card title="Importa documento">
           <p className="page-copy">
             Incolla una bozza KDP Builder e controlla la struttura normalizzata
             prima di creare un libretto salvato.
@@ -29,7 +29,7 @@ export default function NewBookPage() {
             <FieldRow label="Output" value="Report, sezioni, pagine e template" />
           </ul>
           <Link className="button" href="/libri/nuovo/importa">
-            Importa bozza strutturata
+            Importa documento
           </Link>
         </Card>
       </div>

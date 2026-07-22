@@ -36,6 +36,13 @@ export type ImportSource = {
 };
 ```
 
+`source.rawText` rappresenta la sorgente testuale ricevuta dal parser. Quando
+l'import avviene tramite una textarea HTML, CRLF e LF possono essere
+normalizzati tecnicamente dal browser. Questa normalizzazione delle newline non
+modifica il contenuto editoriale: parole, punteggiatura, spazi significativi,
+righe vuote e ordine restano invariati. Il campo non rappresenta necessariamente
+i byte originali del file.
+
 ## ProjectInfo
 
 ```ts

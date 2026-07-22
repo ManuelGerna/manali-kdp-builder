@@ -1040,7 +1040,7 @@ export default async function BookContentsPage({
                 className="ghost-button"
                 href={`/libri/${book.id}/importa`}
               >
-                Importa bozza strutturata
+                Importa documento
               </Link>
             </div>
           </Card>

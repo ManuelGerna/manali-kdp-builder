@@ -18,7 +18,7 @@ export default function NewBookDraftImportPage() {
     >
       <div className="draft-import-layout">
         <div className="grid two">
-          <Card title="Importa bozza strutturata">
+          <Card title="Importa documento">
             <p className="page-copy">
               Seleziona Libro editoriale per incollare un manoscritto naturale
               senza intestazioni tecniche. La modalità editoriale crea sezioni

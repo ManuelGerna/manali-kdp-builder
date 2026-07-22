@@ -32,6 +32,11 @@ import {
   type EditorialDraftProject,
   type NormalizedKdpProject,
 } from "@/lib/kdp/importer";
+import {
+  getUtf8ByteLength,
+  MAX_DRAFT_TEXT_FILE_SIZE_BYTES,
+  MAX_DRAFT_TEXT_FILE_SIZE_LABEL,
+} from "@/lib/kdp/importer/draft-text-file";
 import { createOwnershipActor } from "@/lib/kdp/ownership";
 import {
   createClient,
@@ -56,7 +61,6 @@ export type CreateBookFromGenericDraftState = {
   message: string | null;
 };
 
-const MAX_DRAFT_LENGTH = 120000;
 const PAGE_INSERT_CHUNK_SIZE = 200;
 
 type KdpSupabaseClient = Awaited<ReturnType<typeof createClient>>;
@@ -66,6 +70,9 @@ function getErrorName(error: unknown) {
 }
 
 function getDraftText(formData: FormData) {
+  // Questa è la sorgente testuale transitata dal form. Il browser può
+  // normalizzare tecnicamente CRLF/LF nel valore della textarea; parole,
+  // punteggiatura, spazi significativi, righe vuote e ordine restano invariati.
   return String(formData.get("draft_text") ?? "");
 }
 
@@ -86,8 +93,8 @@ function validateGenericDraftText(draftText: string) {
     return "Incolla una bozza prima di analizzarla.";
   }
 
-  if (draftText.length > MAX_DRAFT_LENGTH) {
-    return "La bozza e' troppo lunga per l'importer. Dividila in piu' parti.";
+  if (getUtf8ByteLength(draftText) > MAX_DRAFT_TEXT_FILE_SIZE_BYTES) {
+    return `Il testo supera la dimensione massima consentita di ${MAX_DRAFT_TEXT_FILE_SIZE_LABEL}.`;
   }
 
   return null;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useRef, useState, type ChangeEvent } from "react";
 import { useFormStatus } from "react-dom";
 import { BookVisibilityFieldset } from "@/components/kdp/book-visibility-fieldset";
 import {
@@ -21,6 +21,14 @@ import {
   type CreateBookFromGenericDraftState,
   type GenericDraftImportFormState,
 } from "@/app/libri/generic-draft-import-actions";
+import {
+  applyLoadedDraftTextFile,
+  applyManualDraftTextEdit,
+  MAX_DRAFT_TEXT_FILE_SIZE_LABEL,
+  readDraftTextFile,
+  removeDraftTextFileReference,
+  type DraftTextInputState,
+} from "@/lib/kdp/importer/draft-text-file";
 
 const initialState: GenericDraftImportFormState = {
   message: null,
@@ -599,13 +607,70 @@ export function GenericDraftImportForm({
     analyzeGenericDraftAction,
     initialState,
   );
-  const draftText = state.fields?.draft_text ?? "";
-  const draftType = state.fields?.draft_type ?? "structured";
+  const [draftInput, setDraftInput] = useState<DraftTextInputState>(() => ({
+    draftText: state.fields?.draft_text ?? "",
+    selectedFileName: null,
+  }));
+  const [draftType, setDraftType] = useState<DraftParserMode>(
+    state.fields?.draft_type ?? "structured",
+  );
+  const [fileError, setFileError] = useState<string | null>(null);
+  const [isReadingFile, setIsReadingFile] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const fileReadRequestRef = useRef(0);
+  const { draftText, selectedFileName } = draftInput;
+  const actionStateIsCurrent =
+    !state.fields ||
+    (state.fields.draft_text === draftText &&
+      state.fields.draft_type === draftType);
+  const currentPreview = actionStateIsCurrent ? state.preview : null;
+
+  async function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.currentTarget.files?.[0] ?? null;
+    const requestId = fileReadRequestRef.current + 1;
+    fileReadRequestRef.current = requestId;
+    setFileError(null);
+    setIsReadingFile(true);
+
+    const result = await readDraftTextFile(file);
+
+    if (fileReadRequestRef.current !== requestId) {
+      return;
+    }
+
+    setIsReadingFile(false);
+
+    if (result.error || !result.data) {
+      setFileError(result.error);
+      setDraftInput((current) => removeDraftTextFileReference(current));
+
+      if (fileInputRef.current) {
+        fileInputRef.current.value = "";
+      }
+
+      return;
+    }
+
+    setDraftInput((current) =>
+      applyLoadedDraftTextFile(current, result.data),
+    );
+  }
+
+  function handleRemoveFile() {
+    fileReadRequestRef.current += 1;
+    setIsReadingFile(false);
+    setFileError(null);
+    setDraftInput((current) => removeDraftTextFileReference(current));
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  }
 
   return (
     <div className="draft-import-workspace">
       <form action={formAction} className="form-grid">
-        {state.message ? (
+        {state.message && actionStateIsCurrent ? (
           <p className="form-note form-note-error" role="alert">
             {state.message}
           </p>
@@ -622,57 +687,118 @@ export function GenericDraftImportForm({
           <div className="visibility-options">
             <label className="radio-field">
               <input
-                defaultChecked={draftType === "structured"}
+                checked={draftType === "structured"}
                 name="draft_type"
+                onChange={() => setDraftType("structured")}
                 type="radio"
                 value="structured"
               />
               <span className="radio-field-main">
                 <span>Bozza strutturata</span>
-                <small>KDP_DRAFT_V1 o formato legacy con pagine dichiarate.</small>
+                <small>Planner, logbook e workbook</small>
               </span>
             </label>
             <label className="radio-field">
               <input
-                defaultChecked={draftType === "editorial"}
+                checked={draftType === "editorial"}
                 name="draft_type"
+                onChange={() => setDraftType("editorial")}
                 type="radio"
                 value="editorial"
               />
               <span className="radio-field-main">
                 <span>Libro editoriale</span>
-                <small>Manoscritto naturale senza header tecnico obbligatorio.</small>
+                <small>Guide, manuali e manoscritti con capitoli</small>
               </span>
             </label>
           </div>
         </fieldset>
 
+        <section className="draft-file-picker" aria-labelledby="draft_file_label">
+          <div>
+            <p className="draft-file-label" id="draft_file_label">
+              Carica file
+            </p>
+            <p className="draft-file-help" id="draft_file_help">
+              Formati supportati: TXT. Dimensione massima: {MAX_DRAFT_TEXT_FILE_SIZE_LABEL}.
+            </p>
+          </div>
+          <input
+            accept=".txt,text/plain"
+            aria-describedby="draft_file_help"
+            className="draft-file-input"
+            disabled={isReadingFile}
+            id="generic_draft_file"
+            onChange={handleFileChange}
+            ref={fileInputRef}
+            type="file"
+          />
+          <label
+            className="secondary-button draft-file-button"
+            htmlFor="generic_draft_file"
+          >
+            Carica file
+          </label>
+
+          {isReadingFile ? (
+            <p className="form-note" role="status">
+              Lettura del file in corso...
+            </p>
+          ) : null}
+
+          {fileError ? (
+            <p className="form-note form-note-error" role="alert">
+              {fileError}
+            </p>
+          ) : null}
+
+          {selectedFileName ? (
+            <div className="draft-file-confirmation">
+              <p className="form-note form-note-success" role="status">
+                File caricato: {selectedFileName}
+              </p>
+              <button
+                className="tertiary-button draft-file-remove"
+                onClick={handleRemoveFile}
+                type="button"
+              >
+                Rimuovi file
+              </button>
+            </div>
+          ) : null}
+        </section>
+
         <div className="field">
-          <label htmlFor="generic_draft_text">Manoscritto o bozza strutturata</label>
+          <label htmlFor="generic_draft_text">oppure incolla il testo</label>
           <textarea
             className="draft-import-textarea"
-            defaultValue={draftText}
             id="generic_draft_text"
             name="draft_text"
+            onChange={(event) =>
+              setDraftInput((current) =>
+                applyManualDraftTextEdit(current, event.currentTarget.value),
+              )
+            }
             placeholder="Incolla qui il manoscritto naturale o la bozza strutturata"
+            value={draftText}
           />
         </div>
 
         <AnalyzeButton />
       </form>
 
-      {state.preview ? (
+      {currentPreview ? (
         <>
-          {isEditorialProject(state.preview) ? (
-            <EditorialDraftPreview project={state.preview} />
+          {isEditorialProject(currentPreview) ? (
+            <EditorialDraftPreview project={currentPreview} />
           ) : (
-            <GenericDraftPreview project={state.preview} />
+            <GenericDraftPreview project={currentPreview} />
           )}
           {enableCreateBook ? (
             <CreateBookFromDraftPanel
               draftType={draftType}
               draftText={draftText}
-              project={state.preview}
+              project={currentPreview}
             />
           ) : null}
         </>

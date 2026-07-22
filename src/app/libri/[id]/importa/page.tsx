@@ -221,7 +221,7 @@ export default async function DraftImportPage({
         ) : null}
 
         <div className="grid two">
-          <Card title="Importa bozza strutturata">
+          <Card title="Importa documento">
             <p className="page-copy">
               Incolla un manoscritto editoriale o una bozza strutturata per
               controllare struttura, contenuti e avvisi.

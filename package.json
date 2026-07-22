@@ -9,7 +9,7 @@
     "lint": "eslint",
     "kdp:editorial-validate": "node --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON scripts/validate-editorial-draft.ts",
     "typecheck": "tsc --noEmit",
-    "test": "node --test --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON src/lib/kdp/importer/__tests__/parser-v0.test.ts src/lib/kdp/__tests__/book-visibility.test.ts src/lib/kdp/__tests__/storage-cleanup.test.ts"
+    "test": "node --test --experimental-strip-types --disable-warning=MODULE_TYPELESS_PACKAGE_JSON src/lib/kdp/importer/__tests__/parser-v0.test.ts src/lib/kdp/importer/__tests__/draft-text-file.test.ts src/lib/kdp/__tests__/book-visibility.test.ts src/lib/kdp/__tests__/storage-cleanup.test.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.5.2",
