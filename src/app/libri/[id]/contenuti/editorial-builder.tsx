@@ -1,0 +1,352 @@
+"use client";
+
+import { EditorialDisclosure, EditorialRevisionContext, EditorialDraftProvider } from "./editorial-disclosure";
+import {
+  buildEditorialBlockHierarchy,
+  isEditorialTextContent,
+  getEditorialSectionTitle,
+  readEditorialMap,
+} from "@/lib/kdp/editorial-hierarchy";
+import type { KdpSectionBlock } from "@/lib/kdp/section-blocks";
+import type { KdpSection } from "@/lib/kdp/sections";
+import {
+  DeleteSectionForm,
+  MoveSectionForm,
+} from "./section-actions";
+import {
+  AddEditorialSubsectionForm,
+  AddEditorialTextForm,
+  DeleteEditorialSubsectionForm,
+  EditEditorialBlockForm,
+  EditEditorialSectionForm,
+  MoveEditorialSubsectionForm,
+  MoveEditorialTextForm,
+  DeleteEditorialTextForm,
+} from "./editorial-builder-forms";
+
+type EditorialBuilderProps = {
+  blocksBySection: Map<string, KdpSectionBlock[]>;
+  sections: KdpSection[];
+};
+
+function getSectionKind(sectionType: string) {
+  if (sectionType === "introduction") return "Introduzione";
+  if (sectionType === "chapter") return "Capitolo";
+  if (sectionType === "conclusion") return "Conclusione";
+  return "Sezione";
+}
+
+function EditorialTextNode({
+  block,
+  canMoveDown,
+  canMoveUp,
+  destinations,
+  currentSubsectionId,
+}: {
+  block: KdpSectionBlock;
+  canMoveDown: boolean;
+  canMoveUp: boolean;
+  destinations: { id: string; title: string }[];
+  currentSubsectionId?: string;
+}) {
+  return (
+    <div className="editorial-text-node scroll-target" id={`block-${block.id}`}>
+      <div className="editorial-node-content">
+        {block.title ? <h4>{block.title}</h4> : null}
+        {block.body ? <p className="editorial-prose">{block.body}</p> : null}
+
+          <EditorialDisclosure className="editorial-edit-panel">
+            <summary className="ghost-button">Modifica testo</summary>
+            <EditEditorialBlockForm block={block} />
+          </EditorialDisclosure>
+
+        <EditorialDisclosure className="editorial-text-tools">
+          <summary className="ghost-button">Organizza testo</summary>
+          <div className="editorial-inline-actions">
+          {canMoveUp ? (
+            <MoveEditorialTextForm
+              block={block}
+              direction="up"
+            />
+          ) : null}
+          {canMoveDown ? (
+            <MoveEditorialTextForm
+              block={block}
+              direction="down"
+            />
+          ) : null}
+          <DeleteEditorialTextForm block={block} subsectionId={currentSubsectionId} />
+          </div>
+          {destinations.length > 0 ? (
+            <EditorialDisclosure className="editorial-edit-panel">
+              <summary className="ghost-button">Sposta in una sottosezione</summary>
+              <MoveEditorialTextForm block={block} destinations={destinations} currentSubsectionId={currentSubsectionId} />
+            </EditorialDisclosure>
+          ) : null}
+        </EditorialDisclosure>
+      </div>
+    </div>
+  );
+}
+
+function EditorialTextList({ blocks, destinations, currentSubsectionId }: {
+  blocks: KdpSectionBlock[];
+  destinations: { id: string; title: string }[];
+  currentSubsectionId?: string;
+}) {
+  const textBlocks = blocks.filter(isEditorialTextContent);
+
+  if (textBlocks.length === 0) {
+    return <p className="editorial-empty-copy">Nessun testo ancora.</p>;
+  }
+
+  return (
+    <div className="editorial-text-list">
+      {textBlocks.map((block, index) => (
+        <EditorialTextNode
+          block={block}
+          canMoveDown={index < textBlocks.length - 1}
+          canMoveUp={index > 0}
+          key={block.id}
+          destinations={destinations}
+          currentSubsectionId={currentSubsectionId}
+        />
+      ))}
+    </div>
+  );
+}
+
+function EditorialSectionNode({
+  blocks,
+  chapterNumber,
+  index,
+  section,
+  sectionCount,
+}: {
+  blocks: KdpSectionBlock[];
+  chapterNumber: number | null;
+  index: number;
+  section: KdpSection;
+  sectionCount: number;
+}) {
+  const map = readEditorialMap(section.settings, blocks);
+  const hierarchy = buildEditorialBlockHierarchy(blocks, map);
+  const title = getEditorialSectionTitle(section, chapterNumber);
+  const destinations = hierarchy.subsections.map(({ marker }) => ({ id: marker.id, title: marker.title?.trim() || "Senza titolo" }));
+  const sectionKind = getSectionKind(section.section_type);
+
+  return (
+    <EditorialRevisionContext.Provider value={map.revision}>
+    <EditorialDisclosure className="editorial-section-node scroll-target" id={`section-${section.id}`} targets={blocks.map(b => `block-${b.id}`)}>
+      <summary className="editorial-node-summary editorial-section-summary">
+        <span className="editorial-node-label">{sectionKind}</span>
+        <span className="editorial-section-title">{title}</span>
+        <span className="editorial-child-count">
+          {hierarchy.subsections.length > 0
+            ? `${hierarchy.subsections.length} ${hierarchy.subsections.length === 1 ? "sottosezione" : "sottosezioni"}`
+            : "Testo"}
+        </span>
+      </summary>
+
+      <div className="editorial-section-content">
+        {section.subtitle ? (
+          <p className="editorial-section-subtitle">{section.subtitle}</p>
+        ) : null}
+
+        {section.body && hierarchy.subsections.length === 0 ? <p className="editorial-prose">{section.body}</p> : section.body ? (
+          <EditorialDisclosure className="editorial-opening-node">
+            <summary className="editorial-node-summary editorial-subsection-summary">
+              <span className="editorial-node-label">Apertura</span>
+              <span>Testo introduttivo</span>
+            </summary>
+            <p className="editorial-prose">{section.body}</p>
+            <EditorialDisclosure className="editorial-edit-panel">
+              <summary className="ghost-button">Modifica testo introduttivo</summary>
+              <EditEditorialSectionForm key={section.updated_at} section={section} fieldSuffix="opening" />
+            </EditorialDisclosure>
+          </EditorialDisclosure>
+        ) : null}
+
+        {hierarchy.openingBlocks.some(isEditorialTextContent) ? (
+          hierarchy.subsections.length === 0 ? (
+            <EditorialTextList blocks={hierarchy.openingBlocks} destinations={destinations} />
+          ) : (
+          <EditorialDisclosure className="editorial-opening-node">
+            <summary className="editorial-node-summary editorial-subsection-summary">
+              <span className="editorial-node-label">Apertura</span>
+              <span>Testo introduttivo</span>
+            </summary>
+            <div className="editorial-subsection-content">
+              <EditorialTextList blocks={hierarchy.openingBlocks} destinations={destinations} />
+            </div>
+          </EditorialDisclosure>)
+        ) : null}
+
+        <div className="editorial-subsection-list">
+          {hierarchy.subsections.map((subsection, subsectionIndex) => {
+            const subsectionTitle = subsection.marker.title?.trim() || "Senza titolo";
+            const textCount = subsection.blocks.filter(isEditorialTextContent).length;
+
+            return (
+              <EditorialDisclosure
+                className="editorial-subsection-node scroll-target"
+                id={`block-${subsection.marker.id}`}
+                key={subsection.marker.id}
+                targets={subsection.blocks.map(b => `block-${b.id}`)}
+              >
+                <summary className="editorial-node-summary editorial-subsection-summary">
+                  <span className="editorial-node-label">Sottosezione</span>
+                  <span>{subsectionTitle}</span>
+                  <span className="editorial-child-count">
+                    {textCount} {textCount === 1 ? "testo" : "testi"}
+                  </span>
+                </summary>
+                <div className="editorial-subsection-content">
+                  {subsection.marker.body ? <p className="editorial-prose">{subsection.marker.body}</p> : null}
+                  <EditorialTextList blocks={subsection.blocks} destinations={destinations} currentSubsectionId={subsection.marker.id} />
+
+                  <div className="editorial-subsection-actions">
+                    <div className="editorial-order-actions" aria-label="Riordina sottosezione">
+                      {subsectionIndex > 0 ? (
+                        <MoveEditorialSubsectionForm
+                          bookId={section.book_id}
+                          direction="up"
+                          sectionId={section.id}
+                          subsectionId={subsection.marker.id}
+                        />
+                      ) : null}
+                      {subsectionIndex < hierarchy.subsections.length - 1 ? (
+                        <MoveEditorialSubsectionForm
+                          bookId={section.book_id}
+                          direction="down"
+                          sectionId={section.id}
+                          subsectionId={subsection.marker.id}
+                        />
+                      ) : null}
+                    </div>
+
+                      <EditorialDisclosure className="editorial-edit-panel">
+                        <summary className="ghost-button">Modifica titolo</summary>
+                        <EditEditorialBlockForm block={subsection.marker} subsection />
+                      </EditorialDisclosure>
+
+                    <EditorialDisclosure className="editorial-add-panel">
+                      <summary className="ghost-button">+ Aggiungi testo</summary>
+                      <AddEditorialTextForm
+                        bookId={section.book_id}
+                        sectionId={section.id}
+                        subsectionId={subsection.marker.id}
+                      />
+                    </EditorialDisclosure>
+
+                    <EditorialDisclosure className="editorial-add-panel">
+                      <summary className="ghost-button">+ Sottosezione dello stesso livello</summary>
+                      <AddEditorialSubsectionForm bookId={section.book_id} sectionId={section.id} />
+                    </EditorialDisclosure>
+
+                    <DeleteEditorialSubsectionForm
+                      bookId={section.book_id}
+                      sectionId={section.id}
+                      subsectionId={subsection.marker.id}
+                      title={subsectionTitle}
+                    />
+                  </div>
+                </div>
+              </EditorialDisclosure>
+            );
+          })}
+        </div>
+
+        {hierarchy.subsections.length === 0 &&
+        !hierarchy.openingBlocks.some(isEditorialTextContent) &&
+        !section.body ? (
+          <p className="editorial-empty-copy">
+            Questo capitolo è vuoto. Aggiungi una sottosezione o del testo.
+          </p>
+        ) : null}
+
+        <div className="editorial-section-tools">
+          <EditorialDisclosure className="editorial-add-panel">
+            <summary className="secondary-button">+ Sottosezione</summary>
+            <AddEditorialSubsectionForm
+              bookId={section.book_id}
+              sectionId={section.id}
+            />
+          </EditorialDisclosure>
+          <EditorialDisclosure className="editorial-add-panel">
+            <summary className="ghost-button">+ Testo introduttivo</summary>
+            <AddEditorialTextForm
+              bookId={section.book_id}
+              sectionId={section.id}
+            />
+          </EditorialDisclosure>
+          <EditorialDisclosure className="editorial-edit-panel">
+            <summary className="ghost-button">Modifica {sectionKind.toLowerCase()}</summary>
+            <EditEditorialSectionForm key={section.updated_at} section={section} />
+          </EditorialDisclosure>
+        </div>
+
+        <div className="editorial-section-danger-zone">
+          <MoveSectionForm
+            bookId={section.book_id}
+            direction="up"
+            disabled={index === 0}
+            sectionId={section.id}
+          />
+          <MoveSectionForm
+            bookId={section.book_id}
+            direction="down"
+            disabled={index === sectionCount - 1}
+            sectionId={section.id}
+          />
+          <DeleteSectionForm
+            bookId={section.book_id}
+            sectionId={section.id}
+            title={title}
+          />
+        </div>
+      </div>
+    </EditorialDisclosure>
+    </EditorialRevisionContext.Provider>
+  );
+}
+
+export function EditorialBuilder({
+  blocksBySection,
+  sections,
+}: EditorialBuilderProps) {
+  let chapterNumber = 0;
+
+  return (
+    <EditorialDraftProvider>
+    <section className="editorial-builder" aria-label="Struttura editoriale del libro">
+      <div className="editorial-book-root">
+        <span className="editorial-book-mark" aria-hidden="true">B</span>
+        <div>
+          <p className="editorial-node-label">Libro</p>
+          <p className="editorial-book-help">
+            Apri un capitolo, poi una sottosezione, per lavorare sul testo.
+          </p>
+        </div>
+      </div>
+
+      <div className="editorial-section-list">
+        {sections.map((section, index) => {
+          if (section.section_type === "chapter") chapterNumber += 1;
+
+          return (
+            <EditorialSectionNode
+              blocks={blocksBySection.get(section.id) ?? []}
+              chapterNumber={section.section_type === "chapter" ? chapterNumber : null}
+              index={index}
+              key={section.id}
+              section={section}
+              sectionCount={sections.length}
+            />
+          );
+        })}
+      </div>
+    </section>
+    </EditorialDraftProvider>
+  );
+}

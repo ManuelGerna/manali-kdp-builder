@@ -20,13 +20,6 @@ export function ContentAnchorScroll() {
   const focus = searchParams.get("focus");
 
   useEffect(() => {
-    const targetId =
-      getSafeTargetId(focus) ?? getSafeTargetId(window.location.hash);
-
-    if (!targetId) {
-      return;
-    }
-
     let cancelled = false;
     let didScroll = false;
 
@@ -35,10 +28,17 @@ export function ContentAnchorScroll() {
         return;
       }
 
-      const target = document.getElementById(targetId);
+      const targetId = getSafeTargetId(window.location.hash) ?? getSafeTargetId(focus);
+      const target = targetId ? document.getElementById(targetId) : null;
 
       if (!target) {
         return;
+      }
+
+      let container: HTMLElement | null = target;
+      while (container) {
+        if (container instanceof HTMLDetailsElement) container.open = true;
+        container = container.parentElement;
       }
 
       target.scrollIntoView({
@@ -49,6 +49,11 @@ export function ContentAnchorScroll() {
     };
 
     const frameId = window.requestAnimationFrame(scrollToTarget);
+    const onHashChange = () => {
+      didScroll = false;
+      scrollToTarget();
+    };
+    window.addEventListener("hashchange", onHashChange);
     const timeoutIds = [75, 250, 600].map((delay) =>
       window.setTimeout(scrollToTarget, delay),
     );
@@ -56,6 +61,7 @@ export function ContentAnchorScroll() {
     return () => {
       cancelled = true;
       window.cancelAnimationFrame(frameId);
+      window.removeEventListener("hashchange", onHashChange);
       timeoutIds.forEach((timeoutId) => window.clearTimeout(timeoutId));
     };
   }, [focus, pathname, searchKey]);

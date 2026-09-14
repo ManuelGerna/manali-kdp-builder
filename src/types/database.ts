@@ -552,6 +552,18 @@ export type Database = {
     };
     Views: Record<string, never>;
     Functions: {
+      bootstrap_editorial_builder_v1: {
+        Args: { p_book_id: string };
+        Returns: Json;
+      };
+      apply_editorial_section_change_v1: {
+        Args: { p_book_id: string; p_section_id: string; p_expected_revision: number; p_expected_order: string[]; p_change: Json };
+        Returns: Json;
+      };
+      create_editorial_section_v1: {
+        Args: { p_book_id: string; p_title: string; p_section_type: string };
+        Returns: string;
+      };
       import_kdp_structured_draft_v2: {
         Args: {
           p_book_id: string;

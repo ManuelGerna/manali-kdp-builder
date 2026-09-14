@@ -1,3 +1,4 @@
+import { readCompleteCollection } from "./complete-collection";
 import type { PostgrestError } from "@supabase/supabase-js";
 import type { RepositoryResult } from "@/lib/kdp/books";
 import type {
@@ -157,29 +158,17 @@ export async function listSectionBlocks(
   supabase: KdpSupabaseClient,
   bookId: string,
 ): Promise<RepositoryResult<KdpSectionBlock[]>> {
-  const { data, error } = await supabase
-    .from("kdp_section_blocks")
-    .select("*")
-    .eq("book_id", bookId)
-    .order("section_id", { ascending: true })
-    .order("sort_order", { ascending: true })
-    .order("created_at", { ascending: true });
-
-  if (error) {
-    logBlockError("list_section_blocks", error, {
-      bookIdTail: idTail(bookId),
-    });
-
-    return {
-      data: null,
-      error: "Non riesco a caricare i blocchi contenuto del libretto.",
-    };
+  try {
+    const data = await readCompleteCollection<KdpSectionBlock>((from, to) => supabase
+      .from("kdp_section_blocks").select("*", { count: "exact" })
+      .eq("book_id", bookId)
+      .order("section_id", { ascending: true }).order("sort_order", { ascending: true })
+      .order("created_at", { ascending: true }).order("id", { ascending: true })
+      .range(from, to));
+    return { data, error: null };
+  } catch {
+    return { data: null, error: "Non riesco a caricare tutti i contenuti. Ricarica il libro prima di modificarlo." };
   }
-
-  return {
-    data: data ?? [],
-    error: null,
-  };
 }
 
 async function getNextBlockSortOrder(
