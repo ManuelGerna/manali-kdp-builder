@@ -1,5 +1,10 @@
 # Editorial Builder V1 — fix blocker
 
+Diagnosi successiva del 15 settembre 2026: [segnalazione duplicazioni ARIETE](editorial-builder-duplication-diagnosis-2026-09-15.md).
+DB e runtime autenticato mostrano 15 parti univoche e 53 / 8 / 3 / 2;
+la verifica manuale dell'utente da telefono conferma tutte le 15 parti una sola
+volta. Segnalazione chiusa senza fix applicativo; conservati i test di regressione.
+
 Implementazione e verifica locale del 14 settembre 2026. Successivamente, su autorizzazione esplicita, eseguiti riconciliazione history, migration remota e bootstrap del solo Ariete: vedere `supabase-migration-history-audit-2026-09-14.md`. Database approvato; il rilascio applicativo tramite main è autorizzato separatamente e non deve ripetere operazioni sul database.
 
 ## Fonte canonica e mappa

@@ -147,6 +147,24 @@ Include:
 
 ## Task 9 — Export PDF
 
+### Requisito Layout Engine V1 — registrato il 15 settembre 2026, da implementare
+
+Milestone successiva alla chiusura verificata di Editorial Builder V1:
+
+- generare automaticamente le pagine fisiche dal layout;
+- numerare automaticamente le pagine risultanti;
+- costruire l'indice usando le pagine reali assegnate ai titoli;
+- ricalcolare numerazione e indice quando il contenuto cambia e le pagine slittano;
+- consentire in futuro di scegliere quali livelli editoriali includere nell'indice.
+
+Esempio: se una modifica ad Amore aggiunge due pagine, le voci successive
+dell'indice e la numerazione devono aggiornarsi automaticamente. I numeri di
+pagina sono risultati del layout e non devono essere salvati manualmente nei
+contenuti. Questo requisito è solo documentato: nessuna paginazione, indice
+definitivo o generazione PDF viene implementata nella diagnosi del Builder.
+
+### Export
+
 Obiettivo:
 
 Generare PDF interno.

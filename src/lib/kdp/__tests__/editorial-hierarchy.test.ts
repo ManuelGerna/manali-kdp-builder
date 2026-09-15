@@ -61,6 +61,27 @@ test("Introduction label is UI-only and never rewrites source title", () => {
  const s={title:null,section_type:"introduction"};assert.equal(getEditorialSectionTitle(s,null),"Introduzione");assert.equal(s.title,null);
 });
 
+test("Semantic heading UUIDs belong to their section; a foreign heading fails validation", () => {
+ const f = ariesFixture();
+ const maps = bootstrapEditorialMaps(f.sections, f.blocks, f.project);
+ const sections = attachMaps(f.sections, maps);
+ for (const section of sections) {
+  const rows = f.blocks.filter(b => b.section_id === section.id);
+  const map = readEditorialMap(section.settings, rows);
+  const hierarchy = buildEditorialBlockHierarchy(rows, map);
+  const all = [...hierarchy.openingBlocks, ...hierarchy.subsections.flatMap(s => [s.marker, ...s.blocks])];
+  assert.deepEqual(all.map(b => b.id), rows.map(b => b.id));
+  assert.equal(new Set(all.map(b => b.id)).size, rows.length);
+  for (const marker of map.subsections) {
+   assert.equal(f.blocks.find(b => b.id === marker.heading_block_id)?.section_id, section.id);
+  }
+ }
+ const wrongMap = structuredClone(maps.get(sections[10].id)!);
+ wrongMap.subsections[0].heading_block_id = maps.get(sections[9].id)!.subsections[0].heading_block_id;
+ assert.throws(() => readEditorialMap({ editorial_builder_v1: wrongMap },
+  f.blocks.filter(b => b.section_id === sections[10].id)), /mappa/);
+});
+
 test("Complete collection loads 1167 records even with an API cap smaller than requested", async () => {
  const rows=ariesFixture().blocks;const requests:number[]=[];
  const result=await readCompleteCollection(async (from,to)=>{requests.push(from);return {data:rows.slice(from,Math.min(to+1,from+200)),count:rows.length,error:null};});
