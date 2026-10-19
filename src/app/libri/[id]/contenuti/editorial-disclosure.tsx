@@ -1,12 +1,16 @@
 "use client";
 
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode, type ChangeEvent } from "react";
+import type { SubsectionTextDraft } from "@/lib/kdp/editorial-text-editor";
 
 type Drafts = Map<string, Record<string, string>>;
 const DraftContext = createContext<Drafts | null>(null);
+const TextDraftContext = createContext<Map<string, SubsectionTextDraft> | null>(null);
+export function useEditorialTextDraftCache() { return useContext(TextDraftContext); }
 export function EditorialDraftProvider({ children }: { children: ReactNode }) {
   const drafts = useRef<Drafts>(new Map());
-  return <DraftContext.Provider value={drafts.current}>{children}</DraftContext.Provider>;
+  const textDrafts = useRef(new Map<string, SubsectionTextDraft>());
+  return <DraftContext.Provider value={drafts.current}><TextDraftContext.Provider value={textDrafts.current}>{children}</TextDraftContext.Provider></DraftContext.Provider>;
 }
 
 // Keep unsaved inputs in memory when a lazy ancestor unmounts them. This is not

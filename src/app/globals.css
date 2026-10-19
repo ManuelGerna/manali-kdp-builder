@@ -1677,6 +1677,41 @@ details[open] > .editorial-node-summary::before {
   white-space: pre-wrap;
 }
 
+.editorial-writing-surface {
+  padding: clamp(1rem, 3vw, 2rem);
+  border: 1px solid #d8d5cc;
+  border-radius: 12px;
+  background: #fffefa;
+}
+
+.editorial-writing-node + .editorial-writing-node { margin-top: 1em; }
+.editorial-writing-image { padding-block: 1rem; }
+.editorial-writing-surface textarea.editorial-literal-text {
+  display: block;
+  width: 100%;
+  min-height: 1.7em;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  color: inherit;
+  font: inherit;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  overflow: hidden;
+  resize: none;
+}
+.editorial-writing-surface textarea.editorial-literal-text:focus-visible {
+  outline: 2px solid #86754d;
+  outline-offset: 5px;
+}
+.editorial-writing-surface textarea.editorial-literal-title { font-weight: 700; }
+.editorial-text-editor > form { margin-block: 1rem; }
+.editorial-text-operations { min-width: 0; padding: 0; margin: 0; border: 0; }
+.editorial-text-operations:disabled { opacity: 0.65; }
+
 .editorial-muted-note,
 .editorial-empty-copy {
   font-size: 0.86rem;

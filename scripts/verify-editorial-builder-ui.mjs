@@ -138,3 +138,23 @@ test('Pending recovery exposes attach/discard with the destination revision and 
  assert.match(html,/value="add_image"/);assert.match(html,/value="discard_image_upload"/);
  assert.ok(!html.includes('type="file"'));
 });
+
+test('Subsection text editor is one continuous surface with one save, immutable image boundaries and literal text',()=>{
+ const editorLoad=editorialTestRuntime({'next/navigation':{useRouter:()=>({refresh(){}})}});
+ const {EditorialSubsectionTextEditor}=editorLoad('src/app/libri/[id]/contenuti/editorial-text-editor.tsx');
+ const base={...f.blocks[0],title:null,asset_id:null,editor_notes:null};
+ const blocks=[{...base,id:'p1',block_type:'text',body:'  Primo\nsecondo\n\n• voce  '},
+  {...base,id:'image',block_type:'image',body:null,asset_id:'asset'},
+  {...base,id:'label',block_type:'text',title:'Titoletto <letterale>',body:null},
+  {...base,id:'p2',block_type:'text',body:'Ultimo paragrafo'}];
+ const html=render(React.createElement(EditorialSubsectionTextEditor,{bookId:'book',sectionId:'section',subsectionId:'marker',revision:3,blocks,
+  images:{asset:{url:'https://example.invalid/signed.png',alt:'Figura'}}}));
+ assert.equal((html.match(/<form/g)||[]).length,1);
+ assert.equal((html.match(/>Salva sottosezione</g)||[]).length,1);
+ assert.equal((html.match(/<textarea/g)||[]).length,3);
+ assert.deepEqual([...html.matchAll(/data-editorial-block="([^"]+)"/g)].map(m=>m[1]),['p1','image','label','p2']);
+ assert.ok(html.includes('  Primo\nsecondo\n\n• voce  '));assert.match(html,/Titoletto &lt;letterale&gt;/);
+ assert.match(html,/contentEditable="false"/i);assert.match(html,/height:auto/);
+ assert.doesNotMatch(html,/Modifica testo|contentEditable="true"/i);
+ assert.match(html,/name="changes" value="\[\]"/);
+});

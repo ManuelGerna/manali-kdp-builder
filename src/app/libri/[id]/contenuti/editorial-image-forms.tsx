@@ -32,17 +32,12 @@ export function EditorialImageForm({ bookId, sectionId, subsectionId, block, sty
     <Submit>{styleOnly ? "Salva formato" : block ? "Sostituisci immagine" : "Carica immagine"}</Submit>
   </form>;
 }
-export function EditorialImageNode({ block, url, alt, canMoveUp, canMoveDown }: {
-  block: KdpSectionBlock; url?: string; alt?: string; canMoveUp: boolean; canMoveDown: boolean;
+export function EditorialImageNode({ block, url, alt, canMoveUp, canMoveDown, anchorPrefix = "" }: {
+  block: KdpSectionBlock; url?: string; alt?: string; canMoveUp: boolean; canMoveDown: boolean; anchorPrefix?: string;
 }) {
-  const style = editorialImageStyle(block.editor_notes);
   const identity = { bookId: block.book_id, sectionId: block.section_id, blockId: block.id };
-  return <div id={`block-${block.id}`} className="editorial-text-node scroll-target">
-    <div style={{ width: style.size === "small" ? "33%" : style.size === "medium" ? "66%" : "100%", marginLeft: style.align === "left" ? 0 : "auto", marginRight: style.align === "right" ? 0 : "auto" }}>
-      {/* Signed private Storage URL; intrinsic proportions, no cropping. */}
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      {url ? <img src={url} alt={alt || "Immagine del capitolo"} style={{ display: "block", width: "100%", height: "auto" }} /> : <p>Anteprima non disponibile. Ricarica la pagina.</p>}
-    </div>
+  return <div id={`${anchorPrefix}block-${block.id}`} className="editorial-text-node scroll-target">
+    <EditorialImagePreview notes={block.editor_notes} url={url} alt={alt} />
     <div className="editorial-inline-actions">
       {(["up", "down"] as const).filter(d => d === "up" ? canMoveUp : canMoveDown).map(direction => <form action={moveEditorialTextAction} key={direction}><Identity {...identity} /><input type="hidden" name="direction" value={direction} /><Submit>{direction === "up" ? "Immagine su" : "Immagine giù"}</Submit></form>)}
       <form action={deleteEditorialTextAction} onSubmit={e => { if (!confirm("Eliminare questa immagine?")) e.preventDefault(); }}><Identity {...identity} /><Submit>Elimina immagine</Submit></form>
@@ -50,4 +45,15 @@ export function EditorialImageNode({ block, url, alt, canMoveUp, canMoveDown }: 
     <details><summary>Dimensione e allineamento</summary><EditorialImageForm {...identity} block={block} styleOnly /></details>
     <details><summary>Sostituisci immagine</summary><EditorialImageForm {...identity} block={block} /></details>
   </div>;
+}
+
+export function EditorialImagePreview({ notes, url, alt }: { notes: string | null; url?: string; alt?: string }) {
+  const style = editorialImageStyle(notes);
+  return (
+    <div style={{ width: style.size === "small" ? "33%" : style.size === "medium" ? "66%" : "100%", marginLeft: style.align === "left" ? 0 : "auto", marginRight: style.align === "right" ? 0 : "auto" }}>
+      {/* Signed private Storage URL; intrinsic proportions, no cropping. */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      {url ? <img src={url} alt={alt || "Immagine del capitolo"} style={{ display: "block", width: "100%", height: "auto" }} /> : <p>Anteprima non disponibile. Ricarica la pagina.</p>}
+    </div>
+  );
 }

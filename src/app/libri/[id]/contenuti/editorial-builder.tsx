@@ -2,6 +2,7 @@
 
 import { createContext, useContext } from "react";
 import { EditorialImageForm, EditorialImageNode } from "./editorial-image-forms";
+import { EditorialSubsectionTextEditor } from "./editorial-text-editor";
 const ImageContext = createContext<Record<string, { url?: string; alt?: string }>>({});
 
 import { EditorialDisclosure, EditorialRevisionContext, EditorialDraftProvider } from "./editorial-disclosure";
@@ -47,16 +48,19 @@ function EditorialTextNode({
   canMoveUp,
   destinations,
   currentSubsectionId,
+  toolsOnly = false,
 }: {
   block: KdpSectionBlock;
   canMoveDown: boolean;
   canMoveUp: boolean;
   destinations: { id: string; title: string }[];
   currentSubsectionId?: string;
+  toolsOnly?: boolean;
 }) {
   return (
-    <div className="editorial-text-node scroll-target" id={`block-${block.id}`}>
+    <div className="editorial-text-node scroll-target" id={`${toolsOnly ? "organize-" : ""}block-${block.id}`}>
       <div className="editorial-node-content">
+        {toolsOnly ? <p>{block.title || block.body?.split(/\r\n|\r|\n/)[0]}</p> : <>
         {block.title ? <h4>{block.title}</h4> : null}
         {block.body ? <p className="editorial-prose">{block.body}</p> : null}
 
@@ -64,6 +68,7 @@ function EditorialTextNode({
             <summary className="ghost-button">Modifica testo</summary>
             <EditEditorialBlockForm block={block} />
           </EditorialDisclosure>
+        </>}
 
         <EditorialDisclosure className="editorial-text-tools">
           <summary className="ghost-button">Organizza testo</summary>
@@ -94,10 +99,11 @@ function EditorialTextNode({
   );
 }
 
-function EditorialTextList({ blocks, destinations, currentSubsectionId }: {
+function EditorialTextList({ blocks, destinations, currentSubsectionId, toolsOnly = false }: {
   blocks: KdpSectionBlock[];
   destinations: { id: string; title: string }[];
   currentSubsectionId?: string;
+  toolsOnly?: boolean;
 }) {
   const images = useContext(ImageContext);
   const textBlocks = blocks.filter(b => isEditorialTextContent(b) || b.block_type === "image");
@@ -109,13 +115,14 @@ function EditorialTextList({ blocks, destinations, currentSubsectionId }: {
   return (
     <div className="editorial-text-list">
       {textBlocks.map((block, index) => (
-        block.block_type === "image" ? <EditorialImageNode key={block.id} block={block} {...images[block.asset_id ?? ""]} canMoveUp={index > 0} canMoveDown={index < textBlocks.length - 1} /> : <EditorialTextNode
+        block.block_type === "image" ? <EditorialImageNode key={block.id} block={block} anchorPrefix={toolsOnly ? "organize-" : ""} {...images[block.asset_id ?? ""]} canMoveUp={index > 0} canMoveDown={index < textBlocks.length - 1} /> : <EditorialTextNode
           block={block}
           canMoveDown={index < textBlocks.length - 1}
           canMoveUp={index > 0}
           key={block.id}
           destinations={destinations}
           currentSubsectionId={currentSubsectionId}
+          toolsOnly={toolsOnly}
         />
       ))}
     </div>
@@ -135,6 +142,7 @@ function EditorialSectionNode({
   section: KdpSection;
   sectionCount: number;
 }) {
+  const images = useContext(ImageContext);
   const map = readEditorialMap(section.settings, blocks);
   const hierarchy = buildEditorialBlockHierarchy(blocks, map);
   const title = getEditorialSectionTitle(section, chapterNumber);
@@ -210,7 +218,12 @@ function EditorialSectionNode({
                 </summary>
                 <div className="editorial-subsection-content">
                   {subsection.marker.body ? <p className="editorial-prose">{subsection.marker.body}</p> : null}
-                  <EditorialTextList blocks={subsection.blocks} destinations={destinations} currentSubsectionId={subsection.marker.id} />
+                  <EditorialSubsectionTextEditor bookId={section.book_id} sectionId={section.id}
+                    subsectionId={subsection.marker.id} revision={map.revision} blocks={subsection.blocks} images={images}>
+                  <EditorialDisclosure className="editorial-text-tools">
+                    <summary className="ghost-button">Organizza paragrafi e immagini</summary>
+                    <EditorialTextList blocks={subsection.blocks} destinations={destinations} currentSubsectionId={subsection.marker.id} toolsOnly />
+                  </EditorialDisclosure>
 
                   <details><summary>+ Aggiungi immagine</summary><EditorialImageForm bookId={section.book_id} sectionId={section.id} subsectionId={subsection.marker.id} /></details>
                   <div className="editorial-subsection-actions">
@@ -259,6 +272,7 @@ function EditorialSectionNode({
                       title={subsectionTitle}
                     />
                   </div>
+                  </EditorialSubsectionTextEditor>
                 </div>
               </EditorialDisclosure>
             );

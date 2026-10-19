@@ -14,6 +14,7 @@ import { createAsset } from "@/lib/kdp/assets";
 import { createOwnershipActor } from "@/lib/kdp/ownership";
 import { validateEditorialImage } from "@/lib/kdp/editorial-images";
 import { cleanupEditorialImages } from "@/lib/kdp/editorial-image-storage";
+import { parseTextChanges, type TextChange } from "@/lib/kdp/editorial-text-editor";
 
 const field = (form: FormData, key: string) => String(form.get(key) ?? "");
 const optional = (form: FormData, key: string) => field(form, key) || null;
@@ -45,6 +46,39 @@ async function context(form: FormData) {
   return { client, bookId, sectionId, blocks, map };
 }
 type Context = Awaited<ReturnType<typeof context>>;
+export type EditorialTextSaveState = {
+  status: "idle" | "saved" | "unchanged" | "error";
+  message: string | null;
+  revision?: number;
+  expectedRevision?: number;
+  saved?: TextChange[];
+};
+
+export async function saveEditorialSubsectionTextAction(_state: EditorialTextSaveState, form: FormData): Promise<EditorialTextSaveState> {
+  try {
+    const changes = parseTextChanges(JSON.parse(field(form, "changes")))
+      .filter(item => item.title !== item.expected_title || item.body !== item.expected_body);
+    // A no-op never calls Supabase, RPC, revalidation or Storage cleanup.
+    if (!changes.length) return { status: "unchanged", message: "Nessuna modifica da salvare." };
+    const c = await context(form);
+    const subsectionId = field(form, "subsection_id");
+    if (!c.map.subsections.some(sub => sub.heading_block_id === subsectionId)) throw new Error("Sottosezione non disponibile. La bozza è conservata.");
+    const result = await applyEditorialChange(c.client, { bookId: c.bookId, sectionId: c.sectionId,
+      revision: c.map.revision, order: c.blocks.map(block => block.id),
+      change: { operation: "update_text_batch", subsection_id: subsectionId, changes } });
+    if (result.error) return { status: "error", message: `${result.message} La bozza è conservata.` };
+    const receipt = result.data as { revision?: number; updated?: number } | null;
+    if (!receipt || !Number.isInteger(receipt.revision) || !Number.isInteger(receipt.updated)) {
+      return { status: "error", message: "Salvataggio non confermato. La bozza è conservata: verifica il contenuto prima di riprovare." };
+    }
+    if (receipt.updated) refresh(c.bookId);
+    return { status: receipt.updated ? "saved" : "unchanged", message: receipt.updated ? "Sottosezione salvata." : "Nessuna modifica da salvare.",
+      revision: receipt.revision, expectedRevision: c.map.revision, saved: changes };
+  } catch (cause) {
+    return { status: "error", message: `${cause instanceof Error ? cause.message : editorialRpcError(null)} La bozza è conservata.` };
+  }
+}
+
 async function change(form: FormData, makeChange: (c: Context) => Json) {
   const c = await context(form);
   const result = await applyEditorialChange(c.client, {

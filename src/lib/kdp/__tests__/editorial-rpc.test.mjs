@@ -305,3 +305,104 @@ test('Image moves through the RPC preserve semantic groups, text and shared asse
  for(const row of current.rows.filter(b=>b.id!==id)) assert.deepEqual([row.title,row.body],original.get(row.id));
  assert.deepEqual(new Set(current.map.subsections.map(s=>s.semantic_id)),new Set(initial.map.subsections.map(s=>s.semantic_id)));
 });
+
+async function textBatchContext() {
+ await bootstrap();const s=await state();const marker=s.map.subsections[0].heading_block_id;
+ const start=s.rows.findIndex(b=>b.id===marker)+1;
+ const end=s.rows.findIndex(b=>b.id===s.map.subsections[1]?.heading_block_id);
+ const texts=s.rows.slice(start,end<0?undefined:end).filter(b=>b.block_type==='text');
+ assert.ok(texts.length>=2);return {s,marker,texts};
+}
+const textChange=(block,body=block.body,title=block.title)=>({block_id:block.id,title,body,expected_title:block.title,expected_body:block.body});
+const textBatch=(subsection_id,changes)=>({operation:'update_text_batch',subsection_id,changes});
+
+test('Text batch writes only changed UUIDs, preserves exact text, map, order and imported source',async()=>{
+ const {s,marker,texts}=await textBatchContext();
+ const changes=[textChange(texts[0],'  Primo\r\nsecondo\n\n• voce  '),textChange(texts[1],'')];
+ const result=(await apply(textBatch(marker,changes),s)).rows[0].result;
+ assert.deepEqual(result,{revision:s.map.revision+1,updated:2});
+ const after=await state();coherent(after);assert.deepEqual(after.map.subsections,s.map.subsections);
+ assert.deepEqual(after.rows.map(b=>b.id),s.rows.map(b=>b.id));
+ const changed=new Set(changes.map(c=>c.block_id));
+ assert.deepEqual(after.rows.filter(b=>!changed.has(b.id)),s.rows.filter(b=>!changed.has(b.id)));
+ for(const change of changes) {
+  const row=after.rows.find(b=>b.id===change.block_id);assert.equal(row.title,change.title);assert.equal(row.body,change.body);
+ }
+ assert.deepEqual((await db.query('select normalized_project from public.kdp_import_runs where book_id=$1',[book])).rows[0].normalized_project,fixture.project);
+});
+
+test('Text batch no-op performs zero UPDATEs, including map and book metadata',async()=>{
+ const {s,marker,texts}=await textBatchContext();
+ await db.exec(`reset role;create or replace function public.fail_text_noop_test() returns trigger language plpgsql as $$ begin raise exception 'unexpected_text_write'; end $$;
+  create trigger fail_text_noop_test before update on public.kdp_section_blocks for each row execute function public.fail_text_noop_test();
+  create trigger fail_text_noop_test before update on public.kdp_sections for each row execute function public.fail_text_noop_test();
+  create trigger fail_text_noop_test before update on public.kdp_books for each row execute function public.fail_text_noop_test();set role authenticated;`);
+ try {
+  for(const changes of [[],[textChange(texts[0])]]) {
+   assert.deepEqual((await apply(textBatch(marker,changes),s)).rows[0].result,{revision:s.map.revision,updated:0});
+   assert.deepEqual(await state(),s);
+  }
+  await assert.rejects(apply(textBatch(marker,[textChange(texts[0],'Should write')]),s),/unexpected_text_write/);
+ } finally {
+  await db.exec(`reset role;drop trigger fail_text_noop_test on public.kdp_section_blocks;
+   drop trigger fail_text_noop_test on public.kdp_sections;drop trigger fail_text_noop_test on public.kdp_books;set role authenticated;`);
+ }
+});
+
+test('Text batch rejects marker/foreign/duplicate/malformed edits and rolls back earlier changes',async()=>{
+ const {s,marker,texts}=await textBatchContext();const first=textChange(texts[0],'Must roll back');
+ const foreign=s.rows[s.rows.findIndex(b=>b.id===s.map.subsections[1].heading_block_id)+1];
+ const heading=s.rows.find(b=>b.id===marker);
+ const invalid=[textChange(heading,'No'),textChange(foreign,'No'),first,{...textChange(texts[1],'No'),expected_body:{bad:true}}];
+ for(const item of invalid) {
+  await assert.rejects(apply(textBatch(marker,[first,item]),s),/editorial_invalid_(target|batch)/);
+  assert.deepEqual(await state(),s);
+ }
+ await assert.rejects(apply(textBatch(marker,[{block_id:texts[0].id,body:'No'}]),s),/editorial_invalid_batch/);
+ assert.deepEqual(await state(),s);
+});
+
+test('Text batch rejects direct text conflicts, old revisions and old observed order without partial writes',async()=>{
+ const {s,marker,texts}=await textBatchContext();const changes=[textChange(texts[0],'Local first'),textChange(texts[1],'Local second')];
+ await db.query('update public.kdp_section_blocks set body=$1 where id=$2',['Other saved content',texts[1].id]);
+ const afterDirect=await state();
+ await assert.rejects(apply(textBatch(marker,changes),s),/editorial_conflict/);assert.deepEqual(await state(),afterDirect);
+ await apply({operation:'reorder',order:planEditorialTextMove(afterDirect.rows,texts[0].id,'down',afterDirect.map)});
+ const afterMove=await state();
+ await assert.rejects(apply(textBatch(marker,[textChange(texts[0],'No')]),s),/editorial_conflict/);
+ await assert.rejects(apply(textBatch(marker,[textChange(texts[0],'No')]),{...afterMove,rows:s.rows}),/editorial_conflict/);
+ assert.deepEqual(await state(),afterMove);
+});
+
+test('Text batch rolls back every text UPDATE when the final map UPDATE fails',async()=>{
+ const {s,marker,texts}=await textBatchContext();
+ await db.exec(`reset role;create or replace function public.fail_editorial_test() returns trigger language plpgsql as $$ begin raise exception 'injected_batch_map_failure'; end $$;
+  create trigger fail_editorial_test before update on public.kdp_sections for each row execute function public.fail_editorial_test();set role authenticated;`);
+ await assert.rejects(apply(textBatch(marker,[textChange(texts[0],'First'),textChange(texts[1],'Second')]),s),/injected_batch_map_failure/);
+ assert.deepEqual(await state(),s);
+});
+
+test('Text batch preserves interleaved images and remains compatible with image and group operations',async()=>{
+ const {marker,texts}=await textBatchContext();const asset=await pendingImage();
+ const id=(await apply({operation:'add_image',asset_id:asset,subsection_id:marker,size:'medium',align:'center'})).rows[0].result.block_id;
+ let s=await state();await apply({operation:'reorder',order:planEditorialTextMove(s.rows,id,'up',s.map)});
+ s=await state();const imageBefore=s.rows.find(b=>b.id===id);
+ await apply(textBatch(marker,[textChange(texts[0],'Text beside an image')]));
+ let after=await state();assert.deepEqual(after.rows.find(b=>b.id===id),imageBefore);assert.deepEqual(after.map.subsections,s.map.subsections);
+ await assert.rejects(apply(textBatch(marker,[textChange(imageBefore,'No image edits')])),/editorial_invalid_target/);
+ assert.deepEqual(await state(),after);
+ await apply({operation:'style_image',block_id:id,size:'small',align:'right'});
+ after=await state();await apply({operation:'reorder',order:planEditorialSubsectionMove(after.rows,marker,'down',after.map)});
+ coherent(await state());assert.equal((await db.query('select prompt from public.kdp_assets where id=$1',[asset])).rows[0].prompt,'editorial-image-v1:active');
+});
+
+test('Text batch respects private/public book RLS, anonymous grants and structured-book exclusion',async()=>{
+ const {s,marker,texts}=await textBatchContext();const change=textBatch(marker,[textChange(texts[0],'Allowed public edit')]);
+ await db.query("select set_config('request.jwt.claim.sub',$1,false)",[fixtureId(3)]);
+ await assert.rejects(apply(change,s),/editorial_access_denied/);
+ await db.exec('reset role;set role anon');await assert.rejects(apply(change,s),/permission denied/);
+ await db.exec('reset role');await db.query("update public.kdp_books set visibility='public' where id=$1",[book]);
+ await db.exec('set role authenticated');assert.equal((await apply(change,s)).rows[0].result.updated,1);
+ await db.query("update public.kdp_import_runs set import_kind='generic_draft_v0' where book_id=$1",[book]);
+ await assert.rejects(apply(textBatch(marker,[])),/editorial_book_required/);
+});
