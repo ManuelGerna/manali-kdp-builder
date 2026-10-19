@@ -1,5 +1,9 @@
 "use client";
 
+import { createContext, useContext } from "react";
+import { EditorialImageForm, EditorialImageNode } from "./editorial-image-forms";
+const ImageContext = createContext<Record<string, { url?: string; alt?: string }>>({});
+
 import { EditorialDisclosure, EditorialRevisionContext, EditorialDraftProvider } from "./editorial-disclosure";
 import {
   buildEditorialBlockHierarchy,
@@ -27,6 +31,7 @@ import {
 type EditorialBuilderProps = {
   blocksBySection: Map<string, KdpSectionBlock[]>;
   sections: KdpSection[];
+  images?: Record<string, { url?: string; alt?: string }>;
 };
 
 function getSectionKind(sectionType: string) {
@@ -94,7 +99,8 @@ function EditorialTextList({ blocks, destinations, currentSubsectionId }: {
   destinations: { id: string; title: string }[];
   currentSubsectionId?: string;
 }) {
-  const textBlocks = blocks.filter(isEditorialTextContent);
+  const images = useContext(ImageContext);
+  const textBlocks = blocks.filter(b => isEditorialTextContent(b) || b.block_type === "image");
 
   if (textBlocks.length === 0) {
     return <p className="editorial-empty-copy">Nessun testo ancora.</p>;
@@ -103,7 +109,7 @@ function EditorialTextList({ blocks, destinations, currentSubsectionId }: {
   return (
     <div className="editorial-text-list">
       {textBlocks.map((block, index) => (
-        <EditorialTextNode
+        block.block_type === "image" ? <EditorialImageNode key={block.id} block={block} {...images[block.asset_id ?? ""]} canMoveUp={index > 0} canMoveDown={index < textBlocks.length - 1} /> : <EditorialTextNode
           block={block}
           canMoveDown={index < textBlocks.length - 1}
           canMoveUp={index > 0}
@@ -149,6 +155,7 @@ function EditorialSectionNode({
       </summary>
 
       <div className="editorial-section-content">
+        <details><summary>+ Immagine nel capitolo</summary><EditorialImageForm bookId={section.book_id} sectionId={section.id} /></details>
         {section.subtitle ? (
           <p className="editorial-section-subtitle">{section.subtitle}</p>
         ) : null}
@@ -167,7 +174,7 @@ function EditorialSectionNode({
           </EditorialDisclosure>
         ) : null}
 
-        {hierarchy.openingBlocks.some(isEditorialTextContent) ? (
+        {hierarchy.openingBlocks.some(b => isEditorialTextContent(b) || b.block_type === "image") ? (
           hierarchy.subsections.length === 0 ? (
             <EditorialTextList blocks={hierarchy.openingBlocks} destinations={destinations} />
           ) : (
@@ -205,6 +212,7 @@ function EditorialSectionNode({
                   {subsection.marker.body ? <p className="editorial-prose">{subsection.marker.body}</p> : null}
                   <EditorialTextList blocks={subsection.blocks} destinations={destinations} currentSubsectionId={subsection.marker.id} />
 
+                  <details><summary>+ Aggiungi immagine</summary><EditorialImageForm bookId={section.book_id} sectionId={section.id} subsectionId={subsection.marker.id} /></details>
                   <div className="editorial-subsection-actions">
                     <div className="editorial-order-actions" aria-label="Riordina sottosezione">
                       {subsectionIndex > 0 ? (
@@ -314,11 +322,12 @@ function EditorialSectionNode({
 export function EditorialBuilder({
   blocksBySection,
   sections,
+  images = {},
 }: EditorialBuilderProps) {
   let chapterNumber = 0;
 
   return (
-    <EditorialDraftProvider>
+    <ImageContext.Provider value={images}><EditorialDraftProvider>
     <section className="editorial-builder" aria-label="Struttura editoriale del libro">
       <div className="editorial-book-root">
         <span className="editorial-book-mark" aria-hidden="true">B</span>
@@ -347,6 +356,6 @@ export function EditorialBuilder({
         })}
       </div>
     </section>
-    </EditorialDraftProvider>
+    </EditorialDraftProvider></ImageContext.Provider>
   );
 }

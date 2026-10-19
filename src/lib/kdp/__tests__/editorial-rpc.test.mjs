@@ -3,7 +3,7 @@ import { before, beforeEach, after, test } from 'node:test';
 import fs from 'node:fs';
 import { PGlite } from '@electric-sql/pglite';
 import { ariesFixture, fixtureId, fixtureBookId as book, fixtureUserId as user } from '../__fixtures__/editorial-fixture.ts';
-import { planEditorialSubsectionMove, planEditorialTextPlacement } from '../editorial-hierarchy.ts';
+import { planEditorialSubsectionMove, planEditorialTextPlacement, planEditorialTextMove } from '../editorial-hierarchy.ts';
 
 const db = new PGlite();
 const migrationDir = new URL('../../../../supabase/migrations/', import.meta.url);
@@ -181,4 +181,127 @@ test('Visibility policy still allows another authenticated user to edit a public
   await db.query("update public.kdp_books set visibility='public' where id=$1",[book]);
   await db.query("select set_config('request.jwt.claim.sub',$1,false)",[fixtureId(3)]);
   assert.equal((await bootstrap()).rows[0].result.initialized,15);
+});
+
+async function pendingImage(n=800001) {
+ const id=fixtureId(n);
+ await db.query("insert into public.kdp_assets(id,book_id,asset_type,prompt,status,file_path) values ($1,$2,'image','editorial-image-v1:pending','placeholder',$3)",[id,book,user+'/'+book+'/'+id+'/image.png']);
+ return id;
+}
+test('Images: atomic insertion, replacement, style, cleanup ledger and stale rejection',async()=>{
+ await bootstrap();const s=await state();const asset=await pendingImage();
+ const added=await apply({operation:'add_image',asset_id:asset,subsection_id:s.map.subsections[0].heading_block_id,size:'medium',align:'center'},s);
+ const id=added.rows[0].result.block_id;let current=await state();coherent(current);
+ assert.deepEqual(current.map.subsections,s.map.subsections);
+ assert.equal(current.rows.find(b=>b.id===id).block_type,'image');
+ const next=current.rows.findIndex(b=>b.id===s.map.subsections[1].heading_block_id);
+ assert.equal(current.rows[next-1].id,id);
+ await assert.rejects(apply({operation:'style_image',block_id:id,size:'small',align:'left'},s),/editorial_conflict/);
+ assert.deepEqual(await state(),current);
+ const replacement=await pendingImage(800002);
+ await apply({operation:'replace_image',block_id:id,asset_id:replacement,size:'small',align:'right'});
+ current=await state();assert.equal(current.rows.find(b=>b.id===id).asset_id,replacement);
+ assert.equal((await db.query('select prompt from public.kdp_assets where id=$1',[asset])).rows[0].prompt,'editorial-image-v1:garbage');
+ await apply({operation:'style_image',block_id:id,size:'text',align:'left'});
+ assert.deepEqual(JSON.parse((await state()).rows.find(b=>b.id===id).editor_notes),{size:'text',align:'left'});
+ await apply({operation:'delete_subsection',block_id:s.map.subsections[0].heading_block_id});
+ assert.equal((await db.query('select prompt from public.kdp_assets where id=$1',[replacement])).rows[0].prompt,'editorial-image-v1:garbage');
+ coherent(await state());
+});
+test('Images reject foreign assets, invalid style, invalid destinations and rollback pending activation',async()=>{
+ await bootstrap();const asset=await pendingImage();const s=await state();
+ for(const change of [
+  {asset_id:fixtureId(900000),size:'small',align:'left'},
+  {asset_id:asset,size:'crop',align:'left'},
+  {asset_id:asset,size:'small',align:'left',subsection_id:fixtureId(900001)},
+ ]) {await assert.rejects(apply({operation:'add_image',...change}),/editorial_invalid_target/);assert.deepEqual(await state(),s);}
+ assert.equal((await db.query('select prompt from public.kdp_assets where id=$1',[asset])).rows[0].prompt,'editorial-image-v1:pending');
+});
+
+
+test('Images: failed asset activation rolls back inserted block, revision and semantic map',async()=>{
+ await bootstrap();const asset=await pendingImage();const s=await state();
+ await db.exec(`reset role; create or replace function public.fail_image_activation_test() returns trigger language plpgsql as $$ begin raise exception 'injected_image_failure'; end $$;
+ create trigger fail_image_activation_test before update on public.kdp_assets for each row execute function public.fail_image_activation_test();set role authenticated;`);
+ try {
+  await assert.rejects(apply({operation:'add_image',asset_id:asset,size:'small',align:'left'}),/injected_image_failure/);
+  assert.deepEqual(await state(),s);
+  assert.equal((await db.query('select prompt from public.kdp_assets where id=$1',[asset])).rows[0].prompt,'editorial-image-v1:pending');
+ } finally { await db.exec('reset role;drop trigger fail_image_activation_test on public.kdp_assets;set role authenticated'); }
+});
+
+test('Pending images: recovery reuses the asset; expiry collects only abandoned uploads and blocks late finalization',async()=>{
+ await bootstrap();const recovered=await pendingImage();const expired=await pendingImage(800002);const recent=await pendingImage(800003);
+ const initial=await state();
+ await apply({operation:'add_image',asset_id:recovered,size:'medium',align:'center'});
+ await db.query("update public.kdp_assets set created_at=now()-interval '2 hours' where id=any($1::uuid[])",[[recovered,expired]]);
+ assert.equal((await db.query('select public.collect_editorial_image_uploads_v1($1) n',[book])).rows[0].n,1);
+ const prompts=(await db.query('select id,prompt from public.kdp_assets order by id')).rows;
+ assert.equal(prompts.find(a=>a.id===recovered).prompt,'editorial-image-v1:active');
+ assert.equal(prompts.find(a=>a.id===expired).prompt,'editorial-image-v1:garbage');
+ assert.equal(prompts.find(a=>a.id===recent).prompt,'editorial-image-v1:pending');
+ const before=await state();
+ await assert.rejects(apply({operation:'add_image',asset_id:expired,size:'medium',align:'center'}),/editorial_invalid_target/);
+ assert.deepEqual(await state(),before);assert.deepEqual(before.map.subsections,initial.map.subsections);coherent(before);
+ assert.equal((await db.query('select public.collect_editorial_image_uploads_v1($1) n',[book])).rows[0].n,0);
+});
+
+test('Pending images: explicit discard is revision checked, preserves content, and refuses active assets',async()=>{
+ await bootstrap();const pending=await pendingImage();const initial=await state();
+ await apply({operation:'discard_image_upload',asset_id:pending},initial);
+ const content=rows=>rows.map(({id,title,body,block_type,asset_id,sort_order})=>({id,title,body,block_type,asset_id,sort_order}));
+ assert.deepEqual(content((await state()).rows),content(initial.rows));
+ assert.equal((await db.query('select prompt from public.kdp_assets where id=$1',[pending])).rows[0].prompt,'editorial-image-v1:garbage');
+ const second=await pendingImage(800002);
+ await assert.rejects(apply({operation:'discard_image_upload',asset_id:second},initial),/editorial_conflict/);
+ assert.equal((await db.query('select prompt from public.kdp_assets where id=$1',[second])).rows[0].prompt,'editorial-image-v1:pending');
+ await apply({operation:'add_image',asset_id:second,size:'small',align:'left'});
+ const current=await state();
+ await assert.rejects(apply({operation:'discard_image_upload',asset_id:second}),/editorial_invalid_target/);
+ assert.deepEqual(await state(),current);
+});
+
+test('Shared images: replacement and deletion retain the asset until its last reference disappears',async()=>{
+ await bootstrap();const asset=await pendingImage();
+ const first=(await apply({operation:'add_image',asset_id:asset,size:'medium',align:'center'})).rows[0].result.block_id;
+ const shared=fixtureId(800010);
+ await db.query("insert into public.kdp_section_blocks(id,book_id,section_id,block_type,asset_id,sort_order) values ($1,$2,$3,'image',$4,9999)",[shared,book,section,asset]);
+ const replacement=await pendingImage(800002);
+ await apply({operation:'replace_image',block_id:first,asset_id:replacement,size:'small',align:'left'});
+ assert.equal((await db.query('select prompt from public.kdp_assets where id=$1',[asset])).rows[0].prompt,'editorial-image-v1:active');
+ await apply({operation:'delete_text',block_id:first});
+ assert.equal((await db.query('select prompt from public.kdp_assets where id=$1',[asset])).rows[0].prompt,'editorial-image-v1:active');
+ await apply({operation:'delete_text',block_id:shared});
+ assert.equal((await db.query('select prompt from public.kdp_assets where id=$1',[asset])).rows[0].prompt,'editorial-image-v1:garbage');
+ await assert.rejects(db.query("insert into public.kdp_section_blocks(book_id,section_id,block_type,asset_id) values ($1,$2,'image',$3)",[book,section,asset]),/editorial_invalid_target/);
+ coherent(await state());
+});
+
+test('Pending collector denies other private-book users, anonymous calls and structured books',async()=>{
+ await pendingImage();
+ await db.query("select set_config('request.jwt.claim.sub',$1,false)",[fixtureId(3)]);
+ await assert.rejects(db.query('select public.collect_editorial_image_uploads_v1($1)',[book]),/editorial_access_denied/);
+ await db.exec('reset role;set role anon');
+ await assert.rejects(db.query('select public.collect_editorial_image_uploads_v1($1)',[book]),/permission denied/);
+ await db.exec('reset role;set role authenticated');
+ await db.query("select set_config('request.jwt.claim.sub',$1,false)",[user]);
+ await db.query("update public.kdp_import_runs set import_kind='generic_draft_v0' where book_id=$1",[book]);
+ await assert.rejects(db.query('select public.collect_editorial_image_uploads_v1($1)',[book]),/editorial_book_required/);
+});
+
+test('Image moves through the RPC preserve semantic groups, text and shared asset identity',async()=>{
+ await bootstrap();const asset=await pendingImage();const initial=await state();const marker=initial.map.subsections[0].heading_block_id;
+ const id=(await apply({operation:'add_image',asset_id:asset,subsection_id:marker,size:'medium',align:'center'})).rows[0].result.block_id;
+ let current=await state();
+ const boundary=planEditorialTextMove(current.rows,id,'down',current.map);
+ assert.deepEqual(boundary,current.rows.map(b=>b.id));
+ await apply({operation:'reorder',order:planEditorialTextMove(current.rows,id,'up',current.map)});
+ current=await state();assert.deepEqual(current.map.subsections,initial.map.subsections);coherent(current);
+ const order=planEditorialSubsectionMove(current.rows,marker,'down',current.map);
+ await apply({operation:'reorder',order});current=await state();coherent(current);
+ assert.deepEqual(current.rows.map(b=>b.id),order);
+ assert.equal(current.rows.find(b=>b.id===id).asset_id,asset);
+ const original=new Map(initial.rows.map(b=>[b.id,[b.title,b.body]]));
+ for(const row of current.rows.filter(b=>b.id!==id)) assert.deepEqual([row.title,row.body],original.get(row.id));
+ assert.deepEqual(new Set(current.map.subsections.map(s=>s.semantic_id)),new Set(initial.map.subsections.map(s=>s.semantic_id)));
 });

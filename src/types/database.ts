@@ -552,6 +552,10 @@ export type Database = {
     };
     Views: Record<string, never>;
     Functions: {
+      collect_editorial_image_uploads_v1: {
+        Args: { p_book_id: string };
+        Returns: number;
+      };
       bootstrap_editorial_builder_v1: {
         Args: { p_book_id: string };
         Returns: Json;

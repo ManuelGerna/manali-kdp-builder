@@ -117,3 +117,24 @@ test('Actual Builder and preview routes send Diario Allenamento to imported page
  }
  assert.equal(blockReads,0);
 });
+
+
+test('Image node renders private preview with original proportions and upload/replace/move/delete controls',()=>{
+ const {EditorialImageNode}=load('src/app/libri/[id]/contenuti/editorial-image-forms.tsx');
+ const block={...f.blocks[0],id:'image-fixture',block_type:'image',asset_id:'asset',editor_notes:JSON.stringify({size:'medium',align:'right'})};
+ const html=render(React.createElement(EditorialImageNode,{block,url:'https://example.invalid/private-signed.png',alt:'Figura esterna',canMoveUp:true,canMoveDown:true}));
+ assert.match(html,/width:66%/);assert.match(html,/height:auto/);assert.match(html,/alt="Figura esterna"/);
+ for(const label of ['Immagine su','Immagine giù','Elimina immagine','Sostituisci immagine','Salva formato','image/png,image/jpeg']) assert.ok(html.includes(label),label);
+ assert.ok(!html.includes('object-fit:cover'));
+});
+
+test('Pending recovery exposes attach/discard with the destination revision and without another file upload',()=>{
+ const {EditorialImageRecovery}=load('src/app/libri/[id]/contenuti/editorial-image-recovery.tsx');
+ const html=render(React.createElement(EditorialImageRecovery,{bookId:'book',assets:[{id:'pending',title:'Figura interrotta'}],
+  destinations:[{sectionId:'section',subsectionId:'marker',revision:7,title:'Capitolo / Sottosezione'}]}));
+ assert.match(html,/Upload da recuperare \(1\)/);assert.match(html,/Figura interrotta/);
+ assert.match(html,/name="pending_asset_id" value="pending"/);assert.match(html,/name="revision" value="7"/);
+ assert.match(html,/name="subsection_id" value="marker"/);
+ assert.match(html,/value="add_image"/);assert.match(html,/value="discard_image_upload"/);
+ assert.ok(!html.includes('type="file"'));
+});

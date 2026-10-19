@@ -10,6 +10,10 @@ import { applyEditorialChange, bootstrapEditorialBook, editorialRpcError } from 
 import { orderEditorialBlocks, readEditorialMap, planEditorialSubsectionMove, planEditorialTextMove, planEditorialTextPlacement } from "@/lib/kdp/editorial-hierarchy";
 import type { Json } from "@/types/database";
 import type { SectionFormState } from "./actions";
+import { createAsset } from "@/lib/kdp/assets";
+import { createOwnershipActor } from "@/lib/kdp/ownership";
+import { validateEditorialImage } from "@/lib/kdp/editorial-images";
+import { cleanupEditorialImages } from "@/lib/kdp/editorial-image-storage";
 
 const field = (form: FormData, key: string) => String(form.get(key) ?? "");
 const optional = (form: FormData, key: string) => field(form, key) || null;
@@ -49,6 +53,7 @@ async function change(form: FormData, makeChange: (c: Context) => Json) {
   });
   if (result.error) throw new Error(result.message!);
   refresh(c.bookId);
+  if (!await cleanupEditorialImages(c.client, c.bookId)) throw new Error("Modifica salvata. Pulizia Storage in attesa: verrà ritentata alla prossima apertura del Builder.");
 }
 async function run(form: FormData, makeChange: (c: Context) => Json, status: string) {
   let error: string | undefined;
@@ -109,4 +114,64 @@ export async function updateEditorialBlockAction(_state: SectionFormState, form:
       title: optional(form, "block_title"), body: optional(form, "block_body") }));
   } catch (cause) { return { message: cause instanceof Error ? cause.message : editorialRpcError(null) }; }
   redirect(path(form, undefined, "block_updated"));
+}
+
+export async function saveEditorialImageAction(form: FormData) {
+  let error: string | undefined;
+  let pending: { client: Context["client"]; bookId: string; assetId: string } | undefined;
+  try {
+    const c = await context(form);
+    const operation = field(form, "operation");
+    if (!["add_image", "replace_image", "style_image", "discard_image_upload"].includes(operation)) throw new Error("Operazione non valida.");
+    const size = field(form, "size"); const align = field(form, "align");
+    if (!["small", "medium", "text"].includes(size) || !["left", "center", "right"].includes(align)) throw new Error("Dimensione o allineamento non valido.");
+    let assetId: string | undefined;
+    const recoveryId = field(form, "pending_asset_id");
+    if (recoveryId) {
+      const recovered = await c.client.from("kdp_assets").select("id,file_path,title")
+        .eq("book_id", c.bookId).eq("id", recoveryId).eq("prompt", "editorial-image-v1:pending").maybeSingle();
+      if (recovered.error || !recovered.data?.file_path) throw new Error("Upload non più disponibile. Ricarica il Builder.");
+      assetId = recovered.data.id;
+      if (operation !== "discard_image_upload") {
+        if (operation !== "add_image") throw new Error("Recupero non valido.");
+        const downloaded = await c.client.storage.from("kdp-assets").download(recovered.data.file_path);
+        if (downloaded.error || !downloaded.data) throw new Error("Upload non completato. Attendi oppure elimina l'upload interrotto.");
+        await validateEditorialImage(new File([downloaded.data], recovered.data.title ?? "image", { type: downloaded.data.type.split(";")[0] }));
+      }
+    } else if (operation === "discard_image_upload") {
+      throw new Error("Upload non trovato.");
+    } else if (operation !== "style_image") {
+      const file = form.get("image");
+      if (!(file instanceof File)) throw new Error("Scegli un'immagine.");
+      const meta = await validateEditorialImage(file);
+      const { data: { user } } = await c.client.auth.getUser();
+      if (!user) throw new Error("Sessione scaduta.");
+      const storagePath = `${user.id}/${c.bookId}/${crypto.randomUUID()}/image.${meta.extension}`;
+      const asset = await createAsset(c.client, { actor: createOwnershipActor({ userId: user.id, email: user.email }),
+        bookId: c.bookId, assetType: "image", title: file.name, altText: field(form, "alt_text") || file.name,
+        prompt: "editorial-image-v1:pending", status: "placeholder", filePath: storagePath });
+      if (!asset.data) throw new Error(asset.error);
+      assetId = asset.data.assetId;
+      pending = { client: c.client, bookId: c.bookId, assetId };
+      const uploaded = await c.client.storage.from("kdp-assets").upload(storagePath, file, { contentType: meta.mimeType, upsert: false });
+      if (uploaded.error) throw new Error("Caricamento Storage non riuscito.");
+    }
+    const result = await applyEditorialChange(c.client, { bookId: c.bookId, sectionId: c.sectionId,
+      revision: c.map.revision, order: c.blocks.map(b => b.id), change: {
+        operation, size, align, block_id: optional(form, "block_id"), subsection_id: optional(form, "subsection_id"), ...(assetId ? { asset_id: assetId } : {}),
+      } });
+    if (result.error) throw new Error(result.message!);
+    pending = undefined;
+    refresh(c.bookId);
+    if (!await cleanupEditorialImages(c.client, c.bookId)) throw new Error("Immagine salvata. Pulizia Storage in attesa, ritentata alla prossima apertura.");
+  } catch (cause) {
+    error = cause instanceof Error ? cause.message : editorialRpcError(null);
+    if (pending) {
+      // Never discard the ledger before Storage confirms deletion.
+      const marked = await pending.client.from("kdp_assets").update({ prompt: "editorial-image-v1:garbage" })
+        .eq("book_id", pending.bookId).eq("id", pending.assetId).eq("prompt", "editorial-image-v1:pending");
+      if (marked.error || !await cleanupEditorialImages(pending.client, pending.bookId)) error += " File tracciato per la pulizia Storage.";
+    }
+  }
+  redirect(path(form, error, "image_saved"));
 }

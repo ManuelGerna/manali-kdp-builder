@@ -8,10 +8,25 @@ import {
 } from "@/lib/kdp/ownership";
 import type { createClient } from "@/lib/supabase/server";
 import type { Tables } from "@/types/database";
+import { readCompleteCollection } from "./complete-collection";
 
 type KdpSupabaseClient = Awaited<ReturnType<typeof createClient>>;
 
 export type KdpAsset = Tables<"kdp_assets">;
+
+// Keep interrupted uploads visible even when PostgREST caps a response page.
+// The structured builder continues to use its existing listAssets flow.
+export async function listEditorialImageAssets(supabase: KdpSupabaseClient, bookId: string): Promise<RepositoryResult<KdpAsset[]>> {
+  try {
+    const data = await readCompleteCollection((from, to) => supabase.from("kdp_assets")
+      .select("*", { count: "exact" }).eq("book_id", bookId)
+      .in("prompt", ["editorial-image-v1:pending", "editorial-image-v1:active", "editorial-image-v1:garbage"])
+      .order("id").range(from, to));
+    return { data, error: null };
+  } catch {
+    return { data: null, error: "Caricamento immagini incompleto. Ricarica il Builder." };
+  }
+}
 
 export type AssetInput = {
   actor: OwnershipActor;

@@ -1,3 +1,7 @@
+import { listEditorialImageAssets } from "@/lib/kdp/assets";
+import { readEditorialMap } from "@/lib/kdp/editorial-hierarchy";
+import { EditorialImageRecovery } from "./editorial-image-recovery";
+import { cleanupEditorialImages } from "@/lib/kdp/editorial-image-storage";
 import { Suspense } from "react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -23,6 +27,7 @@ type BookContentsPageProps = {
 type BookForContents = Pick<Tables<"kdp_books">, "id" | "subtitle" | "title">;
 
 const STATUS_MESSAGES: Record<string, string> = {
+  image_saved: "Immagine salvata.",
   editorial_initialized: "Struttura editoriale pronta.",
   block_deleted: "Testo eliminato.",
   block_reordered: "Ordine dei testi aggiornato.",
@@ -178,6 +183,15 @@ export default async function BookContentsPage({
     if (cause && typeof cause === "object" && "digest" in cause) throw cause;
     return <AppShell title="Contenuti" description="Tipo di libro non disponibile."><EmptyState title="Riprova" description="Non riesco a verificare il percorso di questo libro." /></AppShell>;
   }
+  const cleanupComplete = await cleanupEditorialImages(supabase, id);
+  const assets = await listEditorialImageAssets(supabase, id);
+  const images: Record<string, { url?: string; alt?: string }> = {};
+  await Promise.all((assets.data ?? []).filter(a => a.file_path && a.prompt === "editorial-image-v1:active").map(async a => {
+    try {
+      const result = await supabase.storage.from("kdp-assets").createSignedUrl(a.file_path!, 3600);
+      images[a.id] = { url: result.data?.signedUrl, alt: a.alt_text ?? a.title ?? undefined };
+    } catch { images[a.id] = {}; }
+  }));
   const [sectionsResult, blocksResult] = await Promise.all([
     listSections(supabase, id),
     listSectionBlocks(supabase, id),
@@ -266,10 +280,22 @@ export default async function BookContentsPage({
             description="Inizia da un'introduzione, un capitolo o una conclusione."
           />
         ) : (
+          <>{!cleanupComplete && <p role="status">Pulizia Storage in attesa. I file restano tracciati e verranno rimossi al prossimo tentativo.</p>}
+          {assets.error && <p role="alert">{assets.error}</p>}
+          <EditorialImageRecovery bookId={book.id}
+            assets={(assets.data ?? []).filter(asset => asset.prompt === "editorial-image-v1:pending")}
+            destinations={sections.flatMap(section => {
+              const rows = blocks.filter(block => block.section_id === section.id);
+              const map = readEditorialMap(section.settings, rows);
+              return [{ sectionId: section.id, revision: map.revision, title: section.title || "Introduzione" },
+                ...map.subsections.map(subsection => ({ sectionId: section.id, subsectionId: subsection.heading_block_id,
+                  revision: map.revision, title: `${section.title || "Introduzione"} / ${rows.find(row => row.id === subsection.heading_block_id)?.title || "Sottosezione"}` }))];
+            })} />
           <EditorialBuilder
+            images={images}
             blocksBySection={groupBlocksBySection(blocks)}
             sections={sections}
-          />
+          /></>
         )}
 
         {!mapState.error && !mapState.needsBootstrap && blocksResult.data ? <CreateEditorialSectionPanel bookId={book.id} initiallyOpen={sections.length === 0} /> : null}
