@@ -3,6 +3,7 @@
 import { createContext, useContext } from "react";
 import { EditorialImageForm, EditorialImageNode } from "./editorial-image-forms";
 import { EditorialSubsectionTextEditor } from "./editorial-text-editor";
+import { openingTextSnapshots } from "@/lib/kdp/editorial-text-editor";
 const ImageContext = createContext<Record<string, { url?: string; alt?: string }>>({});
 
 import { EditorialDisclosure, EditorialRevisionContext, EditorialDraftProvider } from "./editorial-disclosure";
@@ -129,6 +130,21 @@ function EditorialTextList({ blocks, destinations, currentSubsectionId, toolsOnl
   );
 }
 
+export function EditorialOpeningTextEditor({ section, blocks, revision, destinations, images }: {
+  section: KdpSection; blocks: KdpSectionBlock[]; revision: number;
+  destinations: { id: string; title: string }[];
+  images: Record<string, { url?: string; alt?: string }>;
+}) {
+  return <EditorialSubsectionTextEditor bookId={section.book_id} sectionId={section.id}
+    subsectionId={null} revision={revision} blocks={openingTextSnapshots(section.id, section.body, blocks)} images={images}>
+    <EditorialDisclosure className="editorial-text-tools">
+      <summary className="ghost-button">Organizza paragrafi e immagini</summary>
+      <EditorialTextList blocks={blocks} destinations={destinations} toolsOnly />
+    </EditorialDisclosure>
+    <details><summary>+ Aggiungi immagine</summary><EditorialImageForm bookId={section.book_id} sectionId={section.id} /></details>
+  </EditorialSubsectionTextEditor>;
+}
+
 function EditorialSectionNode({
   blocks,
   chapterNumber,
@@ -163,28 +179,12 @@ function EditorialSectionNode({
       </summary>
 
       <div className="editorial-section-content">
-        <details><summary>+ Immagine nel capitolo</summary><EditorialImageForm bookId={section.book_id} sectionId={section.id} /></details>
         {section.subtitle ? (
           <p className="editorial-section-subtitle">{section.subtitle}</p>
         ) : null}
 
-        {section.body && hierarchy.subsections.length === 0 ? <p className="editorial-prose">{section.body}</p> : section.body ? (
-          <EditorialDisclosure className="editorial-opening-node">
-            <summary className="editorial-node-summary editorial-subsection-summary">
-              <span className="editorial-node-label">Apertura</span>
-              <span>Testo introduttivo</span>
-            </summary>
-            <p className="editorial-prose">{section.body}</p>
-            <EditorialDisclosure className="editorial-edit-panel">
-              <summary className="ghost-button">Modifica testo introduttivo</summary>
-              <EditEditorialSectionForm key={section.updated_at} section={section} fieldSuffix="opening" />
-            </EditorialDisclosure>
-          </EditorialDisclosure>
-        ) : null}
-
-        {hierarchy.openingBlocks.some(b => isEditorialTextContent(b) || b.block_type === "image") ? (
-          hierarchy.subsections.length === 0 ? (
-            <EditorialTextList blocks={hierarchy.openingBlocks} destinations={destinations} />
+        {hierarchy.subsections.length === 0 ? (
+            <EditorialOpeningTextEditor section={section} blocks={hierarchy.openingBlocks} revision={map.revision} destinations={destinations} images={images} />
           ) : (
           <EditorialDisclosure className="editorial-opening-node">
             <summary className="editorial-node-summary editorial-subsection-summary">
@@ -192,10 +192,9 @@ function EditorialSectionNode({
               <span>Testo introduttivo</span>
             </summary>
             <div className="editorial-subsection-content">
-              <EditorialTextList blocks={hierarchy.openingBlocks} destinations={destinations} />
+              <EditorialOpeningTextEditor section={section} blocks={hierarchy.openingBlocks} revision={map.revision} destinations={destinations} images={images} />
             </div>
-          </EditorialDisclosure>)
-        ) : null}
+          </EditorialDisclosure>)}
 
         <div className="editorial-subsection-list">
           {hierarchy.subsections.map((subsection, subsectionIndex) => {
@@ -304,7 +303,7 @@ function EditorialSectionNode({
           </EditorialDisclosure>
           <EditorialDisclosure className="editorial-edit-panel">
             <summary className="ghost-button">Modifica {sectionKind.toLowerCase()}</summary>
-            <EditEditorialSectionForm key={section.updated_at} section={section} />
+            <EditEditorialSectionForm key={section.updated_at} section={section} hideBody />
           </EditorialDisclosure>
         </div>
 

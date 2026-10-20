@@ -61,8 +61,8 @@ export async function saveEditorialSubsectionTextAction(_state: EditorialTextSav
     // A no-op never calls Supabase, RPC, revalidation or Storage cleanup.
     if (!changes.length) return { status: "unchanged", message: "Nessuna modifica da salvare." };
     const c = await context(form);
-    const subsectionId = field(form, "subsection_id");
-    if (!c.map.subsections.some(sub => sub.heading_block_id === subsectionId)) throw new Error("Sottosezione non disponibile. La bozza è conservata.");
+    const subsectionId = optional(form, "subsection_id");
+    if (subsectionId && !c.map.subsections.some(sub => sub.heading_block_id === subsectionId)) throw new Error("Sottosezione non disponibile. La bozza è conservata.");
     const result = await applyEditorialChange(c.client, { bookId: c.bookId, sectionId: c.sectionId,
       revision: c.map.revision, order: c.blocks.map(block => block.id),
       change: { operation: "update_text_batch", subsection_id: subsectionId, changes } });
@@ -72,7 +72,7 @@ export async function saveEditorialSubsectionTextAction(_state: EditorialTextSav
       return { status: "error", message: "Salvataggio non confermato. La bozza è conservata: verifica il contenuto prima di riprovare." };
     }
     if (receipt.updated) refresh(c.bookId);
-    return { status: receipt.updated ? "saved" : "unchanged", message: receipt.updated ? "Sottosezione salvata." : "Nessuna modifica da salvare.",
+    return { status: receipt.updated ? "saved" : "unchanged", message: receipt.updated ? (subsectionId ? "Sottosezione salvata." : "Testo salvato.") : "Nessuna modifica da salvare.",
       revision: receipt.revision, expectedRevision: c.map.revision, saved: changes };
   } catch (cause) {
     return { status: "error", message: `${cause instanceof Error ? cause.message : editorialRpcError(null)} La bozza è conservata.` };

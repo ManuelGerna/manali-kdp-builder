@@ -7,6 +7,13 @@ export type SubsectionTextDraft = {
   version: 1; revision: number; blocks: TextSnapshot[]; values: Record<string, TextFields>;
 };
 
+// The existing section body is a draft-only node. Saving it updates that field,
+// never creates a block or changes any persisted block UUID.
+export function openingTextSnapshots(sectionId: string, body: string | null, blocks: TextSnapshot[]): TextSnapshot[] {
+  return body === null ? blocks : [{ id: sectionId, block_type: "section_body", title: null, body,
+    asset_id: null, editor_notes: null }, ...blocks];
+}
+
 export function isEditableTextBlock(block: { block_type: string }) {
   return !["image", "image_prompt", "page_break", "internal_note"].includes(block.block_type);
 }

@@ -158,3 +158,57 @@ test('Subsection text editor is one continuous surface with one save, immutable 
  assert.doesNotMatch(html,/Modifica testo|contentEditable="true"/i);
  assert.match(html,/name="changes" value="\[\]"/);
 });
+
+test('Every introductory group in the real Builder uses one unified save with no legacy text edit forms',()=>{
+ const disclosure=load('src/app/libri/[id]/contenuti/editorial-disclosure.tsx');
+ const openLoad=editorialTestRuntime({
+  'next/navigation':{useRouter:()=>({refresh(){}})},
+  './editorial-disclosure':{...disclosure,EditorialDisclosure:props=>{
+   const open=/editorial-section-node|editorial-opening-node/.test(props.className??'');
+   return React.createElement('details',{className:props.className,open},open?props.children:React.Children.toArray(props.children).filter(c=>c.type==='summary'));
+  }},
+ });
+ const Builder=openLoad('src/app/libri/[id]/contenuti/editorial-builder.tsx').EditorialBuilder;
+ const html=render(React.createElement(Builder,{sections,blocksBySection:grouped}));
+ assert.equal((html.match(/aria-label="Editor testo introduttivo"/g)||[]).length,15);
+ assert.equal((html.match(/>Salva testo</g)||[]).length,15);
+ assert.doesNotMatch(html,/Modifica testo<|Modifica testo introduttivo|>Salva sottosezione</);
+ assert.equal((html.match(/name="subsection_id" value=""/g)||[]).length,30); // one text batch and one image-upload form per opening
+ const nodeIds=[...html.matchAll(/data-editorial-block="([^"]+)"/g)].map(m=>m[1]);
+ const expected=sections.flatMap(section=>{
+  const markers=new Set(section.settings.editorial_builder_v1.subsections.map(s=>s.heading_block_id));
+  const blocks=grouped.get(section.id);const end=blocks.findIndex(b=>markers.has(b.id));
+  return blocks.slice(0,end<0?undefined:end).map(b=>b.id);
+ });
+ assert.deepEqual(nodeIds,expected);
+ for(const section_type of ['introduction','chapter','chapter_text']) {
+  const empty={...sections[0],section_type,body:null};
+  const emptyHtml=render(React.createElement(Builder,{sections:[empty],blocksBySection:new Map([[empty.id,[]]])}));
+  assert.equal((emptyHtml.match(/>Salva testo</g)||[]).length,1);
+  assert.match(emptyHtml,/\+ Aggiungi immagine/);
+  assert.match(emptyHtml,/name="changes" value="\[\]"/);
+ }
+});
+
+test('General, chapter and special-section editors keep existing section body and interleaved images in one surface',()=>{
+ const editorLoad=editorialTestRuntime({'next/navigation':{useRouter:()=>({refresh(){}})}});
+ const {EditorialOpeningTextEditor}=editorLoad('src/app/libri/[id]/contenuti/editorial-builder.tsx');
+ for(const index of [0,1,9]) {
+  const section={...sections[index],body:'  Apertura\n\nOriginale  '};
+  const base={...f.blocks[0],section_id:section.id,title:null};
+  const blocks=[{...base,id:'p1',body:'Primo'}, {...base,id:'image',block_type:'image',asset_id:'asset',body:null}, {...base,id:'p2',body:'Ultimo'}];
+  const html=render(React.createElement(EditorialOpeningTextEditor,{section,blocks,revision:2,destinations:[],images:{asset:{url:'https://example.invalid/signed.png',alt:'Figura'}}}));
+  assert.equal((html.match(/>Salva testo</g)||[]).length,1);assert.equal((html.match(/<form/g)||[]).length,2); // text batch and image upload
+  assert.deepEqual([...html.matchAll(/data-editorial-block="([^"]+)"/g)].map(m=>m[1]),[section.id,'p1','image','p2']);
+  assert.match(html,/  Apertura\n\nOriginale  /);assert.match(html,/height:auto/);
+  assert.doesNotMatch(html,/Modifica testo|>Organizza testo</);
+ }
+});
+
+test('Editorial section metadata form omits body instead of resubmitting or trimming introductory text',()=>{
+ const {EditEditorialSectionForm}=load('src/app/libri/[id]/contenuti/editorial-builder-forms.tsx');
+ const section={...sections[0],body:'  Opening\r\n  '};
+ const html=render(React.createElement(EditEditorialSectionForm,{section,hideBody:true}));
+ assert.doesNotMatch(html,/name="body"|Testo introduttivo/);
+ const legacy=render(React.createElement(EditEditorialSectionForm,{section}));assert.match(legacy,/name="body"/);
+});

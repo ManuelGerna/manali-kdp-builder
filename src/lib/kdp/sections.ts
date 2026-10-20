@@ -31,7 +31,8 @@ export type SectionInput = {
   editorNotes: string | null;
 };
 
-export type UpdateSectionInput = SectionInput & {
+export type UpdateSectionInput = Omit<SectionInput, "body"> & {
+  body?: string | null;
   sectionId: string;
 };
 
@@ -203,7 +204,7 @@ export async function updateSection(
       section_type: input.sectionType,
       title: input.title,
       subtitle: input.subtitle,
-      body: input.body,
+      ...(input.body !== undefined ? { body: input.body } : {}),
       include_in_toc: input.includeInToc,
       section_status: input.sectionStatus,
       page_break_before: input.pageBreakBefore,

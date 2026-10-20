@@ -1,11 +1,28 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { acknowledgeTextDraft, changedSubsectionTexts, createSubsectionTextDraft, editSubsectionTextDraft,
-  parseTextChanges, preserveTextNewlines, readSubsectionTextDraft, textDraftIsStale } from "../editorial-text-editor.ts";
+  parseTextChanges, preserveTextNewlines, readSubsectionTextDraft, textDraftIsStale, openingTextSnapshots } from "../editorial-text-editor.ts";
 
 const text = { id: "text", block_type: "text", title: null, body: "  Primo\r\nsecondo\n\n• voce  \r\nFine", asset_id: null, editor_notes: null };
 const image = { ...text, id: "image", block_type: "image", body: null, asset_id: "asset" };
 const label = { ...text, id: "label", title: "Titoletto", body: null };
+
+test("Introductory draft preserves section body, blocks, images and conflict recovery without merging", () => {
+  const body = "  Apertura\r\n\r\nOriginale  ";
+  const snapshots = openingTextSnapshots("section", body, [text, image, label]);
+  assert.deepEqual(snapshots.map(b => b.id), ["section", "text", "image", "label"]);
+  assert.deepEqual(snapshots.slice(1), [text, image, label]);
+  const draft = createSubsectionTextDraft(snapshots, 2);
+  assert.deepEqual(changedSubsectionTexts(draft), []);
+  const edited = editSubsectionTextDraft(draft, "section", "body", "  Apertura\n\nModificata  ");
+  assert.equal(changedSubsectionTexts(edited)[0].body, "  Apertura\r\n\r\nModificata  ");
+  const restored = readSubsectionTextDraft(JSON.stringify(edited))!;
+  assert.deepEqual(restored, edited);
+  assert.equal(textDraftIsStale(restored, openingTextSnapshots("section", "Remote", [text, image, label]), 3), true);
+  assert.deepEqual(changedSubsectionTexts(restored), changedSubsectionTexts(edited));
+  assert.deepEqual(openingTextSnapshots("section", null, [image, text]), [image, text]);
+  assert.equal(openingTextSnapshots("section", "", [text])[0].body, "");
+});
 
 test("Opening, focusing and reverting text is byte-exact and produces no changes", () => {
   const initial = createSubsectionTextDraft([text, image, label], 4);

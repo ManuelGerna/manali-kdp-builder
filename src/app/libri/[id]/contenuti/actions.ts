@@ -628,7 +628,7 @@ export async function updateSectionAction(
     sectionType,
     title: getOptionalText(formData, "title"),
     subtitle: getOptionalText(formData, "subtitle"),
-    body: getOptionalText(formData, "body"),
+    ...(formData.has("body") ? { body: getOptionalText(formData, "body") } : {}),
     includeInToc: getCheckbox(formData, "include_in_toc"),
     sectionStatus,
     pageBreakBefore: getCheckbox(formData, "page_break_before"),

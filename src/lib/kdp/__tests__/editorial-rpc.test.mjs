@@ -406,3 +406,100 @@ test('Text batch respects private/public book RLS, anonymous grants and structur
  await db.query("update public.kdp_import_runs set import_kind='generic_draft_v0' where book_id=$1",[book]);
  await assert.rejects(apply(textBatch(marker,[])),/editorial_book_required/);
 });
+
+test('Opening batch edits general introduction, chapter and special-section prefix without changing UUIDs or semantic groups',async()=>{
+ await bootstrap();
+ for(const index of [0,1,9]) {
+  const id=fixture.sections[index].id;const s=await state(id);const first=s.rows[0];
+  const body='  Apertura\r\nseconda riga\n\n• voce  ';
+  const result=(await apply(textBatch(null,[textChange(first,body)]),s,id)).rows[0].result;
+  assert.deepEqual(result,{revision:s.map.revision+1,updated:1});
+  const after=await state(id);coherent(after);assert.deepEqual(after.map.subsections,s.map.subsections);
+  assert.deepEqual(after.rows.map(b=>b.id),s.rows.map(b=>b.id));assert.equal(after.rows[0].body,body);
+  assert.deepEqual(after.rows.slice(1),s.rows.slice(1));
+ }
+ assert.deepEqual((await db.query('select normalized_project from public.kdp_import_runs where book_id=$1',[book])).rows[0].normalized_project,fixture.project);
+});
+
+test('Opening batch saves existing section body and paragraph atomically without synthetic DB rows',async()=>{
+ await bootstrap();const s=await state();const before=(await db.query('select * from public.kdp_sections where id=$1',[section])).rows[0];
+ const bodyChange={block_id:section,title:null,expected_title:null,expected_body:null,body:'  Intro\r\n\r\nConservata  '};
+ const result=(await apply(textBatch(null,[bodyChange,textChange(s.rows[0],'Paragraph')]),s)).rows[0].result;
+ assert.deepEqual(result,{updated:2,revision:s.map.revision+1});
+ const after=await state();assert.deepEqual(after.rows.map(b=>b.id),s.rows.map(b=>b.id));
+ const saved=(await db.query('select * from public.kdp_sections where id=$1',[section])).rows[0];
+ assert.equal(saved.body,bodyChange.body);assert.equal(saved.title,before.title);assert.deepEqual(after.map.subsections,s.map.subsections);
+ await apply(textBatch(null,[{...bodyChange,expected_body:bodyChange.body,body:''}]));
+ assert.equal((await db.query('select body from public.kdp_sections where id=$1',[section])).rows[0].body,'');
+});
+
+test('Opening no-op performs zero writes even with section-body and paragraph snapshots',async()=>{
+ await bootstrap();const s=await state();
+ await db.exec(`reset role;create or replace function public.fail_text_noop_test() returns trigger language plpgsql as $$ begin raise exception 'unexpected_noop_write'; end $$;
+  create trigger fail_text_noop_test before update on public.kdp_section_blocks for each row execute function public.fail_text_noop_test();
+  create trigger fail_text_noop_test before update on public.kdp_sections for each row execute function public.fail_text_noop_test();
+  create trigger fail_text_noop_test before update on public.kdp_books for each row execute function public.fail_text_noop_test();set role authenticated;`);
+ try {
+  for(const changes of [[],[textChange(s.rows[0]),{block_id:section,title:null,body:null,expected_title:null,expected_body:null}]]) {
+   assert.deepEqual((await apply(textBatch(null,changes),s)).rows[0].result,{updated:0,revision:s.map.revision});
+  }
+  assert.deepEqual(await state(),s);
+ } finally {
+  await db.exec(`reset role;drop trigger fail_text_noop_test on public.kdp_section_blocks;drop trigger fail_text_noop_test on public.kdp_sections;
+   drop trigger fail_text_noop_test on public.kdp_books;set role authenticated;`);
+ }
+});
+
+test('Opening boundaries reject markers, subsection text, duplicates, invalid scopes and section-title changes with full rollback',async()=>{
+ const {s,marker,texts}=await textBatchContext();const first=textChange(s.rows[0],'Must roll back');
+ const bodyChange={block_id:section,title:null,body:'Must roll back',expected_title:null,expected_body:null};
+ const invalid=[textChange(s.rows.find(b=>b.id===marker),'No'),textChange(texts[0],'No'),first,
+  {...bodyChange,title:'No section rename'},textChange({...s.rows[0],id:fixtureId(999999)},'No')];
+ for(const item of invalid) {
+  await assert.rejects(apply(textBatch(null,[first,bodyChange,item]),s),/editorial_invalid_target/);
+  assert.deepEqual(await state(),s);assert.equal((await db.query('select body from public.kdp_sections where id=$1',[section])).rows[0].body,null);
+ }
+ await assert.rejects(apply(textBatch(marker,[bodyChange]),s),/editorial_invalid_target/);
+ await assert.rejects(apply({operation:'update_text_batch',changes:[first]},s),/editorial_invalid_target/);
+ await assert.rejects(apply(textBatch({},[first]),s),/editorial_invalid_target/);
+});
+
+test('Opening conflicts and final map failure roll back text and section body; stale revision/order never overwrite',async()=>{
+ const {s,marker}=await textBatchContext();const bodyChange={block_id:section,title:null,body:'Local body',expected_title:null,expected_body:null};
+ await db.query('update public.kdp_sections set body=$1 where id=$2',['Remote body',section]);
+ await assert.rejects(apply(textBatch(null,[textChange(s.rows[0],'Local'),bodyChange]),s),/editorial_conflict/);
+ assert.deepEqual(await state(),s);assert.equal((await db.query('select body from public.kdp_sections where id=$1',[section])).rows[0].body,'Remote body');
+ await db.exec(`reset role;create or replace function public.fail_editorial_test() returns trigger language plpgsql as $$ begin raise exception 'injected_opening_failure'; end $$;
+  create trigger fail_editorial_test before update on public.kdp_sections for each row execute function public.fail_editorial_test();set role authenticated;`);
+ await assert.rejects(apply(textBatch(null,[textChange(s.rows[0],'Local'),{...bodyChange,expected_body:'Remote body'}]),s),/injected_opening_failure/);
+ assert.deepEqual(await state(),s);
+ await db.exec('reset role;drop trigger fail_editorial_test on public.kdp_sections;set role authenticated');
+ await apply({operation:'reorder',order:planEditorialSubsectionMove(s.rows,marker,'down',s.map)});
+ const moved=await state();await assert.rejects(apply(textBatch(null,[textChange(s.rows[0],'No')]),s),/editorial_conflict/);
+ await assert.rejects(apply(textBatch(null,[textChange(s.rows[0],'No')]),{...moved,rows:[...moved.rows].reverse()}),/editorial_conflict/);
+ assert.deepEqual(await state(),moved);
+});
+
+test('Opening batch preserves interleaved images, references and later subsection operations',async()=>{
+ await bootstrap();const asset=await pendingImage();
+ const id=(await apply({operation:'add_image',asset_id:asset,subsection_id:null,size:'medium',align:'center'})).rows[0].result.block_id;
+ let s=await state();await apply({operation:'reorder',order:planEditorialTextMove(s.rows,id,'up',s.map)});
+ s=await state();const image=s.rows.find(b=>b.id===id);
+ await apply(textBatch(null,[textChange(s.rows[0],'Opening beside image')]));let after=await state();
+ assert.deepEqual(after.rows.find(b=>b.id===id),image);assert.deepEqual(after.rows.map(b=>b.id),s.rows.map(b=>b.id));
+ await assert.rejects(apply(textBatch(null,[textChange(image,'No')])),/editorial_invalid_target/);
+ await apply({operation:'style_image',block_id:id,size:'small',align:'right'});
+ after=await state();await apply({operation:'reorder',order:planEditorialSubsectionMove(after.rows,after.map.subsections[0].heading_block_id,'down',after.map)});
+ coherent(await state());assert.equal((await db.query('select prompt from public.kdp_assets where id=$1',[asset])).rows[0].prompt,'editorial-image-v1:active');
+});
+
+test('Opening batches retain RLS, anonymous execution denial and structured-book exclusion',async()=>{
+ await bootstrap();const s=await state();const change=textBatch(null,[textChange(s.rows[0],'Public opening')]);
+ await db.query("select set_config('request.jwt.claim.sub',$1,false)",[fixtureId(3)]);
+ await assert.rejects(apply(change,s),/editorial_access_denied/);
+ await db.exec('reset role;set role anon');await assert.rejects(apply(change,s),/permission denied/);
+ await db.exec('reset role');await db.query("update public.kdp_books set visibility='public' where id=$1",[book]);
+ await db.exec('set role authenticated');assert.equal((await apply(change,s)).rows[0].result.updated,1);
+ await db.query("update public.kdp_import_runs set import_kind='generic_draft_v0' where book_id=$1",[book]);
+ await assert.rejects(apply(textBatch(null,[])),/editorial_book_required/);
+});

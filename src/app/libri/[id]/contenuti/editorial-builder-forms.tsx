@@ -89,7 +89,7 @@ export function CreateEditorialSectionForm({ bookId }: { bookId: string }) {
   );
 }
 
-export function EditEditorialSectionForm({ section, fieldSuffix = "section" }: { section: KdpSection; fieldSuffix?: string }) {
+export function EditEditorialSectionForm({ section, fieldSuffix = "section", hideBody = false }: { section: KdpSection; fieldSuffix?: string; hideBody?: boolean }) {
   const draft = useEditorialDraftForm(`section:${section.id}:${section.updated_at}`);
   const initialState: SectionFormState = {
     message: null,
@@ -150,7 +150,7 @@ export function EditEditorialSectionForm({ section, fieldSuffix = "section" }: {
         />
       </div>
 
-      <div className="field">
+      {!hideBody && <div className="field">
         <label htmlFor={`editorial_body_${section.id}_${fieldSuffix}`}>Testo introduttivo</label>
         <textarea
           defaultValue={state.fields?.body ?? section.body ?? ""}
@@ -158,7 +158,7 @@ export function EditEditorialSectionForm({ section, fieldSuffix = "section" }: {
           name="body"
           placeholder="Testo facoltativo prima delle sottosezioni"
         />
-      </div>
+      </div>}
 
       <SubmitButton label="Salva" pendingLabel="Salvataggio..." />
       <button className="ghost-button" type="reset">Annulla modifiche</button>
