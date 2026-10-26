@@ -15,6 +15,10 @@ import { createOwnershipActor } from "@/lib/kdp/ownership";
 import { validateEditorialImage } from "@/lib/kdp/editorial-images";
 import { cleanupEditorialImages } from "@/lib/kdp/editorial-image-storage";
 import { parseTextChanges, type TextChange } from "@/lib/kdp/editorial-text-editor";
+import { parseEditorialGroupV2, readEditorialSectionText, sameEditorialJson, type EditorialTextGroupV2 } from "@/lib/kdp/editorial-text-v2";
+import { editorialTextV2LocalEnabled, isEditorialTextV2Canary } from "@/lib/kdp/editorial-text-v2-gate";
+import { planEditorialImagePlacement, readImagePlacement, type ImagePlacement } from "@/lib/kdp/editorial-image-placement";
+import type { KdpSectionBlock } from "@/lib/kdp/section-blocks";
 
 const field = (form: FormData, key: string) => String(form.get(key) ?? "");
 const optional = (form: FormData, key: string) => field(form, key) || null;
@@ -43,9 +47,40 @@ async function context(form: FormData) {
   const map = readEditorialMap(section.settings, blocks);
   const revision = field(form, "revision");
   if (!/^\d+$/.test(revision) || Number(revision) !== map.revision) throw new Error("Il contenuto è cambiato. Ricarica il libro prima di riprovare.");
-  return { client, bookId, sectionId, blocks, map };
+  return { client, bookId, sectionId, section, blocks, map };
 }
 type Context = Awaited<ReturnType<typeof context>>;
+export type EditorialTextV2SaveState = {
+  status: "idle" | "saved" | "unchanged" | "error"; message: string | null;
+  revision?: number; expected?: EditorialTextGroupV2; saved?: EditorialTextGroupV2;
+};
+export async function saveEditorialTextV2Action(_state: EditorialTextV2SaveState, form: FormData): Promise<EditorialTextV2SaveState> {
+  try {
+    const localV2 = editorialTextV2LocalEnabled();
+    if (!localV2 && !isEditorialTextV2Canary(field(form, "book_id"), field(form, "section_id"), optional(form, "subsection_id"))) {
+      throw new Error("V2 non è attivato per questo gruppo.");
+    }
+    const expected = JSON.parse(field(form, "expected_group")) as EditorialTextGroupV2;
+    const group = parseEditorialGroupV2(JSON.parse(field(form, "group")), expected);
+    if (sameEditorialJson(expected, group)) return { status: "unchanged", message: "Nessuna modifica da salvare." };
+    const c = await context(form);
+    const id = optional(form, "subsection_id");
+    const read = readEditorialSectionText(c.section, c.blocks);
+    const current = id === null ? read.opening : read.subsections.find(sub => sub.marker.id === id)?.text;
+    if (!localV2 && current?.format !== "v2") throw new Error("V2 non è attivato per questo gruppo.");
+    if (!current || !sameEditorialJson(current.group, expected) || group.subsection_id !== id) throw new Error("Il contenuto è cambiato.");
+    const result = await applyEditorialChange(c.client, { bookId: c.bookId, sectionId: c.sectionId, revision: c.map.revision,
+      order: c.blocks.map(b => b.id), change: { operation: "save_text_v2", subsection_id: id,
+        expected_group: expected as unknown as Json, group: group as unknown as Json } });
+    if (result.error) throw new Error(result.message ?? "Salvataggio non confermato.");
+    const receipt = result.data as { revision?: number; updated?: number; group?: unknown } | null;
+    if (receipt?.revision !== c.map.revision + 1 || receipt.updated !== 1 || !sameEditorialJson(receipt.group, group)) throw new Error("Salvataggio non confermato.");
+    refresh(c.bookId);
+    return { status: "saved", message: "Testo salvato.", revision: receipt.revision, expected, saved: group };
+  } catch (cause) {
+    return { status: "error", message: `${cause instanceof Error ? cause.message : editorialRpcError(null)} La bozza è conservata.` };
+  }
+}
 export type EditorialTextSaveState = {
   status: "idle" | "saved" | "unchanged" | "error";
   message: string | null;
@@ -156,9 +191,38 @@ export async function saveEditorialImageAction(form: FormData) {
   try {
     const c = await context(form);
     const operation = field(form, "operation");
-    if (!["add_image", "replace_image", "style_image", "discard_image_upload"].includes(operation)) throw new Error("Operazione non valida.");
-    const size = field(form, "size"); const align = field(form, "align");
+    const imageV2 = field(form, "image_v2") === "true";
+    if (!["add_image", "replace_image", "style_image", "discard_image_upload", ...(imageV2 ? ["move_image", "delete_image"] : [])].includes(operation)) throw new Error("Operazione non valida.");
+    const original = c.blocks.find(b => b.id === field(form, "block_id"));
+    if (imageV2 && operation !== "add_image" && original?.block_type !== "image") throw new Error("Immagine non disponibile.");
+    const size = field(form, "size") || (imageV2 ? "text" : ""); const align = field(form, "align") || (imageV2 ? "center" : "");
     if (!["small", "medium", "text"].includes(size) || !["left", "center", "right"].includes(align)) throw new Error("Dimensione o allineamento non valido.");
+    let imagePlan: ReturnType<typeof planEditorialImagePlacement> | undefined;
+    let placement: ImagePlacement | null = null;
+    let imageId: string | undefined;
+    let beforeImageId: string | null = null;
+    if (imageV2) {
+      imageId = original?.id ?? crypto.randomUUID();
+      placement = original ? readImagePlacement(original.editor_notes) ?? { scope: "group", subsection_id: null, edge: "after" } :
+        { scope: field(form, "scope") === "chapter" ? "chapter" : "group", subsection_id: optional(form, "subsection_id"), edge: field(form, "edge") === "before" ? "before" : "after" };
+      if (operation === "move_image") {
+        const [scope, target, edge] = field(form, "destination").split("|");
+        if (scope === "image") {
+          const sibling = c.blocks.find(b => b.id === target && b.block_type === "image");
+          placement = sibling ? readImagePlacement(sibling.editor_notes) : null;
+          if (!placement) throw new Error("Posizione immagine non valida.");
+          beforeImageId = target;
+        } else {
+          if (!["group", "chapter"].includes(scope) || !["before", "after"].includes(edge)) throw new Error("Posizione immagine non valida.");
+          placement = { scope: scope as ImagePlacement["scope"], subsection_id: target || null, edge: edge as ImagePlacement["edge"] };
+        }
+      }
+      const image = original ?? { id: imageId, book_id: c.bookId, section_id: c.sectionId, block_type: "image", title: null, body: null,
+        asset_id: null, sort_order: c.blocks.length + 1, editor_notes: null, created_at: "", updated_at: "", print_visibility: "print", layout_preset: "default",
+        created_by_user_id: null, created_by_email: null, updated_by_user_id: null, updated_by_email: null } as KdpSectionBlock;
+      if (["add_image", "move_image", "delete_image"].includes(operation)) imagePlan = planEditorialImagePlacement(c.section, c.blocks, image, operation === "delete_image" ? null : placement, beforeImageId);
+      else imagePlan = { order: c.blocks.map(b => b.id), groups: Object.fromEntries([readEditorialSectionText(c.section, c.blocks).opening, ...readEditorialSectionText(c.section, c.blocks).subsections.map(s => s.text)].filter(g => g.format === "v2").map(g => [g.group.subsection_id ?? "opening", g.group])) };
+    }
     let assetId: string | undefined;
     const recoveryId = field(form, "pending_asset_id");
     if (recoveryId) {
@@ -174,7 +238,7 @@ export async function saveEditorialImageAction(form: FormData) {
       }
     } else if (operation === "discard_image_upload") {
       throw new Error("Upload non trovato.");
-    } else if (operation !== "style_image") {
+    } else if (["add_image", "replace_image"].includes(operation)) {
       const file = form.get("image");
       if (!(file instanceof File)) throw new Error("Scegli un'immagine.");
       const meta = await validateEditorialImage(file);
@@ -192,9 +256,14 @@ export async function saveEditorialImageAction(form: FormData) {
     }
     const result = await applyEditorialChange(c.client, { bookId: c.bookId, sectionId: c.sectionId,
       revision: c.map.revision, order: c.blocks.map(b => b.id), change: {
-        operation, size, align, block_id: optional(form, "block_id"), subsection_id: optional(form, "subsection_id"), ...(assetId ? { asset_id: assetId } : {}),
+        operation: imageV2 ? "image_v2" : operation, size, align, block_id: imageId ?? optional(form, "block_id"), subsection_id: optional(form, "subsection_id"), ...(assetId ? { asset_id: assetId } : {}),
+        ...(imageV2 ? { image_operation: operation, placement: placement as unknown as Json, order: imagePlan!.order, groups: imagePlan!.groups as unknown as Json } : {}),
       } });
     if (result.error) throw new Error(result.message!);
+    if (imageV2) {
+      const receipt = result.data as { revision?: number; block_id?: string } | null;
+      if (receipt?.revision !== c.map.revision + 1 || receipt.block_id !== imageId) throw new Error("Operazione immagine non confermata. Ricarica il Builder per verificarne l’esito.");
+    }
     pending = undefined;
     refresh(c.bookId);
     if (!await cleanupEditorialImages(c.client, c.bookId)) throw new Error("Immagine salvata. Pulizia Storage in attesa, ritentata alla prossima apertura.");

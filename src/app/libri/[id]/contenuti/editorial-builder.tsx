@@ -1,12 +1,19 @@
 "use client";
 
-import { createContext, useContext } from "react";
+import { createContext, useContext, type ReactNode } from "react";
 import { EditorialImageForm, EditorialImageNode } from "./editorial-image-forms";
 import { EditorialSubsectionTextEditor } from "./editorial-text-editor";
 import { openingTextSnapshots } from "@/lib/kdp/editorial-text-editor";
+import { readEditorialSectionText, type EditorialTextGroupRead } from "@/lib/kdp/editorial-text-v2";
+import { isEditorialTextV2Canary } from "@/lib/kdp/editorial-text-v2-gate";
+import { EditorialTextV2Editor } from "./editorial-text-v2-editor";
+import { EditorialGroupV2View } from "./editorial-text-v2-render";
+import { AddImageV2, EditorialImagesV2, imageDestinations, type ImageDestination } from "./editorial-images-v2";
+import { chapterImages, readImagePlacement } from "@/lib/kdp/editorial-image-placement";
 const ImageContext = createContext<Record<string, { url?: string; alt?: string }>>({});
+const ImageDestinationContext = createContext<ImageDestination[]>([]);
 
-import { EditorialDisclosure, EditorialRevisionContext, EditorialDraftProvider } from "./editorial-disclosure";
+import { EditorialDisclosure, EditorialRevisionContext, EditorialDraftProvider, EditorialTextV2Context } from "./editorial-disclosure";
 import {
   buildEditorialBlockHierarchy,
   isEditorialTextContent,
@@ -34,7 +41,25 @@ type EditorialBuilderProps = {
   blocksBySection: Map<string, KdpSectionBlock[]>;
   sections: KdpSection[];
   images?: Record<string, { url?: string; alt?: string }>;
+  textEditorV2Enabled?: boolean;
 };
+
+function GroupEditor({ section, blocks, revision, text, images, children }: {
+  section: KdpSection; blocks: KdpSectionBlock[]; revision: number; text: EditorialTextGroupRead;
+  images: Record<string, { url?: string; alt?: string }>; children: ReactNode;
+}) {
+  const localV2 = useContext(EditorialTextV2Context);
+  const destinations = useContext(ImageDestinationContext);
+  if (localV2 || (text.format === "v2" && isEditorialTextV2Canary(section.book_id, section.id, text.group.subsection_id))) {
+    return <EditorialTextV2Editor bookId={section.book_id} sectionId={section.id} revision={revision} group={text.group} images={images} imageDestinations={destinations}>
+      <AddImageV2 bookId={section.book_id} sectionId={section.id} subsectionId={text.group.subsection_id ?? undefined} />
+    </EditorialTextV2Editor>;
+  }
+  if (text.format === "v2") return <EditorialGroupV2View group={{ ...text.group, nodes: text.group.nodes.filter(node => node.kind === "text" ||
+    readImagePlacement(text.group.source.blocks.find(b => b.id === node.id)?.editor_notes ?? null)?.scope !== "chapter") }} images={images} />;
+  return <EditorialSubsectionTextEditor bookId={section.book_id} sectionId={section.id} subsectionId={text.group.subsection_id}
+    revision={revision} blocks={text.group.subsection_id === null ? openingTextSnapshots(section.id, section.body, blocks) : blocks} images={images}>{children}</EditorialSubsectionTextEditor>;
+}
 
 function getSectionKind(sectionType: string) {
   if (sectionType === "introduction") return "Introduzione";
@@ -130,19 +155,25 @@ function EditorialTextList({ blocks, destinations, currentSubsectionId, toolsOnl
   );
 }
 
-export function EditorialOpeningTextEditor({ section, blocks, revision, destinations, images }: {
+export function EditorialOpeningTextEditor({ section, blocks, revision, destinations, images, text }: {
   section: KdpSection; blocks: KdpSectionBlock[]; revision: number;
   destinations: { id: string; title: string }[];
   images: Record<string, { url?: string; alt?: string }>;
+  text?: EditorialTextGroupRead;
 }) {
-  return <EditorialSubsectionTextEditor bookId={section.book_id} sectionId={section.id}
+  // Direct callers may supply only opening rows; preserve the V1 path as well.
+  if (!text) return <EditorialSubsectionTextEditor bookId={section.book_id} sectionId={section.id}
     subsectionId={null} revision={revision} blocks={openingTextSnapshots(section.id, section.body, blocks)} images={images}>
+    <EditorialDisclosure className="editorial-text-tools"><summary className="ghost-button">Organizza paragrafi e immagini</summary><EditorialTextList blocks={blocks} destinations={destinations} toolsOnly /></EditorialDisclosure>
+    <details><summary>+ Aggiungi immagine</summary><EditorialImageForm bookId={section.book_id} sectionId={section.id} /></details>
+  </EditorialSubsectionTextEditor>;
+  return <GroupEditor section={section} blocks={blocks} revision={revision} text={text} images={images}>
     <EditorialDisclosure className="editorial-text-tools">
       <summary className="ghost-button">Organizza paragrafi e immagini</summary>
       <EditorialTextList blocks={blocks} destinations={destinations} toolsOnly />
     </EditorialDisclosure>
     <details><summary>+ Aggiungi immagine</summary><EditorialImageForm bookId={section.book_id} sectionId={section.id} /></details>
-  </EditorialSubsectionTextEditor>;
+  </GroupEditor>;
 }
 
 function EditorialSectionNode({
@@ -161,12 +192,16 @@ function EditorialSectionNode({
   const images = useContext(ImageContext);
   const map = readEditorialMap(section.settings, blocks);
   const hierarchy = buildEditorialBlockHierarchy(blocks, map);
+  const text = readEditorialSectionText(section, blocks);
+  const localV2 = useContext(EditorialTextV2Context);
+  const v2Mode = localV2 || text.opening.format === "v2" || text.subsections.some(s => s.text.format === "v2");
   const title = getEditorialSectionTitle(section, chapterNumber);
   const destinations = hierarchy.subsections.map(({ marker }) => ({ id: marker.id, title: marker.title?.trim() || "Senza titolo" }));
   const sectionKind = getSectionKind(section.section_type);
 
   return (
     <EditorialRevisionContext.Provider value={map.revision}>
+    <ImageDestinationContext.Provider value={imageDestinations(destinations, section.section_type === "chapter")}>
     <EditorialDisclosure className="editorial-section-node scroll-target" id={`section-${section.id}`} targets={blocks.map(b => `block-${b.id}`)}>
       <summary className="editorial-node-summary editorial-section-summary">
         <span className="editorial-node-label">{sectionKind}</span>
@@ -184,7 +219,7 @@ function EditorialSectionNode({
         ) : null}
 
         {hierarchy.subsections.length === 0 ? (
-            <EditorialOpeningTextEditor section={section} blocks={hierarchy.openingBlocks} revision={map.revision} destinations={destinations} images={images} />
+            <EditorialOpeningTextEditor section={section} blocks={hierarchy.openingBlocks} revision={map.revision} destinations={destinations} images={images} text={text.opening} />
           ) : (
           <EditorialDisclosure className="editorial-opening-node">
             <summary className="editorial-node-summary editorial-subsection-summary">
@@ -192,17 +227,22 @@ function EditorialSectionNode({
               <span>Testo introduttivo</span>
             </summary>
             <div className="editorial-subsection-content">
-              <EditorialOpeningTextEditor section={section} blocks={hierarchy.openingBlocks} revision={map.revision} destinations={destinations} images={images} />
+              <EditorialOpeningTextEditor section={section} blocks={hierarchy.openingBlocks} revision={map.revision} destinations={destinations} images={images} text={text.opening} />
             </div>
           </EditorialDisclosure>)}
 
         <div className="editorial-subsection-list">
+          {v2Mode && section.section_type === "chapter" && <>
+            <EditorialImagesV2 blocks={chapterImages(blocks, null)} images={images} destinations={imageDestinations(destinations, true)} />
+            <AddImageV2 bookId={section.book_id} sectionId={section.id} chapter />
+          </>}
           {hierarchy.subsections.map((subsection, subsectionIndex) => {
             const subsectionTitle = subsection.marker.title?.trim() || "Senza titolo";
             const textCount = subsection.blocks.filter(isEditorialTextContent).length;
+            const subsectionText = text.subsections.find(s => s.marker.id === subsection.marker.id)!.text;
 
             return (
-              <EditorialDisclosure
+              <div key={subsection.marker.id} className="editorial-subsection-with-images"><EditorialDisclosure
                 className="editorial-subsection-node scroll-target"
                 id={`block-${subsection.marker.id}`}
                 key={subsection.marker.id}
@@ -212,13 +252,13 @@ function EditorialSectionNode({
                   <span className="editorial-node-label">Sottosezione</span>
                   <span>{subsectionTitle}</span>
                   <span className="editorial-child-count">
-                    {textCount} {textCount === 1 ? "testo" : "testi"}
+                    {localV2 || subsectionText.format === "v2" ? "Testo" : `${textCount} ${textCount === 1 ? "testo" : "testi"}`}
                   </span>
                 </summary>
                 <div className="editorial-subsection-content">
-                  {subsection.marker.body ? <p className="editorial-prose">{subsection.marker.body}</p> : null}
-                  <EditorialSubsectionTextEditor bookId={section.book_id} sectionId={section.id}
-                    subsectionId={subsection.marker.id} revision={map.revision} blocks={subsection.blocks} images={images}>
+                  {!localV2 && subsectionText.format === "v1" && subsection.marker.body ? <p className="editorial-prose">{subsection.marker.body}</p> : null}
+                  <GroupEditor section={section} revision={map.revision} blocks={subsection.blocks} images={images}
+                    text={subsectionText}>
                   <EditorialDisclosure className="editorial-text-tools">
                     <summary className="ghost-button">Organizza paragrafi e immagini</summary>
                     <EditorialTextList blocks={subsection.blocks} destinations={destinations} currentSubsectionId={subsection.marker.id} toolsOnly />
@@ -271,9 +311,14 @@ function EditorialSectionNode({
                       title={subsectionTitle}
                     />
                   </div>
-                  </EditorialSubsectionTextEditor>
+                  </GroupEditor>
                 </div>
               </EditorialDisclosure>
+              {v2Mode && section.section_type === "chapter" && <>
+                <EditorialImagesV2 blocks={chapterImages(blocks, subsection.marker.id)} images={images} destinations={imageDestinations(destinations, true)} />
+                <AddImageV2 bookId={section.book_id} sectionId={section.id} subsectionId={subsection.marker.id} chapter />
+              </>}
+              </div>
             );
           })}
         </div>
@@ -286,7 +331,7 @@ function EditorialSectionNode({
           </p>
         ) : null}
 
-        <div className="editorial-section-tools">
+        <fieldset className="editorial-section-tools" disabled={v2Mode}>
           <EditorialDisclosure className="editorial-add-panel">
             <summary className="secondary-button">+ Sottosezione</summary>
             <AddEditorialSubsectionForm
@@ -294,18 +339,18 @@ function EditorialSectionNode({
               sectionId={section.id}
             />
           </EditorialDisclosure>
-          <EditorialDisclosure className="editorial-add-panel">
+          {!v2Mode && <EditorialDisclosure className="editorial-add-panel">
             <summary className="ghost-button">+ Testo introduttivo</summary>
             <AddEditorialTextForm
               bookId={section.book_id}
               sectionId={section.id}
             />
-          </EditorialDisclosure>
+          </EditorialDisclosure>}
           <EditorialDisclosure className="editorial-edit-panel">
             <summary className="ghost-button">Modifica {sectionKind.toLowerCase()}</summary>
             <EditEditorialSectionForm key={section.updated_at} section={section} hideBody />
           </EditorialDisclosure>
-        </div>
+        </fieldset>
 
         <div className="editorial-section-danger-zone">
           <MoveSectionForm
@@ -328,6 +373,7 @@ function EditorialSectionNode({
         </div>
       </div>
     </EditorialDisclosure>
+    </ImageDestinationContext.Provider>
     </EditorialRevisionContext.Provider>
   );
 }
@@ -336,11 +382,12 @@ export function EditorialBuilder({
   blocksBySection,
   sections,
   images = {},
+  textEditorV2Enabled = false,
 }: EditorialBuilderProps) {
   let chapterNumber = 0;
 
   return (
-    <ImageContext.Provider value={images}><EditorialDraftProvider>
+    <ImageContext.Provider value={images}><EditorialTextV2Context.Provider value={textEditorV2Enabled}><EditorialDraftProvider>
     <section className="editorial-builder" aria-label="Struttura editoriale del libro">
       <div className="editorial-book-root">
         <span className="editorial-book-mark" aria-hidden="true">B</span>
@@ -369,6 +416,6 @@ export function EditorialBuilder({
         })}
       </div>
     </section>
-    </EditorialDraftProvider></ImageContext.Provider>
+    </EditorialDraftProvider></EditorialTextV2Context.Provider></ImageContext.Provider>
   );
 }

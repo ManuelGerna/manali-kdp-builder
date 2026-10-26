@@ -25,6 +25,29 @@
   --shadow-soft: 0 6px 18px rgba(77, 45, 96, 0.07);
 }
 
+.editorial-image-form {
+  padding: 20px; margin-block: 12px; border: 1px solid var(--line);
+  border-radius: 12px; background: var(--surface); grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.editorial-image-form label { display: grid; gap: 8px; min-width: 0; }
+.editorial-image-picker, .editorial-image-description, .editorial-image-upload-preview,
+.editorial-image-form > [role="alert"] { grid-column: 1 / -1; }
+.editorial-image-picker { padding: 16px; background: var(--surface-tinted); border: 1px dashed var(--brand); border-radius: 8px; }
+.editorial-image-picker input { width: 100%; min-width: 0; }
+.editorial-image-help, .editorial-image-upload-preview figcaption { color: var(--muted); font-size: .875rem; overflow-wrap: anywhere; }
+.editorial-image-upload-preview { margin: 0; padding: 12px; background: var(--surface-muted); border-radius: 8px; }
+.editorial-image-upload-preview img { display: block; max-width: 100%; max-height: 280px; height: auto; margin: auto; object-fit: contain; }
+.editorial-image-submit { grid-column: 1 / -1; width: 100%; background: var(--brand-strong); color: white; min-height: 48px; }
+.editorial-image-add { margin-block: 12px; }
+.editorial-v2-image-tools { border: 0; min-width: 0; padding: 0; margin: 0; }
+.editorial-image-position { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 8px; min-width: 0; }
+.editorial-image-position label { display: grid; gap: 6px; min-width: 0; }
+.editorial-image-position select { max-width: 100%; }
+@media (max-width: 640px) {
+  .editorial-image-form { padding: 14px; grid-template-columns: minmax(0, 1fr); }
+  .editorial-image-position, .editorial-image-position label { width: 100%; }
+}
+
 * {
   box-sizing: border-box;
 }
@@ -1708,6 +1731,15 @@ details[open] > .editorial-node-summary::before {
   outline-offset: 5px;
 }
 .editorial-writing-surface textarea.editorial-literal-title { font-weight: 700; }
+.editorial-v2-segment .tiptap,
+.editorial-v2-document { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.7; }
+.editorial-v2-segment .tiptap { min-height: 1.7em; outline: none; }
+.editorial-v2-segment .tiptap p,
+.editorial-v2-document p { margin: 0; min-height: 1.7em; }
+.editorial-v2-segment .tiptap p + p,
+.editorial-v2-document p + p { margin-top: 1em; }
+.editorial-v2-segment .tiptap:focus-visible { outline: 2px solid #86754d; outline-offset: 5px; }
+.editorial-v2-document:empty { display: none; }
 .editorial-text-editor > form { margin-block: 1rem; }
 .editorial-text-operations { min-width: 0; padding: 0; margin: 0; border: 0; }
 .editorial-text-operations:disabled { opacity: 0.65; }

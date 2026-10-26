@@ -104,6 +104,15 @@ export default async function BookPreviewPage({ params }: BookPreviewPageProps) 
   }
 
 
+  const images: Record<string, { url?: string; alt?: string }> = {};
+  const imageIds = blocksResult.data.filter(b => ["image", "image_prompt"].includes(b.block_type) && b.asset_id).map(b => b.asset_id!);
+  if (imageIds.length) {
+    const assets = await supabase.from("kdp_assets").select("id,file_path,alt_text,title").eq("book_id", book.id).in("id", imageIds);
+    for (const asset of assets.data ?? []) if (asset.file_path) {
+      const result = await supabase.storage.from("kdp-assets").createSignedUrl(asset.file_path, 3600);
+      images[asset.id] = { url: result.data?.signedUrl, alt: asset.alt_text ?? asset.title ?? undefined };
+    }
+  }
   const mapState = inspectEditorialMaps(sections, blocksResult.data);
   if (mapState.error || mapState.needsBootstrap) return <AppShell title="Anteprima libretto">
     <EmptyState title="Prepara la struttura editoriale" description={mapState.error || "Apri il Builder per attivare la struttura del libro importato."}
@@ -136,7 +145,7 @@ export default async function BookPreviewPage({ params }: BookPreviewPageProps) 
           description="Il libro non ha ancora contenuti."
         />
       ) : (
-        <EditorialPreview sections={sections} blocks={blocksResult.data} />
+        <EditorialPreview sections={sections} blocks={blocksResult.data} images={images} />
       )}
     </AppShell>
   );

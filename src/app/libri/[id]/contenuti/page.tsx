@@ -13,6 +13,7 @@ import { createClient, hasSupabaseServerConfig } from "@/lib/supabase/server";
 import type { Tables } from "@/types/database";
 import { ContentAnchorScroll } from "./content-anchor-scroll";
 import { EditorialBuilder } from "./editorial-builder";
+import { editorialTextV2LocalEnabled } from "@/lib/kdp/editorial-text-v2-gate";
 import { CreateEditorialSectionPanel } from "./editorial-builder-forms";
 import LegacyBuilder from "./legacy-builder";
 import { getBookContentMode } from "@/lib/kdp/editorial-book-mode";
@@ -292,6 +293,7 @@ export default async function BookContentsPage({
                   revision: map.revision, title: `${section.title || "Introduzione"} / ${rows.find(row => row.id === subsection.heading_block_id)?.title || "Sottosezione"}` }))];
             })} />
           <EditorialBuilder
+            textEditorV2Enabled={editorialTextV2LocalEnabled()}
             images={images}
             blocksBySection={groupBlocksBySection(blocks)}
             sections={sections}

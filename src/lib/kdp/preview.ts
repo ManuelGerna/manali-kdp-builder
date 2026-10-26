@@ -10,6 +10,7 @@ import {
 } from "@/lib/kdp/constants";
 import type { KdpSectionBlock } from "@/lib/kdp/section-blocks";
 import type { KdpSection } from "@/lib/kdp/sections";
+import { editorialSectionTextProjection, EDITORIAL_TEXT_V2_KEY } from "./editorial-text-v2";
 
 type BuildBookPreviewInput = {
   assets: KdpAsset[];
@@ -29,6 +30,7 @@ export type PreviewTocItem = {
 };
 
 export type PreviewBlock = {
+  editorialTextV2?: boolean;
   assetAltText: string | null;
   assetPrompt: string | null;
   assetTitle: string | null;
@@ -157,6 +159,7 @@ function toPreviewBlock(
     layoutPreset: block.layout_preset,
     sortOrder: block.sort_order,
     title: block.title,
+    ...((block as KdpSectionBlock & { editorial_text_v2?: boolean }).editorial_text_v2 ? { editorialTextV2: true } : {}),
   };
 }
 
@@ -187,13 +190,18 @@ export function buildBookPreview({
       title: getSectionTitle(section),
     }));
   const previewSections = orderedSections.map((section, index) => {
-    const previewBlocks = (blocksBySection.get(section.id) ?? [])
+    const rows = blocksBySection.get(section.id) ?? [];
+    // Structured/legacy books keep their existing path. An explicitly converted
+    // editorial section uses the very same reader as Builder and preview.
+    const hasV2 = section.settings && typeof section.settings === "object" && EDITORIAL_TEXT_V2_KEY in section.settings;
+    const projection = hasV2 ? editorialSectionTextProjection(section, rows) : null;
+    const previewBlocks = (projection?.blocks ?? rows)
       .filter(isVisiblePreviewBlock)
       .map((block) => toPreviewBlock(block, assetById));
 
     return {
       blocks: previewBlocks,
-      body: previewBlocks.length > 0 ? null : section.body,
+      body: projection?.converted ? projection.body : previewBlocks.length > 0 ? null : section.body,
       id: section.id,
       index: index + 1,
       layoutPresetLabel: formatLayoutPreset(section.layout_preset),
@@ -223,6 +231,7 @@ function slugify(value: string) {
 }
 
 function formatPreviewBlockAsText(block: PreviewBlock) {
+  if (block.editorialTextV2) return block.body ?? "";
   if (block.isPageBreak) {
     return "";
   }
@@ -256,16 +265,16 @@ export function formatBookPreviewAsText(preview: BookPreview) {
         )
       : ["Nessuna sezione marcata per l'indice."];
   const sectionLines = preview.sections.flatMap((section) => {
-    const blockLines = section.blocks
-      .map(formatPreviewBlockAsText)
-      .filter(Boolean);
+    const blockLines = section.blocks.flatMap(block => {
+      const text = formatPreviewBlockAsText(block);
+      return text || block.editorialTextV2 ? [text] : [];
+    });
 
     return [
       `${section.index}. ${section.title}`,
       section.subtitle ?? null,
       section.body ?? null,
-      ...blockLines,
-    ].filter(Boolean) as string[];
+    ].filter(Boolean).concat(blockLines) as string[];
   });
 
   return [

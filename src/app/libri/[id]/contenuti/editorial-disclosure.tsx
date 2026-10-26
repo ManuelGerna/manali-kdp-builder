@@ -2,15 +2,20 @@
 
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode, type ChangeEvent } from "react";
 import type { SubsectionTextDraft } from "@/lib/kdp/editorial-text-editor";
+import type { EditorialTextDraftV2 } from "@/lib/kdp/editorial-text-v2-draft";
 
 type Drafts = Map<string, Record<string, string>>;
 const DraftContext = createContext<Drafts | null>(null);
 const TextDraftContext = createContext<Map<string, SubsectionTextDraft> | null>(null);
+const TextDraftV2Context = createContext<Map<string, EditorialTextDraftV2> | null>(null);
+export function useEditorialTextV2DraftCache() { return useContext(TextDraftV2Context); }
+export const EditorialTextV2Context = createContext(false);
 export function useEditorialTextDraftCache() { return useContext(TextDraftContext); }
 export function EditorialDraftProvider({ children }: { children: ReactNode }) {
   const drafts = useRef<Drafts>(new Map());
   const textDrafts = useRef(new Map<string, SubsectionTextDraft>());
-  return <DraftContext.Provider value={drafts.current}><TextDraftContext.Provider value={textDrafts.current}>{children}</TextDraftContext.Provider></DraftContext.Provider>;
+  const v2Drafts = useRef(new Map<string, EditorialTextDraftV2>());
+  return <DraftContext.Provider value={drafts.current}><TextDraftContext.Provider value={textDrafts.current}><TextDraftV2Context.Provider value={v2Drafts.current}>{children}</TextDraftV2Context.Provider></TextDraftContext.Provider></DraftContext.Provider>;
 }
 
 // Keep unsaved inputs in memory when a lazy ancestor unmounts them. This is not

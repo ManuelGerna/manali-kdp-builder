@@ -1,4 +1,7 @@
-import { buildEditorialBlockHierarchy, isEditorialTextContent, getEditorialSectionTitle, readEditorialMap } from "@/lib/kdp/editorial-hierarchy";
+import { isEditorialTextContent, getEditorialSectionTitle } from "@/lib/kdp/editorial-hierarchy";
+import { readEditorialSectionText } from "@/lib/kdp/editorial-text-v2";
+import { EditorialGroupV2View } from "../contenuti/editorial-text-v2-render";
+import { EditorialImagePreview } from "../contenuti/editorial-image-forms";
 import type { KdpSectionBlock } from "@/lib/kdp/section-blocks";
 import type { KdpSection } from "@/lib/kdp/sections";
 
@@ -15,10 +18,11 @@ function groupBlocksBySection(blocks: KdpSectionBlock[]) {
 }
 
 function isEditorialPreviewBlock(block: KdpSectionBlock) {
-  return block.print_visibility === "print" && isEditorialTextContent(block);
+  return block.print_visibility === "print" && (isEditorialTextContent(block) || ["image", "image_prompt"].includes(block.block_type));
 }
 
-function PreviewText({ block }: { block: KdpSectionBlock }) {
+function PreviewText({ block, images }: { block: KdpSectionBlock; images: Record<string, { url?: string; alt?: string }> }) {
+  if (["image", "image_prompt"].includes(block.block_type)) return <EditorialImagePreview notes={block.editor_notes} {...images[block.asset_id ?? ""]} />;
   return (
     <div className="book-preview-text">
       {block.title ? <h4>{block.title}</h4> : null}
@@ -28,21 +32,24 @@ function PreviewText({ block }: { block: KdpSectionBlock }) {
 }
 
 
-export function EditorialPreview({ sections, blocks }: { sections: KdpSection[]; blocks: KdpSectionBlock[] }) {
+export function EditorialPreview({ sections, blocks, images = {} }: { sections: KdpSection[]; blocks: KdpSectionBlock[]; images?: Record<string, { url?: string; alt?: string }> }) {
   const blocksBySection = groupBlocksBySection(blocks);
   let chapterCounter = 0;
   const editorialSections = sections.map((section) => {
     if (section.section_type === "chapter") chapterCounter += 1;
 
     const blocks = blocksBySection.get(section.id) ?? [];
-    const hierarchy = buildEditorialBlockHierarchy(blocks, readEditorialMap(section.settings, blocks));
+    const text = readEditorialSectionText(section, blocks);
+    const hierarchy = { openingBlocks: text.opening.group.source.blocks, subsections: text.subsections };
     // Visibility must not erase a structural boundary and merge unrelated text.
-    hierarchy.subsections = hierarchy.subsections.filter(({ marker, blocks }) =>
-      marker.print_visibility === "print" || blocks.some(isEditorialPreviewBlock),
+    hierarchy.subsections = hierarchy.subsections.filter(({ marker, blocks, text }) =>
+      marker.print_visibility === "print" || blocks.some(isEditorialPreviewBlock) ||
+      (text.format === "v2" && text.group.nodes.some(n => n.kind === "text" && n.doc.content.some(p => p.attrs.visibility === "print"))),
     );
 
     return {
       hierarchy,
+      text,
       section,
       title: getEditorialSectionTitle(
         section,
@@ -77,7 +84,7 @@ export function EditorialPreview({ sections, blocks }: { sections: KdpSection[];
           </nav>
 
           <div className="book-preview-manuscript" aria-label="Contenuto del libro">
-            {editorialSections.map(({ hierarchy, section, title }) => {
+            {editorialSections.map(({ hierarchy, section, title, text }) => {
               const openingBlocks = hierarchy.openingBlocks.filter(
                 isEditorialPreviewBlock,
               );
@@ -96,12 +103,12 @@ export function EditorialPreview({ sections, blocks }: { sections: KdpSection[];
                     {section.subtitle ? <p>{section.subtitle}</p> : null}
                   </header>
 
-                  {section.body ? (
+                  {text.opening.format === "v1" && section.body ? (
                     <p className="book-preview-lead">{section.body}</p>
                   ) : null}
 
-                  {openingBlocks.map((block) => (
-                    <PreviewText block={block} key={block.id} />
+                  {text.opening.format === "v2" ? <EditorialGroupV2View group={text.opening.group} images={images} print /> : openingBlocks.map((block) => (
+                    <PreviewText block={block} key={block.id} images={images} />
                   ))}
 
                   {hierarchy.subsections.map((subsection) => (
@@ -111,13 +118,13 @@ export function EditorialPreview({ sections, blocks }: { sections: KdpSection[];
                       key={subsection.marker.id}
                     >
                       {subsection.marker.print_visibility === "print" ? <h3>{subsection.marker.title}</h3> : null}
-                      {subsection.marker.print_visibility === "print" && subsection.marker.body ? (
+                      {subsection.text.format === "v1" && subsection.marker.print_visibility === "print" && subsection.marker.body ? (
                         <p className="book-preview-lead">{subsection.marker.body}</p>
                       ) : null}
-                      {subsection.blocks
+                      {subsection.text.format === "v2" ? <EditorialGroupV2View group={subsection.text.group} images={images} print /> : subsection.blocks
                         .filter(isEditorialPreviewBlock)
                         .map((block) => (
-                          <PreviewText block={block} key={block.id} />
+                          <PreviewText block={block} key={block.id} images={images} />
                         ))}
                     </section>
                   ))}
